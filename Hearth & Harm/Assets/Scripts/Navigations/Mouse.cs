@@ -1,0 +1,42 @@
+using UnityEngine;
+
+/// <summary>
+/// Converts the screen-space mouse position to a world position using the 2D
+/// orthographic camera.  Replaces the old 3D Physics.Raycast + LayerMask approach.
+///
+/// SETUP
+///   Attach to any persistent manager GameObject (e.g. GameManager).
+///   Call MouseWorld2D.GetPosition() from anywhere.
+/// </summary>
+public class MouseWorld2D : MonoBehaviour
+{
+    public static MouseWorld2D Instance { get; private set; }
+
+    [Header("Camera (auto-assigned if blank)")]
+    [SerializeField] private Camera cam;
+
+    [Header("Z depth for world position (usually 0 for 2D)")]
+    [SerializeField] private float worldZ = 0f;
+
+    private void Awake()
+    {
+        Instance = this;
+        if (cam == null) cam = Camera.main;
+    }
+
+    /// <summary>Returns the world position of the mouse cursor.</summary>
+    public static Vector3 GetPosition()
+    {
+        if (Instance == null || Instance.cam == null) return Vector3.zero;
+        Vector3 screenPos = Input.mousePosition;
+        screenPos.z = Instance.cam.nearClipPlane + Mathf.Abs(Instance.worldZ - Instance.cam.transform.position.z);
+        return Instance.cam.ScreenToWorldPoint(screenPos);
+    }
+
+    /// <summary>Returns the grid position in a specific room under the mouse.</summary>
+    public static GridPosition GetGridPosition(RoomGrid room)
+    {
+        if (room == null) return default;
+        return room.GetGridPosition(GetPosition());
+    }
+}
