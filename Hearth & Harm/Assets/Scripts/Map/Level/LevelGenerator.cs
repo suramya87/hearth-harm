@@ -269,12 +269,26 @@ public class LevelGenerator : MonoBehaviour
 
         var entryPt = tempConn.GetConnectionPoint(opp);
 
-        // Position new room so its entry connection aligns with the exit point
-        Vector3 newWorld = exitPt.transform.position - entryPt.transform.localPosition;
+        // Align new room's entry connection with this room's exit point,
+        // then push outward by roomSpacing so rooms don't overlap.
+        Vector3 offset    = DirToVector(dir) * roomSpacing;
+        Vector3 newWorld  = exitPt.transform.position
+                            - entryPt.transform.localPosition
+                            + offset;
         Vector2Int newLayout = from.gridPosition + DirOffset(dir);
 
         return PlaceRoom(type, newLayout, newWorld);
     }
+
+    // Converts a Direction to a normalised world Vector3 (XY plane).
+    private static Vector3 DirToVector(Direction d) => d switch
+    {
+        Direction.North => Vector3.up,
+        Direction.South => Vector3.down,
+        Direction.East  => Vector3.right,
+        Direction.West  => Vector3.left,
+        _               => Vector3.zero
+    };
 
     private void Connect(PlacedRoom a, PlacedRoom b, Direction dir)
     {
@@ -316,29 +330,48 @@ public class LevelGenerator : MonoBehaviour
         var exitPt  = a.connector.GetConnectionPoint(dir)?.transform?.position ?? a.worldPosition;
         var entryPt = b.connector.GetConnectionPoint(GetOppositeDirection(dir))?.transform?.position ?? b.worldPosition;
 
-        // Walk from exitPt to entryPt cell by cell
         Vector3Int startCell = hallwayTilemap.WorldToCell(exitPt);
         Vector3Int endCell   = hallwayTilemap.WorldToCell(entryPt);
 
-        bool horizontal = dir == Direction.East || dir == Direction.West;
-        int  half       = hallwayWidth / 2;
-
+        int half = Mathf.Max(0, hallwayWidth / 2);
         int sx = startCell.x, sy = startCell.y;
         int ex = endCell.x,   ey = endCell.y;
 
+        bool horizontal = dir == Direction.East || dir == Direction.West;
+
         if (horizontal)
         {
+            // Leg 1: horizontal run from start to end X, at start Y
             int minX = Mathf.Min(sx, ex), maxX = Mathf.Max(sx, ex);
             for (int x = minX; x <= maxX; x++)
             for (int y = sy - half; y <= sy + half; y++)
                 SetHallwayTile(new Vector3Int(x, y, 0));
+
+            // Leg 2: vertical bend if the two doors are at different Y positions
+            if (sy != ey)
+            {
+                int minY = Mathf.Min(sy, ey), maxY = Mathf.Max(sy, ey);
+                for (int y = minY; y <= maxY; y++)
+                for (int x = ex - half; x <= ex + half; x++)
+                    SetHallwayTile(new Vector3Int(x, y, 0));
+            }
         }
         else
         {
+            // Leg 1: vertical run from start to end Y, at start X
             int minY = Mathf.Min(sy, ey), maxY = Mathf.Max(sy, ey);
             for (int y = minY; y <= maxY; y++)
             for (int x = sx - half; x <= sx + half; x++)
                 SetHallwayTile(new Vector3Int(x, y, 0));
+
+            // Leg 2: horizontal bend if the two doors are at different X positions
+            if (sx != ex)
+            {
+                int minX = Mathf.Min(sx, ex), maxX = Mathf.Max(sx, ex);
+                for (int x = minX; x <= maxX; x++)
+                for (int y = ey - half; y <= ey + half; y++)
+                    SetHallwayTile(new Vector3Int(x, y, 0));
+            }
         }
     }
 
