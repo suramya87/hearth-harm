@@ -52,14 +52,13 @@ public class LevelGenerator : MonoBehaviour
     [Header("Room Prefabs")]
     [SerializeField] private List<RoomPrefabData> roomPrefabs;
 
-    [Header("Hallways (tilemap-based)")]
-    [Tooltip("Parent grid / tilemap used for hallway painting. " +
-             "Create a separate Grid + Tilemap in your scene named 'HallwayTilemap'.")]
-    [SerializeField] private Tilemap hallwayTilemap;
-    [Tooltip("Floor tile painted for hallway cells.")]
-    [SerializeField] private TileBase hallwayFloorTile;
-    [Tooltip("Width of the hallway corridor in tiles.")]
-    [SerializeField, Min(1)] private int hallwayWidth = 3;
+    [Header("Hallways (prefab-based)")]
+    [Tooltip("Prefab for a horizontal (East/West) hallway. Oriented left-right in your art.")]
+    [SerializeField] private GameObject hallwayHorizontalPrefab;
+    [Tooltip("Prefab for a vertical (North/South) hallway. Oriented up-down in your art.")]
+    [SerializeField] private GameObject hallwayVerticalPrefab;
+    [Tooltip("Single prefab fallback. If set, this is used for all directions and rotated 90 deg for vertical.")]
+    [SerializeField] private GameObject hallwaySinglePrefab;
 
     [Header("Generation")]
     [SerializeField] private int   minRooms          = 5;
@@ -152,7 +151,7 @@ public class LevelGenerator : MonoBehaviour
 
         if (spawnedPlayer != null) { Destroy(spawnedPlayer); spawnedPlayer = null; }
 
-        hallwayTilemap?.ClearAllTiles();
+        ClearHallways();
 
         EnemyManager.Instance?.ClearAllEnemies();
         RoomManager.Instance?.ClearCurrentRoom();
@@ -160,11 +159,15 @@ public class LevelGenerator : MonoBehaviour
 
     // ── Layout generation ──────────────────────────────────────────────────
 
-    private bool GenerateLayout()
+        private bool GenerateLayout()
     {
         if (GetRandomPrefab(RoomType.End) == null)
-        { Debug.LogError("[LevelGenerator] No End room prefab!"); return false; }
+        { 
+            Debug.LogError("[LevelGenerator] No End room prefab!"); 
+            return false; 
+        }
 
+        // 1. Place Start Room
         PlacedRoom start = PlaceRoom(RoomType.Start, Vector2Int.zero, Vector3.zero);
         if (start == null) return false;
 
@@ -172,17 +175,39 @@ public class LevelGenerator : MonoBehaviour
             WaveManager.Instance?.GetMinRooms() ?? minRooms,
             (WaveManager.Instance?.GetMaxRooms() ?? maxRooms) + 1);
 
-        var queue      = new Queue<PlacedRoom>();
-        var lastNormal = start;
-        queue.Enqueue(start);
-
-        int count = 1, attempts = 0;
+        var queue = new Queue<PlacedRoom>();
+        int count = 1;
         bool bossPlaced = false;
 
-        while (queue.Count > 0 && count < targetCount && attempts < 200)
+        // --- NEW LOGIC: Force Start Room to only have ONE exit ---
+        var startDirs = GetAvailableDirections(start);
+        Shuffle(startDirs);
+        
+        // Pick exactly one direction to start the chain
+        Direction initialDir = startDirs[0]; 
+        RoomType secondRoomType = DetermineType(count, targetCount, bossPlaced);
+        PlacedRoom secondRoom = PlaceRoomInDirection(start, initialDir, secondRoomType);
+
+        if (secondRoom != null)
+        {
+            Connect(start, secondRoom, initialDir);
+            queue.Enqueue(secondRoom);
+            count++;
+            if (secondRoomType == RoomType.Boss) bossPlaced = true;
+        }
+        // ---------------------------------------------------------
+
+        int attempts = 0;
+        PlacedRoom lastNormal = secondRoom ?? start;
+
+        while (queue.Count > 0 && count < targetCount && attempts < 500)
         {
             attempts++;
             PlacedRoom current = queue.Dequeue();
+            
+            // Safety: If for some reason we dequeued the End room, don't grow from it
+            if (current.prefabData.roomType == RoomType.End) continue;
+
             var dirs = GetAvailableDirections(current);
             Shuffle(dirs);
 
@@ -191,6 +216,9 @@ public class LevelGenerator : MonoBehaviour
                 if (count >= targetCount) break;
 
                 RoomType type = DetermineType(count, targetCount, bossPlaced);
+                
+                // If we are placing the End room, we don't need to check for one hallway
+                // because the End room logic (not being in the queue) naturally stops it from branching.
                 PlacedRoom newRoom = PlaceRoomInDirection(current, dir, type);
                 if (newRoom == null) continue;
 
@@ -198,19 +226,25 @@ public class LevelGenerator : MonoBehaviour
                 lastNormal = newRoom;
 
                 if (type == RoomType.Boss) bossPlaced = true;
-                if (type != RoomType.End) queue.Enqueue(newRoom);
+                
+                // ONLY add to queue if it's NOT the End room
+                if (type != RoomType.End) 
+                {
+                    queue.Enqueue(newRoom);
+                }
                 count++;
             }
         }
 
+        // Fallback: If we reached target count without an End room
         if (!placedRooms.Exists(r => r.prefabData.roomType == RoomType.End))
         {
-            // Force-append end room onto last normal room
             var from = lastNormal;
-            foreach (var d in GetAvailableDirections(from))
+            var available = GetAvailableDirections(from);
+            if (available.Count > 0)
             {
-                var er = PlaceRoomInDirection(from, d, RoomType.End);
-                if (er != null) { Connect(from, er, d); break; }
+                var er = PlaceRoomInDirection(from, available[0], RoomType.End);
+                if (er != null) Connect(from, er, available[0]);
             }
         }
 
@@ -299,14 +333,27 @@ public class LevelGenerator : MonoBehaviour
         b.connector.MarkConnectionUsed(opp);
     }
 
-    // ── Hallway painting ───────────────────────────────────────────────────
+    // ── Hallway spawning (prefab-based) ───────────────────────────────────
+
+    private readonly List<GameObject> spawnedHallways = new();
+
+    private void ClearHallways()
+    {
+        foreach (var h in spawnedHallways)
+            if (h != null) Destroy(h);
+        spawnedHallways.Clear();
+    }
 
     private void PaintHallways()
     {
-        if (hallwayTilemap == null || hallwayFloorTile == null)
+        bool hasAny = hallwayHorizontalPrefab != null
+                   || hallwayVerticalPrefab   != null
+                   || hallwaySinglePrefab     != null;
+
+        if (!hasAny)
         {
-            Debug.LogWarning("[LevelGenerator] HallwayTilemap or hallwayFloorTile not set — " +
-                             "skipping hallway painting. Assign them in the Inspector.");
+            Debug.LogWarning("[LevelGenerator] No hallway prefabs assigned — skipping hallways. " +
+                             "Assign hallwayHorizontalPrefab / hallwayVerticalPrefab in the Inspector.");
             return;
         }
 
@@ -321,64 +368,52 @@ public class LevelGenerator : MonoBehaviour
             visited.Add((room, dir));
             visited.Add((neighbour, GetOppositeDirection(dir)));
 
-            PaintCorridor(room, neighbour, dir);
+            SpawnHallway(room, neighbour, dir);
         }
     }
 
-    private void PaintCorridor(PlacedRoom a, PlacedRoom b, Direction dir)
+    private void SpawnHallway(PlacedRoom a, PlacedRoom b, Direction dir)
     {
-        var exitPt  = a.connector.GetConnectionPoint(dir)?.transform?.position ?? a.worldPosition;
-        var entryPt = b.connector.GetConnectionPoint(GetOppositeDirection(dir))?.transform?.position ?? b.worldPosition;
-
-        Vector3Int startCell = hallwayTilemap.WorldToCell(exitPt);
-        Vector3Int endCell   = hallwayTilemap.WorldToCell(entryPt);
-
-        int half = Mathf.Max(0, hallwayWidth / 2);
-        int sx = startCell.x, sy = startCell.y;
-        int ex = endCell.x,   ey = endCell.y;
-
         bool horizontal = dir == Direction.East || dir == Direction.West;
 
-        if (horizontal)
-        {
-            // Leg 1: horizontal run from start to end X, at start Y
-            int minX = Mathf.Min(sx, ex), maxX = Mathf.Max(sx, ex);
-            for (int x = minX; x <= maxX; x++)
-            for (int y = sy - half; y <= sy + half; y++)
-                SetHallwayTile(new Vector3Int(x, y, 0));
+        // Pick the right prefab
+        GameObject prefab = horizontal
+            ? (hallwayHorizontalPrefab != null ? hallwayHorizontalPrefab : hallwaySinglePrefab)
+            : (hallwayVerticalPrefab   != null ? hallwayVerticalPrefab   : hallwaySinglePrefab);
 
-            // Leg 2: vertical bend if the two doors are at different Y positions
-            if (sy != ey)
-            {
-                int minY = Mathf.Min(sy, ey), maxY = Mathf.Max(sy, ey);
-                for (int y = minY; y <= maxY; y++)
-                for (int x = ex - half; x <= ex + half; x++)
-                    SetHallwayTile(new Vector3Int(x, y, 0));
-            }
-        }
-        else
-        {
-            // Leg 1: vertical run from start to end Y, at start X
-            int minY = Mathf.Min(sy, ey), maxY = Mathf.Max(sy, ey);
-            for (int y = minY; y <= maxY; y++)
-            for (int x = sx - half; x <= sx + half; x++)
-                SetHallwayTile(new Vector3Int(x, y, 0));
+        if (prefab == null) return;
 
-            // Leg 2: horizontal bend if the two doors are at different X positions
-            if (sx != ex)
-            {
-                int minX = Mathf.Min(sx, ex), maxX = Mathf.Max(sx, ex);
-                for (int x = minX; x <= maxX; x++)
-                for (int y = ey - half; y <= ey + half; y++)
-                    SetHallwayTile(new Vector3Int(x, y, 0));
-            }
-        }
-    }
+        // Get the world positions of both connection points
+        Vector3 exitPos  = a.connector.GetConnectionPoint(dir)?.transform?.position
+                           ?? a.worldPosition;
+        Vector3 entryPos = b.connector.GetConnectionPoint(GetOppositeDirection(dir))?.transform?.position
+                           ?? b.worldPosition;
 
-    private void SetHallwayTile(Vector3Int pos)
-    {
-        if (!hallwayTilemap.HasTile(pos))
-            hallwayTilemap.SetTile(pos, hallwayFloorTile);
+        // Place the hallway prefab centred between the two connection points
+        Vector3 centre = (exitPos + entryPos) * 0.5f;
+        centre.y += 1f;
+        centre.z = 0f;
+
+        // Rotation: horizontal prefabs stay at 0 deg.
+        // Vertical prefabs stay at 0 deg if you have a dedicated vertical prefab.
+        // If only a single prefab is assigned, rotate it 90 deg for vertical connections.
+        Quaternion rot = Quaternion.identity;
+        if (!horizontal && hallwayVerticalPrefab == null && hallwaySinglePrefab != null)
+            rot = Quaternion.Euler(0f, 0f, 90f);
+
+        // Scale the hallway to span the exact distance between connection points.
+        // This assumes the prefab's local X axis runs along its length.
+        float length   = Vector3.Distance(exitPos, entryPos);
+        var   go       = Instantiate(prefab, centre, rot, transform);
+        go.name        = $"Hallway_{a.roomInstance.name}_{dir}";
+
+        // Stretch to fit the gap — adjust the local X scale to match the distance.
+        // If your prefab is already sized to 1 world unit, this scales it correctly.
+        // If you don't want auto-scaling, remove the two lines below.
+        // Vector3 s = go.transform.localScale;
+        // go.transform.localScale = new Vector3(length, s.y, s.z);
+
+        spawnedHallways.Add(go);
     }
 
     // ── Door configuration ─────────────────────────────────────────────────
