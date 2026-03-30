@@ -26,9 +26,9 @@ Transform:
   m_GameObject: {fileID: 5416193600817877662}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.42684937, y: -0.63583, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalPosition: {x: 0, y: 0.17699999, z: 0}
+  m_LocalScale: {x: 2.5, y: 2.5, z: 2.5}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 6477451395151706828}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -117,9 +117,9 @@ Transform:
   m_GameObject: {fileID: 6870659467898387669}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.42684937, y: -0.63583, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalPosition: {x: 0, y: 0.17699999, z: 0}
+  m_LocalScale: {x: 2.5, y: 2.5, z: 2.5}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 6477451395151706828}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -208,9 +208,9 @@ Transform:
   m_GameObject: {fileID: 7749520458560917583}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.42684937, y: -0.63583, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalPosition: {x: 0, y: 0.177, z: 0}
+  m_LocalScale: {x: 2.5, y: 2.5, z: 2.5}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 6477451395151706828}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -397,7 +397,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerStats
   playerClass: 0
-  classStatsDatabase: {fileID: 0}
+  classStatsDatabase: {fileID: 11400000, guid: 15551a7b1b92e6949baac2f9844e0846, type: 2}
   maxHealth: 0
   currentHealth: 0
   maxStamina: 0
