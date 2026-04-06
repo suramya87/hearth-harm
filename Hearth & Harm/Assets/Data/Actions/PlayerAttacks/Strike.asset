@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9a028d5cbccb09b4b83c80df1942443c, type: 3}
-  m_Name: Slash
+  m_Name: Strike
   m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
   actionName: Attack
   icon: {fileID: 0}
@@ -21,7 +21,7 @@ MonoBehaviour:
   dieType: 6
   flatBonus: 0
   damageMultiplier: 1
-  attackPattern: {fileID: 0}
+  attackPattern: {fileID: 11400000, guid: 9ff23cfd44de3574392cbb5333ab50fa, type: 2}
   rotatesToFacing: 1
   minRange: 0
   maxRange: 0
@@ -31,4 +31,13 @@ MonoBehaviour:
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   showSpritePerTile: 0
-  _summary: 
+  _summary: 'Damage: 10
+
+    Stamina: 2
+
+    Pattern: StrikeATP
+
+    Range: Melee
+
+    Rotates:
+    True'

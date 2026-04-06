@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a028d5cbccb09b4b83c80df1942443c, type: 3}
+  m_Name: Slash
+  m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
+  actionName: Attack
+  icon: {fileID: 0}
+  animationFrames: []
+  useDiceDamage: 0
+  baseDamage: 10
+  diceCount: 1
+  dieType: 6
+  flatBonus: 0
+  damageMultiplier: 1
+  attackPattern: {fileID: 11400000, guid: 69197eac5c8147e49b6c3dd7ddf5a52d, type: 2}
+  rotatesToFacing: 1
+  minRange: 0
+  maxRange: 0
+  canTargetSelf: 0
+  staminaCost: 2
+  requiresEnoughStamina: 1
+  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
+  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  showSpritePerTile: 0
+  _summary: 'Damage: 10
+
+    Stamina: 2
+
+    Pattern: SlashATP
+
+    Range: Melee
+
+    Rotates:
+    True'

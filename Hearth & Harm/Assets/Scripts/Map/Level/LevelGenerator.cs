@@ -456,11 +456,15 @@ public class LevelGenerator : MonoBehaviour
         foreach (PlacedRoom room in placedRooms)
         {
             var setup = room.roomInstance.GetComponent<RoomTilemapSetup>()
-                     ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
+                    ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
             setup.Initialize();
 
-            // Ensure RoomGrid component exists (RoomTilemapSetup adds it via [RequireComponent])
             room.roomGrid = room.roomInstance.GetComponent<RoomGrid>();
+
+            // ADD THIS — initialize spawn point reader alongside everything else
+            var spawnReader = room.roomInstance.GetComponent<RoomSpawnPointReader>()
+                        ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
+            spawnReader.Initialize();
         }
     }
 
@@ -482,7 +486,10 @@ public class LevelGenerator : MonoBehaviour
             ? playerPrefabs[index] : playerPrefabs[0];
         if (prefab == null) { Debug.LogError("[LevelGenerator] Player prefab null!"); return; }
 
-        GridPosition? sp = FindSpawnTile(start.roomGrid);
+        // No manual Initialize() call needed here anymore
+        GridPosition? sp = FindSpawnTileFromSpawnPoints(start)
+                        ?? FindSpawnTile(start.roomGrid);
+
         if (sp == null) { Debug.LogError("[LevelGenerator] No spawn tile in start room!"); return; }
 
         spawnedPlayer = Instantiate(prefab);
@@ -492,6 +499,43 @@ public class LevelGenerator : MonoBehaviour
         unit?.PlaceInRoom(start.roomGrid, sp.Value);
 
         Debug.Log($"[LevelGenerator] Player spawned at {sp.Value}");
+    }
+
+    private GridPosition? FindSpawnTileFromSpawnPoints(PlacedRoom room)
+    {
+        var reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
+        if (reader == null)
+        {
+            Debug.LogWarning("[LevelGenerator] No RoomSpawnPointReader on start room.");
+            return null;
+        }
+
+        var all = reader.GetAll();
+
+        if (all.Count == 0)
+        {
+            Debug.LogWarning("[LevelGenerator] RoomSpawnPointReader found no spawn points at all.");
+            return null;
+        }
+
+        // For the start room, prefer South spawn tile (player "starts" facing north)
+        // but fall back to whatever direction exists
+        foreach (var preferredDir in new[]
+        {
+            Direction.South,
+            Direction.North,
+            Direction.West,
+            Direction.East
+        })
+        {
+            if (all.TryGetValue(preferredDir, out var pos))
+            {
+                Debug.Log($"[LevelGenerator] Using {preferredDir} spawn → {pos}");
+                return pos;
+            }
+        }
+
+        return null;
     }
 
     private GridPosition? FindSpawnTile(RoomGrid roomGrid)

@@ -289,6 +289,7 @@ GameObject:
   - component: {fileID: 8494066922487507146}
   - component: {fileID: 843455202767276121}
   - component: {fileID: 3643986616525070629}
+  - component: {fileID: 6970145410071607390}
   m_Layer: 6
   m_Name: SmokeStack
   m_TagString: Untagged
@@ -450,6 +451,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e980a3cc01ddac47910eb0e978a6e4f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatAction
-  actionData: {fileID: 0}
+  actionData: {fileID: 11400000, guid: 97b874ead8732e84ebe619eb2498f8ea, type: 2}
+  facingRotationSteps: 1
+  diceBox: {fileID: 0}
+--- !u!114 &6970145410071607390
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9198468102176965729}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e980a3cc01ddac47910eb0e978a6e4f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CombatAction
+  actionData: {fileID: 11400000, guid: 209b7a3184cb62444865611ce8003f35, type: 2}
   facingRotationSteps: 1
   diceBox: {fileID: 0}

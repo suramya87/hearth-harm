@@ -8,38 +8,99 @@ using UnityEngine;
 public class UnitActionSystemUI : MonoBehaviour
 {
     [SerializeField] private Transform actionButtonPrefab;
-    [SerializeField] private Transform actionButtonContainer;
 
-    private readonly List<ActionButtonUI> buttons = new();
+    [Tooltip("The container transform that holds the action buttons.")]
+    [SerializeField] private Transform actionButtonContainerTransform;
+
+    private readonly List<ActionButtonUI> actionButtonUIList = new();
 
     private void Start()
     {
-        UnitActionSystem.Instance.OnSelectedUnitChange   += (_,__) => Rebuild();
-        UnitActionSystem.Instance.OnSelectedActionChange += (_,__) => RefreshSelected();
-        Rebuild();
+        // Subscribe to whichever action system is present
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
+        }
+        else
+        {
+            // Retry on level ready in case the system isn't initialised yet
+            LevelGenerator.OnLevelReady += OnLevelReady;
+        }
+
+        CreateUnitActionButtons();
+        UpdateSelectedVisual();
     }
 
-    private void Update() => RefreshSelected();
-
-    private void Rebuild()
+    private void OnDestroy()
     {
-        foreach (Transform c in actionButtonContainer) Destroy(c.gameObject);
-        buttons.Clear();
+        LevelGenerator.OnLevelReady -= OnLevelReady;
 
-        var unit = UnitActionSystem.Instance?.GetSelectedUnit();
-        if (unit == null) return;
-
-        foreach (var action in unit.GetBaseActionArray())
+        if (UnitActionSystem.Instance != null)
         {
-            var t  = Instantiate(actionButtonPrefab, actionButtonContainer);
-            var ui = t.GetComponent<ActionButtonUI>();
-            ui?.SetBaseAction(action);
-            buttons.Add(ui);
+            UnitActionSystem.Instance.OnSelectedUnitChange   -= OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChange -= OnSelectedActionChanged;
         }
     }
 
-    private void RefreshSelected()
+    private void OnLevelReady()
     {
-        foreach (var b in buttons) b?.UpdateSelectedVisual();
+        LevelGenerator.OnLevelReady -= OnLevelReady;
+
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
+        }
+
+        CreateUnitActionButtons();
+        UpdateSelectedVisual();
     }
+
+    private void Update() => UpdateSelectedVisual();
+
+    // ── Button creation ────────────────────────────────────────────────────
+
+    private void CreateUnitActionButtons()
+    {
+        if (actionButtonContainerTransform == null)
+        {
+            Debug.LogError("[UnitActionSystemUI] actionButtonContainerTransform is not assigned!");
+            return;
+        }
+
+        foreach (Transform child in actionButtonContainerTransform)
+            Destroy(child.gameObject);
+        actionButtonUIList.Clear();
+
+        Unit unit = UnitActionSystem.Instance?.GetSelectedUnit();
+        if (unit == null) return;
+
+        foreach (BaseAction action in unit.GetBaseActionArray())
+        {
+            Transform t  = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
+            ActionButtonUI ui = t.GetComponent<ActionButtonUI>();
+            if (ui != null)
+            {
+                ui.SetBaseAction(action);
+                actionButtonUIList.Add(ui);
+            }
+        }
+    }
+
+    private void UpdateSelectedVisual()
+    {
+        foreach (ActionButtonUI btn in actionButtonUIList)
+            btn?.UpdateSelectedVisual();
+    }
+
+    // ── Events ─────────────────────────────────────────────────────────────
+
+    private void OnSelectedUnitChanged(object sender, EventArgs e)
+    {
+        CreateUnitActionButtons();
+        UpdateSelectedVisual();
+    }
+
+    private void OnSelectedActionChanged(object sender, EventArgs e) => UpdateSelectedVisual();
 }
