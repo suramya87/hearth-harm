@@ -2080,7 +2080,7 @@ MonoBehaviour:
   dragPanSpeed: 0.015
   zoomSpeed: 4
   orthoMin: 3
-  orthoMax: 6
+  orthoMax: 16
   snapSmoothness: 6
   shakeFrequency: 25
 --- !u!1001 &1594257105
@@ -2289,6 +2289,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1713042350}
   - component: {fileID: 1713042351}
+  - component: {fileID: 1713042352}
   m_Layer: 0
   m_Name: TurnSystem
   m_TagString: Untagged
@@ -2323,6 +2324,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 674e2dc92c440b34fbecc7cbfb862b46, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TurnSystem
+--- !u!114 &1713042352
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1713042349}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6086ea268d786e45a78d9fe34c74444, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurnSystemUI
+  endTurnButton: {fileID: 0}
+  turnNumberText: {fileID: 0}
+  endTurnFlashOverlay: {fileID: 0}
+  disabledClickFeedback: {fileID: 0}
+  flashInterval: 0.3
+  disabledFeedbackDuration: 0.15
 --- !u!1 &1742391427
 GameObject:
   m_ObjectHideFlags: 0
