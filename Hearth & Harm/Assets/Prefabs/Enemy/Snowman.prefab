@@ -12,7 +12,6 @@ GameObject:
   - component: {fileID: 2644428068708621384}
   - component: {fileID: 8572563392350084283}
   - component: {fileID: 6062027027240477414}
-  - component: {fileID: 5846900513437101330}
   - component: {fileID: 4408372023848108270}
   m_Layer: 0
   m_Name: Snowman
@@ -73,7 +72,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 497202a670cfd964b929077fe8edc47e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
-  stats: {fileID: 0}
+  stats: {fileID: 11400000, guid: 3818f3074d71d9348bab594ea94fda85, type: 2}
   showDebugLogs: 0
   selectedVisual: {fileID: 0}
 --- !u!114 &6062027027240477414
@@ -89,21 +88,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
   stepDelay: 0.2
---- !u!114 &5846900513437101330
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2607613351963544914}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 497202a670cfd964b929077fe8edc47e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
-  stats: {fileID: 0}
-  showDebugLogs: 0
-  selectedVisual: {fileID: 0}
 --- !u!65 &4408372023848108270
 BoxCollider:
   m_ObjectHideFlags: 0
