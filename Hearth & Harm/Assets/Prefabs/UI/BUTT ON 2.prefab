@@ -103,6 +103,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -148,8 +149,8 @@ GameObject:
   - component: {fileID: 5634182804808060343}
   - component: {fileID: 5922421880635570446}
   - component: {fileID: 4514998456624431675}
-  - component: {fileID: 1708002543873052786}
   - component: {fileID: 6532482949608768341}
+  - component: {fileID: -7816269774463923005}
   m_Layer: 5
   m_Name: BUTT ON 2
   m_TagString: Untagged
@@ -261,28 +262,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 1
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &1708002543873052786
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5500324636673053658}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2dce4b4468562470d8a1203f232f0e5d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ActionButtonUI
-  button: {fileID: 5922421880635570446}
-  actionNameText: {fileID: 2720331086997413472}
-  selectedGameObject: {fileID: 0}
-  actionDescText: {fileID: 6134589991723547986}
-  actionIcon: {fileID: 0}
-  staminaCostRoot: {fileID: 5500324636673053658}
-  staminaCostText: {fileID: 8408432048722376576}
-  staminaIcon: {fileID: 0}
-  unaffordableAlpha: 0.4
-  canvasGroup: {fileID: 0}
 --- !u!114 &6532482949608768341
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -303,6 +282,27 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!114 &-7816269774463923005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5500324636673053658}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 27c565f9debcb3844ba94bb13e24967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActionButtonUI
+  button: {fileID: 5922421880635570446}
+  actionNameText: {fileID: 2720331086997413472}
+  selectedHighlight: {fileID: 0}
+  actionDescText: {fileID: 6134589991723547986}
+  actionIcon: {fileID: 0}
+  staminaCostRoot: {fileID: 5500324636673053658}
+  staminaCostText: {fileID: 8408432048722376576}
+  unaffordableAlpha: 0.4
+  canvasGroup: {fileID: 0}
 --- !u!1 &7450048976212049740
 GameObject:
   m_ObjectHideFlags: 0
@@ -406,6 +406,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -542,6 +543,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
