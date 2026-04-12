@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9a028d5cbccb09b4b83c80df1942443c, type: 3}
   m_Name: Slash
   m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
-  actionName: Attack
+  actionName: Slash
   icon: {fileID: 0}
   animationFrames: []
-  useDiceDamage: 0
+  useDiceDamage: 1
   baseDamage: 10
-  diceCount: 1
+  diceCount: 6
   dieType: 6
   flatBonus: 0
   damageMultiplier: 1
@@ -26,14 +26,14 @@ MonoBehaviour:
   minRange: 0
   maxRange: 0
   canTargetSelf: 0
-  staminaCost: 2
+  staminaCost: 3
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   showSpritePerTile: 0
-  _summary: 'Damage: 10
+  _summary: 'Damage: 6d6+0
 
-    Stamina: 2
+    Stamina: 3
 
     Pattern: SlashATP
 
