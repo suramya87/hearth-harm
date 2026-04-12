@@ -8248,7 +8248,7 @@ MonoBehaviour:
   dragPanSpeed: 0.015
   zoomSpeed: 4
   orthoMin: 3
-  orthoMax: 16
+  orthoMax: 10
   snapSmoothness: 6
   shakeFrequency: 25
 --- !u!1 &1450848182
