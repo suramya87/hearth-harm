@@ -3,10 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Moves the unit along a path on the tilemap grid.
-/// Stamina = move distance. Each tile costs 1 stamina.
-/// </summary>
 public class MoveAction : BaseAction
 {
     [SerializeField] private int   maxMoveDistance = 4;
@@ -32,33 +28,36 @@ public class MoveAction : BaseAction
         var path = new Pathfinder(room).FindPath(unit.GetGridPosition(), target);
         if (path.Count == 0) { onComplete?.Invoke(); return; }
 
-        int steps     = Mathf.Min(path.Count, MoveDistance);
-        var usedPath  = path.GetRange(0, steps);
-        var finalPos  = usedPath[^1];
+        int steps    = Mathf.Min(path.Count, MoveDistance);
+        var usedPath = path.GetRange(0, steps);
+        var finalPos = usedPath[^1];
 
-        // Update occupancy
         room.RemoveUnitAtGridPosition(unit.GetGridPosition(), unit);
         room.AddUnitAtGridPosition(finalPos, unit);
 
-        // Deduct stamina
         if (playerStats != null)
             playerStats.currentStamina = Mathf.Max(0, playerStats.currentStamina - steps);
 
-        // Build world waypoints
         var waypoints = new List<Vector3>();
         foreach (var gp in usedPath) waypoints.Add(room.GetWorldPosition(gp));
 
+        SetFacingToward(usedPath[0]);
+        unitAnimator?.SetMoving(true);
+
         isActive = true;
-        StartCoroutine(MoveAlongPath(waypoints, finalPos, onComplete));
+        StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, onComplete));
     }
 
-    private IEnumerator MoveAlongPath(List<Vector3> waypoints, GridPosition finalGP,
-                                      Action onComplete)
+    private IEnumerator MoveAlongPath(List<Vector3> waypoints, List<GridPosition> gridPath,
+                                      GridPosition finalGP, Action onComplete)
     {
-        foreach (var wp in waypoints)
+        for (int i = 0; i < waypoints.Count; i++)
         {
-            // Keep Z for sorting
-            var target = new Vector3(wp.x, wp.y, transform.position.z);
+            if (i < gridPath.Count)
+                SetFacingToward(gridPath[i]);
+
+            var target = new Vector3(waypoints[i].x, waypoints[i].y, transform.position.z);
+
             while (Vector2.Distance(transform.position, target) > 0.05f)
             {
                 transform.position = Vector3.MoveTowards(transform.position, target,
@@ -68,11 +67,29 @@ public class MoveAction : BaseAction
             transform.position = target;
         }
 
-        // Sync grid position via PlaceInRoom (updates occupancy + position correctly)
         unit.PlaceInRoom(unit.GetCurrentRoomGrid(), finalGP);
+
+        unitAnimator?.SetMoving(false);
+        playerAnimator?.RefreshStaminaState();
 
         isActive = false;
         onComplete?.Invoke();
+    }
+
+    // ── Facing helper ──────────────────────────────────────────────────────
+
+    private void SetFacingToward(GridPosition next)
+    {
+        var current = unit.GetGridPosition();
+        int dx = next.x - current.x;
+        int dy = next.y - current.y;
+
+        var dir = new Vector2Int(
+            dx == 0 ? 0 : (int)Mathf.Sign(dx),
+            dy == 0 ? 0 : (int)Mathf.Sign(dy)
+        );
+
+        unitAnimator?.SetFacing(dir);
     }
 
     // ── Validity ───────────────────────────────────────────────────────────
@@ -80,7 +97,6 @@ public class MoveAction : BaseAction
     public bool IsValidTarget(GridPosition gp) =>
         GetValidTargets().Contains(gp);
 
-    // Back-compat name used by old UI
     public bool isValidActionGridPosition(GridPosition gp) => IsValidTarget(gp);
 
     public List<GridPosition> GetValidActionGridPositionList() => GetValidTargets();
@@ -93,9 +109,9 @@ public class MoveAction : BaseAction
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return list;
 
-        var unitPos  = unit.GetGridPosition();
-        int dist     = MoveDistance;
-        var pf       = new Pathfinder(room);
+        var unitPos = unit.GetGridPosition();
+        int dist    = MoveDistance;
+        var pf      = new Pathfinder(room);
 
         for (int dx = -dist; dx <= dist; dx++)
         for (int dy = -dist; dy <= dist; dy++)
@@ -104,7 +120,7 @@ public class MoveAction : BaseAction
             if (dx == 0 && dy == 0) continue;
 
             var test = new GridPosition(unitPos.x + dx, unitPos.y + dy);
-            if (!room.IsValidGridPosition(test)) continue;
+            if (!room.IsValidGridPosition(test))       continue;
             if (!room.IsWalkableIgnoreOccupancy(test)) continue;
             if (room.HasAnyUnitOnGridPosition(test))   continue;
 
@@ -115,7 +131,6 @@ public class MoveAction : BaseAction
         return list;
     }
 
-    /// <summary>Returns the tile cost to reach a specific position (number of steps).</summary>
     public int GetMoveCost(GridPosition target)
     {
         var room = unit?.GetCurrentRoomGrid();

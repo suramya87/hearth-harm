@@ -1,0 +1,614 @@
+fileFormatVersion: 2
+guid: 6f3d688f11bcb054e91ae96851726c77
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 6044047817087341967
+    second: spritesheet_SmokestackIdle_0
+  - first:
+      213: 3834891834233034606
+    second: spritesheet_SmokestackIdle_1
+  - first:
+      213: 9105780371787447259
+    second: spritesheet_SmokestackIdle_2
+  - first:
+      213: -1735716134094863230
+    second: spritesheet_SmokestackIdle_3
+  - first:
+      213: -8796578778646677615
+    second: spritesheet_SmokestackIdle_4
+  - first:
+      213: -783394660900508432
+    second: spritesheet_SmokestackIdle_5
+  - first:
+      213: 6030660001377430499
+    second: spritesheet_SmokestackIdle_6
+  - first:
+      213: -289463784315989126
+    second: spritesheet_SmokestackIdle_7
+  - first:
+      213: -1836036352523524186
+    second: spritesheet_SmokestackIdle_8
+  - first:
+      213: 3761539513352818841
+    second: spritesheet_SmokestackIdle_9
+  - first:
+      213: -6007313127022206239
+    second: spritesheet_SmokestackIdle_10
+  - first:
+      213: 6319121744480062508
+    second: spritesheet_SmokestackIdle_11
+  - first:
+      213: 1544324955931414577
+    second: spritesheet_SmokestackIdle_12
+  - first:
+      213: -890630510101509455
+    second: spritesheet_SmokestackIdle_13
+  - first:
+      213: -3635544978129449475
+    second: spritesheet_SmokestackIdle_14
+  - first:
+      213: 6575322643030095791
+    second: spritesheet_SmokestackIdle_15
+  - first:
+      213: 8825222910634903818
+    second: spritesheet_SmokestackIdle_16
+  - first:
+      213: 7508533820044839079
+    second: spritesheet_SmokestackIdle_17
+  - first:
+      213: -4496806966472233102
+    second: spritesheet_SmokestackIdle_18
+  - first:
+      213: 3987378235439972562
+    second: spritesheet_SmokestackIdle_19
+  - first:
+      213: 2404753035047076073
+    second: spritesheet_SmokestackIdle_20
+  - first:
+      213: 2189886406647962047
+    second: spritesheet_SmokestackIdle_21
+  - first:
+      213: -3941932600257069737
+    second: spritesheet_SmokestackIdle_22
+  - first:
+      213: 296143776455184597
+    second: spritesheet_SmokestackIdle_23
+  - first:
+      213: -3908040590119206095
+    second: spritesheet_SmokestackIdle_24
+  - first:
+      213: 5399449506669334420
+    second: spritesheet_SmokestackIdle_25
+  - first:
+      213: -8825290183555746013
+    second: spritesheet_SmokestackIdle_26
+  - first:
+      213: -2464903366523551359
+    second: spritesheet_SmokestackIdle_27
+  - first:
+      213: -2357434888432757311
+    second: spritesheet_SmokestackIdle_28
+  - first:
+      213: -802004477015647227
+    second: spritesheet_SmokestackIdle_29
+  - first:
+      213: 7166284073530238949
+    second: spritesheet_SmokestackIdle_30
+  - first:
+      213: -925940331695658860
+    second: spritesheet_SmokestackIdle_31
+  - first:
+      213: -844107509137822439
+    second: spritesheet_SmokestackIdle_32
+  - first:
+      213: 3179345594197517673
+    second: spritesheet_SmokestackIdle_33
+  - first:
+      213: 241381409531232770
+    second: spritesheet_SmokestackIdle_34
+  - first:
+      213: -3959067739516216886
+    second: spritesheet_SmokestackIdle_35
+  - first:
+      213: -8697665465793041706
+    second: spritesheet_SmokestackIdle_36
+  - first:
+      213: 5537586744360494146
+    second: spritesheet_SmokestackIdle_37
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 0
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 0
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 32
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f8557f68775c0e350800000000000000
+      internalID: 6044047817087341967
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_1
+      rect:
+        serializedVersion: 2
+        x: 64
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e67918b1ec5483530800000000000000
+      internalID: 3834891834233034606
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_2
+      rect:
+        serializedVersion: 2
+        x: 128
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bdb7d1fe00b3e5e70800000000000000
+      internalID: 9105780371787447259
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_3
+      rect:
+        serializedVersion: 2
+        x: 192
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2848c5c4f5f79e7e0800000000000000
+      internalID: -1735716134094863230
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_4
+      rect:
+        serializedVersion: 2
+        x: 256
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 197760405364ce580800000000000000
+      internalID: -8796578778646677615
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_5
+      rect:
+        serializedVersion: 2
+        x: 320
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0fc661ed4b2d025f0800000000000000
+      internalID: -783394660900508432
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_6
+      rect:
+        serializedVersion: 2
+        x: 384
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3eb2247c15531b350800000000000000
+      internalID: 6030660001377430499
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_7
+      rect:
+        serializedVersion: 2
+        x: 448
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a735188c83e9bfbf0800000000000000
+      internalID: -289463784315989126
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_8
+      rect:
+        serializedVersion: 2
+        x: 512
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6a7a1254aa61586e0800000000000000
+      internalID: -1836036352523524186
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_9
+      rect:
+        serializedVersion: 2
+        x: 576
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9909df5024ca33430800000000000000
+      internalID: 3761539513352818841
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_10
+      rect:
+        serializedVersion: 2
+        x: 640
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1e2ec410a8cb1aca0800000000000000
+      internalID: -6007313127022206239
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_11
+      rect:
+        serializedVersion: 2
+        x: 704
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c2c4e281fb702b750800000000000000
+      internalID: 6319121744480062508
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_12
+      rect:
+        serializedVersion: 2
+        x: 768
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 13010108d5b8e6510800000000000000
+      internalID: 1544324955931414577
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_13
+      rect:
+        serializedVersion: 2
+        x: 832
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1ba46431548d3a3f0800000000000000
+      internalID: -890630510101509455
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_14
+      rect:
+        serializedVersion: 2
+        x: 896
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dfd83a5ba13fb8dc0800000000000000
+      internalID: -3635544978129449475
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: spritesheet_SmokestackIdle_15
+      rect:
+        serializedVersion: 2
+        x: 960
+        y: 0
+        width: 64
+        height: 64
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fa734653b1d304b50800000000000000
+      internalID: 6575322643030095791
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 51c628debf39174439c911fdcd71fc51
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries:
+      - key: SpriteEditor.SliceSettings
+        value: '{"sliceOnImport":false,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":64.0,"y":64.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":1,"keepEmptyRects":false,"isAlternate":false}'
+    nameFileIdTable:
+      spritesheet_SmokestackIdle_0: 6044047817087341967
+      spritesheet_SmokestackIdle_1: 3834891834233034606
+      spritesheet_SmokestackIdle_10: -6007313127022206239
+      spritesheet_SmokestackIdle_11: 6319121744480062508
+      spritesheet_SmokestackIdle_12: 1544324955931414577
+      spritesheet_SmokestackIdle_13: -890630510101509455
+      spritesheet_SmokestackIdle_14: -3635544978129449475
+      spritesheet_SmokestackIdle_15: 6575322643030095791
+      spritesheet_SmokestackIdle_2: 9105780371787447259
+      spritesheet_SmokestackIdle_3: -1735716134094863230
+      spritesheet_SmokestackIdle_4: -8796578778646677615
+      spritesheet_SmokestackIdle_5: -783394660900508432
+      spritesheet_SmokestackIdle_6: 6030660001377430499
+      spritesheet_SmokestackIdle_7: -289463784315989126
+      spritesheet_SmokestackIdle_8: -1836036352523524186
+      spritesheet_SmokestackIdle_9: 3761539513352818841
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

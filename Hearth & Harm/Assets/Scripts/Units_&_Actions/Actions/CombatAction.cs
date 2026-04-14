@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Executes a combat action (melee or ranged) driven by CombatActionData.
-/// </summary>
 public class CombatAction : BaseAction
 {
     [Header("Data")]
@@ -17,8 +14,8 @@ public class CombatAction : BaseAction
     [Header("Optional dice box UI")]
     [SerializeField] private DiceBoxUI diceBox;
 
-    private Vector2Int            currentFacing       = new(0, 1);
-    private List<GridPosition>    lastPreview         = new();
+    private Vector2Int         currentFacing = new(0, 1);
+    private List<GridPosition> lastPreview   = new();
 
     public CombatActionData ActionData => actionData;
     public void SetActionData(CombatActionData d) => actionData = d;
@@ -31,7 +28,7 @@ public class CombatAction : BaseAction
         if (diceBox == null) diceBox = FindAnyObjectByType<DiceBoxUI>();
     }
 
-    // ── Preview (called by TilemapHighlighter) ─────────────────────────────
+    // ── Preview ────────────────────────────────────────────────────────────
 
     public List<GridPosition> GetPreviewPositions(GridPosition mouseGP)
     {
@@ -65,6 +62,10 @@ public class CombatAction : BaseAction
         if (actionData.rotatesToFacing)
             currentFacing = ApplyCorrection(FacingToward(unitGP, targetGP));
 
+        // Use cached fields from BaseAction — not GetComponent
+        unitAnimator?.SetFacing(currentFacing);
+        unitAnimator?.TriggerAttack();
+
         var hitPositions = IsRanged()
             ? PatternAt(targetGP, currentFacing)
             : PatternAt(unitGP, currentFacing);
@@ -72,6 +73,8 @@ public class CombatAction : BaseAction
         AttackSpritePopup.ShowOnTiles(actionData, hitPositions);
         SpendStamina();
         ApplyDamage(hitPositions);
+
+        playerAnimator?.RefreshStaminaState();
 
         isActive = false;
         onActionComplete?.Invoke();
@@ -84,7 +87,7 @@ public class CombatAction : BaseAction
         var valid = new List<GridPosition>();
         if (actionData == null) return valid;
 
-        var room   = unit.GetCurrentRoomGrid();
+        var room = unit.GetCurrentRoomGrid();
         if (room == null) return valid;
 
         var unitGP = unit.GetGridPosition();
@@ -192,7 +195,6 @@ public class CombatAction : BaseAction
     private int RollDamage()
     {
         if (!actionData.useDiceDamage) return actionData.baseDamage;
-
         if (actionData.diceCount <= 0) return actionData.flatBonus;
 
         var rolls = DiceRoller.RollMultiple(actionData.dieType, actionData.diceCount);

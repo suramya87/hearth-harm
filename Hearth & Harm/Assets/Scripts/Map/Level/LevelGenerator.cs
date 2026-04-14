@@ -5,22 +5,9 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 using Random = UnityEngine.Random;
 
-/// <summary>
-/// Procedurally generates a dungeon made of room prefabs connected by
-/// tilemap-painted hallways.
-///
-/// CHANGES FROM 3D VERSION
-///   - All room placement is on the 2D XY plane.
-///   - Hallways are painted directly onto a shared "HallwayTilemap" using
-///     a configurable floor tile — no separate hallway prefabs required
-///     (though you can still use them if you prefer).
-///   - LevelGrid has been removed; use RoomManager.GetCurrentRoom() or
-///     RoomManager.GetCurrentRoomGrid() wherever you previously used LevelGrid.
-///   - WaveManager-driven room/enemy budget scaling is preserved.
-/// </summary>
+
 public class LevelGenerator : MonoBehaviour
 {
-    // ── Types ──────────────────────────────────────────────────────────────
 
     [Serializable]
     public class RoomPrefabData
@@ -43,11 +30,9 @@ public class LevelGenerator : MonoBehaviour
         public RoomPrefabData prefabData;
         public RoomConnector  connector;
         public Vector3        worldPosition;
-        public Vector2Int     gridPosition;    // layout grid (not tilemap)
+        public Vector2Int     gridPosition;    
         public RoomGrid       roomGrid;
     }
-
-    // ── Inspector ──────────────────────────────────────────────────────────
 
     [Header("Room Prefabs")]
     [SerializeField] private List<RoomPrefabData> roomPrefabs;
@@ -75,26 +60,18 @@ public class LevelGenerator : MonoBehaviour
     [SerializeField] private List<GameObject> playerPrefabs;
     [SerializeField] private bool spawnPlayerOnGenerate = true;
 
-    // ── Events ─────────────────────────────────────────────────────────────
-
     public static Action OnLevelReady;
-
-    // ── Runtime state ──────────────────────────────────────────────────────
 
     private List<PlacedRoom>                                               placedRooms;
     private Dictionary<Vector2Int, PlacedRoom>                             roomLayoutGrid;
     private Dictionary<(PlacedRoom, Direction), PlacedRoom>                connections;
     private GameObject                                                     spawnedPlayer;
 
-    // ── Lifecycle ──────────────────────────────────────────────────────────
-
     private void Start()
     {
         ReadPrefabDimensions();
         Invoke(nameof(GenerateLevel), 0.1f);
     }
-
-    // ── Public API ─────────────────────────────────────────────────────────
 
     public void GenerateLevel()
     {
@@ -143,8 +120,6 @@ public class LevelGenerator : MonoBehaviour
         _               => Direction.North
     };
 
-    // ── Clear ──────────────────────────────────────────────────────────────
-
     private void ClearLevel()
     {
         foreach (Transform c in transform) Destroy(c.gameObject);
@@ -157,8 +132,6 @@ public class LevelGenerator : MonoBehaviour
         RoomManager.Instance?.ClearCurrentRoom();
     }
 
-    // ── Layout generation ──────────────────────────────────────────────────
-
         private bool GenerateLayout()
     {
         if (GetRandomPrefab(RoomType.End) == null)
@@ -167,7 +140,6 @@ public class LevelGenerator : MonoBehaviour
             return false; 
         }
 
-        // 1. Place Start Room
         PlacedRoom start = PlaceRoom(RoomType.Start, Vector2Int.zero, Vector3.zero);
         if (start == null) return false;
 
@@ -179,7 +151,6 @@ public class LevelGenerator : MonoBehaviour
         int count = 1;
         bool bossPlaced = false;
 
-        // --- NEW LOGIC: Force Start Room to only have ONE exit ---
         var startDirs = GetAvailableDirections(start);
         Shuffle(startDirs);
         
@@ -195,7 +166,6 @@ public class LevelGenerator : MonoBehaviour
             count++;
             if (secondRoomType == RoomType.Boss) bossPlaced = true;
         }
-        // ---------------------------------------------------------
 
         int attempts = 0;
         PlacedRoom lastNormal = secondRoom ?? start;
@@ -217,8 +187,6 @@ public class LevelGenerator : MonoBehaviour
 
                 RoomType type = DetermineType(count, targetCount, bossPlaced);
                 
-                // If we are placing the End room, we don't need to check for one hallway
-                // because the End room logic (not being in the queue) naturally stops it from branching.
                 PlacedRoom newRoom = PlaceRoomInDirection(current, dir, type);
                 if (newRoom == null) continue;
 
@@ -227,7 +195,6 @@ public class LevelGenerator : MonoBehaviour
 
                 if (type == RoomType.Boss) bossPlaced = true;
                 
-                // ONLY add to queue if it's NOT the End room
                 if (type != RoomType.End) 
                 {
                     queue.Enqueue(newRoom);
@@ -236,7 +203,6 @@ public class LevelGenerator : MonoBehaviour
             }
         }
 
-        // Fallback: If we reached target count without an End room
         if (!placedRooms.Exists(r => r.prefabData.roomType == RoomType.End))
         {
             var from = lastNormal;
@@ -250,8 +216,6 @@ public class LevelGenerator : MonoBehaviour
 
         return placedRooms.Exists(r => r.prefabData.roomType == RoomType.End);
     }
-
-    // ── Room placement ─────────────────────────────────────────────────────
 
     private PlacedRoom PlaceRoom(RoomType type, Vector2Int layoutPos, Vector3 worldPos)
     {
@@ -270,7 +234,6 @@ public class LevelGenerator : MonoBehaviour
             Destroy(inst); return null;
         }
 
-        // Read actual dimensions from setup component
         var setup = inst.GetComponent<RoomTilemapSetup>();
         if (setup != null) { data.width = setup.GetWidth(); data.height = setup.GetHeight(); data.cellSize = setup.GetCellSize(); }
 
@@ -303,8 +266,6 @@ public class LevelGenerator : MonoBehaviour
 
         var entryPt = tempConn.GetConnectionPoint(opp);
 
-        // Align new room's entry connection with this room's exit point,
-        // then push outward by roomSpacing so rooms don't overlap.
         Vector3 offset    = DirToVector(dir) * roomSpacing;
         Vector3 newWorld  = exitPt.transform.position
                             - entryPt.transform.localPosition
@@ -314,7 +275,6 @@ public class LevelGenerator : MonoBehaviour
         return PlaceRoom(type, newLayout, newWorld);
     }
 
-    // Converts a Direction to a normalised world Vector3 (XY plane).
     private static Vector3 DirToVector(Direction d) => d switch
     {
         Direction.North => Vector3.up,
@@ -394,29 +354,18 @@ public class LevelGenerator : MonoBehaviour
         centre.y += 1f;
         centre.z = 0f;
 
-        // Rotation: horizontal prefabs stay at 0 deg.
-        // Vertical prefabs stay at 0 deg if you have a dedicated vertical prefab.
-        // If only a single prefab is assigned, rotate it 90 deg for vertical connections.
         Quaternion rot = Quaternion.identity;
         if (!horizontal && hallwayVerticalPrefab == null && hallwaySinglePrefab != null)
             rot = Quaternion.Euler(0f, 0f, 90f);
 
-        // Scale the hallway to span the exact distance between connection points.
-        // This assumes the prefab's local X axis runs along its length.
         float length   = Vector3.Distance(exitPos, entryPos);
         var   go       = Instantiate(prefab, centre, rot, transform);
         go.name        = $"Hallway_{a.roomInstance.name}_{dir}";
 
-        // Stretch to fit the gap — adjust the local X scale to match the distance.
-        // If your prefab is already sized to 1 world unit, this scales it correctly.
-        // If you don't want auto-scaling, remove the two lines below.
-        // Vector3 s = go.transform.localScale;
-        // go.transform.localScale = new Vector3(length, s.y, s.z);
 
         spawnedHallways.Add(go);
     }
 
-    // ── Door configuration ─────────────────────────────────────────────────
 
     private void ConfigureDoors()
     {
@@ -449,7 +398,6 @@ public class LevelGenerator : MonoBehaviour
         }
     }
 
-    // ── Room grid init ─────────────────────────────────────────────────────
 
     private void InitRoomGrids()
     {
@@ -461,7 +409,6 @@ public class LevelGenerator : MonoBehaviour
 
             room.roomGrid = room.roomInstance.GetComponent<RoomGrid>();
 
-            // ADD THIS — initialize spawn point reader alongside everything else
             var spawnReader = room.roomInstance.GetComponent<RoomSpawnPointReader>()
                         ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
             spawnReader.Initialize();
@@ -475,7 +422,6 @@ public class LevelGenerator : MonoBehaviour
             door.Initialize(room);
     }
 
-    // ── Player spawn ───────────────────────────────────────────────────────
 
     private void SpawnPlayer(PlacedRoom start)
     {
@@ -518,8 +464,6 @@ public class LevelGenerator : MonoBehaviour
             return null;
         }
 
-        // For the start room, prefer South spawn tile (player "starts" facing north)
-        // but fall back to whatever direction exists
         foreach (var preferredDir in new[]
         {
             Direction.South,
@@ -560,8 +504,6 @@ public class LevelGenerator : MonoBehaviour
         }
         return null;
     }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
 
     private void ReadPrefabDimensions()
     {
