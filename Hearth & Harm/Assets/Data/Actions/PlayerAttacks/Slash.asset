@@ -19,7 +19,7 @@ MonoBehaviour:
   baseDamage: 10
   diceCount: 6
   dieType: 6
-  flatBonus: 0
+  flatBonus: 5
   damageMultiplier: 1
   attackPattern: {fileID: 11400000, guid: 69197eac5c8147e49b6c3dd7ddf5a52d, type: 2}
   rotatesToFacing: 1
@@ -31,7 +31,7 @@ MonoBehaviour:
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   showSpritePerTile: 0
-  _summary: 'Damage: 6d6+0
+  _summary: 'Damage: 6d6+5
 
     Stamina: 3
 
