@@ -34,77 +34,77 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
     private IEnumerator SpawnAllPlayersNextFrame()
     {
         yield return null;
-        SpawnAllPlayers();
+        // SpawnAllPlayers();
     }
 
-    private void SpawnAllPlayers()
-    {
-        var gen = FindAnyObjectByType<LevelGenerator>();
-        if (gen == null) { Debug.LogError("[NetworkedPlayerSpawner] No LevelGenerator!"); return; }
+    // private void SpawnAllPlayers()
+    // {
+    //     var gen = FindAnyObjectByType<LevelGenerator>();
+    //     if (gen == null) { Debug.LogError("[NetworkedPlayerSpawner] No LevelGenerator!"); return; }
 
-        var startRoom = gen.GetAllRooms().Find(r =>
-            r.prefabData.roomType == LevelGenerator.RoomType.Start &&
-            r.roomGrid != null && r.roomGrid.IsInitialized());
+    //     var startRoom = gen.GetAllRooms().Find(r =>
+    //         r.prefabData.roomType == LevelGenerator.RoomType.Start &&
+    //         r.roomGrid != null && r.roomGrid.IsInitialized());
 
-        if (startRoom == null)
-        {
-            Debug.LogError("[NetworkedPlayerSpawner] No valid start room found!");
-            return;
-        }
+    //     if (startRoom == null)
+    //     {
+    //         Debug.LogError("[NetworkedPlayerSpawner] No valid start room found!");
+    //         return;
+    //     }
 
-        RoomManager.Instance?.SetCurrentRoom(startRoom);
+    //     RoomManager.Instance?.SetCurrentRoom(startRoom);
 
-        var clients = NetworkManager.Singleton.ConnectedClientsList;
-        int cx = startRoom.roomGrid.GetWidth()  / 2;
-        int cy = startRoom.roomGrid.GetHeight() / 2;
+    //     var clients = NetworkManager.Singleton.ConnectedClientsList;
+    //     int cx = startRoom.roomGrid.GetWidth()  / 2;
+    //     int cy = startRoom.roomGrid.GetHeight() / 2;
 
-        var offsets = new Vector2Int[]
-        {
-            new(0, 0), new(-spawnSpread, 0), new(spawnSpread, 0),
-            new(0, -spawnSpread), new(0, spawnSpread)
-        };
+    //     var offsets = new Vector2Int[]
+    //     {
+    //         new(0, 0), new(-spawnSpread, 0), new(spawnSpread, 0),
+    //         new(0, -spawnSpread), new(0, spawnSpread)
+    //     };
 
-        for (int i = 0; i < clients.Count; i++)
-        {
-            ulong clientId  = clients[i].ClientId;
+    //     for (int i = 0; i < clients.Count; i++)
+    //     {
+    //         ulong clientId  = clients[i].ClientId;
 
-            int charIndex = CharacterSelectionSync.Instance != null
-                ? CharacterSelectionSync.Instance.GetCharacterIndex(clientId)
-                : 0;
+    //         int charIndex = CharacterSelectionSync.Instance != null
+    //             ? CharacterSelectionSync.Instance.GetCharacterIndex(clientId)
+    //             : 0;
 
-            GameObject prefab = GetPrefab(charIndex);
-            if (prefab == null) continue;
+    //         GameObject prefab = GetPrefab(charIndex);
+    //         if (prefab == null) continue;
 
-            var offset  = i < offsets.Length ? offsets[i] : new Vector2Int(i, 0);
-            var spawnGP = new GridPosition(cx + offset.x, cy + offset.y);
+    //         var offset  = i < offsets.Length ? offsets[i] : new Vector2Int(i, 0);
+    //         var spawnGP = new GridPosition(cx + offset.x, cy + offset.y);
 
-            if (!startRoom.roomGrid.IsValidGridPosition(spawnGP) ||
-                !startRoom.roomGrid.IsWalkableIgnoreOccupancy(spawnGP))
-                spawnGP = new GridPosition(cx, cy);
+    //         if (!startRoom.roomGrid.IsValidGridPosition(spawnGP) ||
+    //             !startRoom.roomGrid.IsWalkableIgnoreOccupancy(spawnGP))
+    //             spawnGP = new GridPosition(cx, cy);
 
-            Vector3 spawnWorld = startRoom.roomGrid.GetWorldPosition(spawnGP);
+    //         Vector3 spawnWorld = startRoom.roomGrid.GetWorldPosition(spawnGP);
 
-            var go     = Instantiate(prefab, spawnWorld, Quaternion.identity);
-            var netObj = go.GetComponent<NetworkObject>();
+    //         var go     = Instantiate(prefab, spawnWorld, Quaternion.identity);
+    //         var netObj = go.GetComponent<NetworkObject>();
 
-            if (netObj == null)
-            {
-                Debug.LogError($"[NetworkedPlayerSpawner] {prefab.name} missing NetworkObject!");
-                Destroy(go);
-                continue;
-            }
+    //         if (netObj == null)
+    //         {
+    //             Debug.LogError($"[NetworkedPlayerSpawner] {prefab.name} missing NetworkObject!");
+    //             Destroy(go);
+    //             continue;
+    //         }
 
-            netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
+    //         netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
 
-            var unit = go.GetComponent<Unit>();
-            unit?.PlaceInRoom(startRoom.roomGrid, spawnGP);
+    //         var unit = go.GetComponent<Unit>();
+    //         unit?.PlaceInRoom(startRoom.roomGrid, spawnGP);
 
-            var bridge = go.GetComponent<NetworkedPlayerBridge>();
-            bridge?.PlaceInRoom(startRoom.roomGrid, spawnGP);
+    //         var bridge = go.GetComponent<NetworkedPlayerBridge>();
+    //         bridge?.PlaceInRoom(startRoom.roomGrid, spawnGP);
 
-            Debug.Log($"[NetworkedPlayerSpawner] Spawned player {clientId} (char {charIndex}) at {spawnGP}");
-        }
-    }
+    //         Debug.Log($"[NetworkedPlayerSpawner] Spawned player {clientId} (char {charIndex}) at {spawnGP}");
+    //     }
+    // }
 
     private GameObject GetPrefab(int index)
     {
