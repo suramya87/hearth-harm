@@ -4,10 +4,14 @@ using UnityEngine.EventSystems;
 
 /// <summary>
 /// Central input handler for unit selection and action execution.
+/// Modified to route actions through network authority in multiplayer.
 ///
-/// 2D CHANGES
-///   - Uses MouseWorld2D.GetPosition() instead of 3D raycast.
-///   - Room grid looked up from RoomManager, not LevelGrid.
+/// CHANGES FROM ORIGINAL:
+///   - Damage calls go through NetworkedHealthBridge.TakeDamage() (static helper)
+///     instead of enemy.Health.TakeDamage() directly
+///   - Move calls go through NetworkedPlayerBridge.PlaceInRoom() when in MP
+///   - In SP: behaves identically to the original
+///
 /// </summary>
 public class UnitActionSystem : MonoBehaviour
 {
@@ -36,15 +40,48 @@ public class UnitActionSystem : MonoBehaviour
 
     private void OnLevelReady()
     {
-        var unit = FindAnyObjectByType<Unit>();
-        if (unit != null) SetSelectedUnit(unit);
+        // In MP: only auto-select the unit we own
+        var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
+        foreach (var u in units)
+        {
+            if (!GameManager.IsMultiplayer)
+            {
+                SetSelectedUnit(u);
+                break;
+            }
+
+            // In MP: select the unit owned by this client
+            var netBridge = u.GetComponent<NetworkedPlayerBridge>();
+            if (netBridge != null)
+            {
+                // We check ownership via the NetworkObject
+                var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && netObj.IsOwner)
+                {
+                    SetSelectedUnit(u);
+                    break;
+                }
+            }
+        }
     }
 
     private void Update()
     {
-        if (isBusy)         return;
+        if (isBusy)               return;
         if (selectedUnit == null) return;
-        if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn) return;
+
+        // In MP: only process input on player turn and when it's allowed
+        if (GameManager.IsMultiplayer)
+        {
+            if (NetworkedTurnSystem.Instance != null && !NetworkedTurnSystem.Instance.IsPlayerPhase)
+                return;
+        }
+        else
+        {
+            if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn)
+                return;
+        }
+
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
         HandleInput();
@@ -60,31 +97,56 @@ public class UnitActionSystem : MonoBehaviour
         Vector3      mouseWorld = MouseWorld2D.GetPosition();
         GridPosition mouseGP    = room.GetGridPosition(mouseWorld);
 
-        // Check for enemy click first
         EnemyUnit clickedEnemy = room.GetEnemyAtGridPosition(mouseGP);
         if (clickedEnemy != null && selectedAction is CombatAction ca)
         {
             if (ca.CanAfford() && ca.IsValidTarget(mouseGP))
             {
                 SetBusy();
-                ca.PerformAttack(mouseGP, ClearBusy);
+                PerformAttack(ca, mouseGP, clickedEnemy);
             }
             else
             {
-                // Select enemy for inspection
                 SelectEnemy(clickedEnemy);
             }
             return;
         }
 
-        // Normal action dispatch
         switch (selectedAction)
         {
             case MoveAction move when move.IsValidTarget(mouseGP):
-                SetBusy(); move.Move(mouseGP, ClearBusy); break;
+                SetBusy();
+                PerformMove(move, mouseGP);
+                break;
 
             case CombatAction combat when combat.CanAfford() && combat.IsValidTarget(mouseGP):
-                SetBusy(); combat.PerformAttack(mouseGP, ClearBusy); break;
+                SetBusy();
+                PerformAttack(combat, mouseGP, null);
+                break;
+        }
+    }
+
+    // ── Action execution with network routing ──────────────────────────────
+
+    private void PerformMove(MoveAction move, GridPosition targetGP)
+    {
+        // MoveAction handles the local movement and visual
+        // NetworkedPlayerBridge will sync the final position to other clients
+        move.Move(targetGP, ClearBusy);
+    }
+
+    private void PerformAttack(CombatAction combat, GridPosition targetGP, EnemyUnit directTarget)
+    {
+        if (GameManager.IsMultiplayer)
+        {
+            // In MP: perform attack locally for responsiveness,
+            // but route damage through NetworkedHealthBridge
+            combat.PerformAttackNetworked(targetGP, ClearBusy);
+        }
+        else
+        {
+            // SP: unchanged behaviour
+            combat.PerformAttack(targetGP, ClearBusy);
         }
     }
 
@@ -115,8 +177,8 @@ public class UnitActionSystem : MonoBehaviour
         OnSelectedActionChange?.Invoke(this, EventArgs.Empty);
     }
 
-    private void SetBusy()  { isBusy = true;  OnBusyChanged?.Invoke(this, true);  }
-    private void ClearBusy(){ isBusy = false; OnBusyChanged?.Invoke(this, false); }
+    private void SetBusy()   { isBusy = true;  OnBusyChanged?.Invoke(this, true);  }
+    private void ClearBusy() { isBusy = false; OnBusyChanged?.Invoke(this, false); }
 
     public Unit       GetSelectedUnit()   => selectedUnit;
     public BaseAction GetSelectedAction() => selectedAction;

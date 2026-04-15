@@ -8,14 +8,14 @@ public class CombatAction : BaseAction
     [SerializeField] private CombatActionData actionData;
 
     [Header("Facing correction (0–3 × 90° CCW)")]
-    [Range(0,3)]
+    [Range(0, 3)]
     [SerializeField] private int facingRotationSteps = 1;
 
     [Header("Optional dice box UI")]
     [SerializeField] private DiceBoxUI diceBox;
 
-    private Vector2Int         currentFacing = new(0, 1);
-    private List<GridPosition> lastPreview   = new();
+    private Vector2Int currentFacing = new(0, 1);
+    private List<GridPosition> lastPreview = new();
 
     public CombatActionData ActionData => actionData;
     public void SetActionData(CombatActionData d) => actionData = d;
@@ -49,20 +49,36 @@ public class CombatAction : BaseAction
         return positions;
     }
 
-    // ── Execution ──────────────────────────────────────────────────────────
+    // ── Execution Logic ────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Singleplayer/Standard Execution
+    /// </summary>
     public void PerformAttack(GridPosition targetGP, Action onComplete)
+    {
+        ExecuteAttackFlow(targetGP, onComplete, useNetworkBridge: false);
+    }
+
+    /// <summary>
+    /// Multiplayer-safe attack. Routes damage through NetworkedHealthBridge.
+    /// </summary>
+    public void PerformAttackNetworked(GridPosition targetGP, Action onComplete)
+    {
+        ExecuteAttackFlow(targetGP, onComplete, useNetworkBridge: true);
+    }
+
+    private void ExecuteAttackFlow(GridPosition targetGP, Action onComplete, bool useNetworkBridge)
     {
         if (actionData == null) { onComplete?.Invoke(); return; }
 
         onActionComplete = onComplete;
-        isActive         = true;
+        isActive = true;
 
         var unitGP = unit.GetGridPosition();
         if (actionData.rotatesToFacing)
             currentFacing = ApplyCorrection(FacingToward(unitGP, targetGP));
 
-        // Use cached fields from BaseAction — not GetComponent
+        // Visuals & Animation
         unitAnimator?.SetFacing(currentFacing);
         unitAnimator?.TriggerAttack();
 
@@ -71,13 +87,72 @@ public class CombatAction : BaseAction
             : PatternAt(unitGP, currentFacing);
 
         AttackSpritePopup.ShowOnTiles(actionData, hitPositions);
+        
+        // Resource & Damage
         SpendStamina();
-        ApplyDamage(hitPositions);
+        
+        if (useNetworkBridge)
+            ApplyDamageNetworked(hitPositions);
+        else
+            ApplyDamage(hitPositions);
 
         playerAnimator?.RefreshStaminaState();
 
         isActive = false;
         onActionComplete?.Invoke();
+    }
+
+    // ── Damage Application ─────────────────────────────────────────────────
+
+    private void ApplyDamage(List<GridPosition> positions)
+    {
+        var room = unit.GetCurrentRoomGrid();
+        if (room == null) return;
+
+        int dmg = RollDamage();
+
+        foreach (var pos in positions)
+        {
+            if (!room.IsValidGridPosition(pos)) continue;
+
+            foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
+            {
+                if (enemy == null || enemy.IsDead) continue;
+                enemy.Health.TakeDamage(dmg);
+            }
+
+            foreach (var target in room.GetUnitsAtGridPosition(pos))
+            {
+                if (target == unit && !actionData.canTargetSelf) continue;
+                target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
+            }
+        }
+    }
+
+    private void ApplyDamageNetworked(List<GridPosition> positions)
+    {
+        var room = unit.GetCurrentRoomGrid();
+        if (room == null) return;
+
+        int dmg = RollDamage();
+
+        foreach (var pos in positions)
+        {
+            if (!room.IsValidGridPosition(pos)) continue;
+
+            // Routes through NetworkedHealthBridge for Server Authority
+            foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
+            {
+                if (enemy == null || enemy.IsDead) continue;
+                NetworkedHealthBridge.TakeDamage(enemy.gameObject, dmg);
+            }
+
+            foreach (var target in room.GetUnitsAtGridPosition(pos))
+            {
+                if (target == unit && !actionData.canTargetSelf) continue;
+                NetworkedHealthBridge.TakeDamage(target.gameObject, dmg);
+            }
+        }
     }
 
     // ── Valid targets ──────────────────────────────────────────────────────
@@ -124,40 +199,13 @@ public class CombatAction : BaseAction
         !actionData.requiresEnoughStamina ||
         playerStats.currentStamina >= actionData.staminaCost;
 
-    // ── Damage ─────────────────────────────────────────────────────────────
-
-    private void ApplyDamage(List<GridPosition> positions)
-    {
-        var room = unit.GetCurrentRoomGrid();
-        if (room == null) return;
-
-        int dmg = RollDamage();
-
-        foreach (var pos in positions)
-        {
-            if (!room.IsValidGridPosition(pos)) continue;
-
-            foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
-            {
-                if (enemy == null || enemy.IsDead) continue;
-                enemy.Health.TakeDamage(dmg);
-            }
-
-            foreach (var target in room.GetUnitsAtGridPosition(pos))
-            {
-                if (target == unit && !actionData.canTargetSelf) continue;
-                target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
-            }
-        }
-    }
+    // ── Helpers ────────────────────────────────────────────────────────────
 
     private void SpendStamina()
     {
         if (playerStats == null) return;
         playerStats.currentStamina = Mathf.Max(0, playerStats.currentStamina - actionData.staminaCost);
     }
-
-    // ── Pattern helpers ────────────────────────────────────────────────────
 
     private List<GridPosition> PatternAt(GridPosition origin, Vector2Int facing) =>
         actionData.attackPattern != null
@@ -186,11 +234,8 @@ public class CombatAction : BaseAction
             : (dx >= 0 ? new(1, 0) : new(-1, 0));
     }
 
-    private static readonly Vector2Int[] _cardinals =
-        { new(0,1), new(0,-1), new(1,0), new(-1,0) };
+    private static readonly Vector2Int[] _cardinals = { new(0, 1), new(0, -1), new(1, 0), new(-1, 0) };
     private static IEnumerable<Vector2Int> Cardinals() => _cardinals;
-
-    // ── Dice ───────────────────────────────────────────────────────────────
 
     private int RollDamage()
     {
@@ -201,6 +246,7 @@ public class CombatAction : BaseAction
         int total = actionData.flatBonus;
         foreach (int r in rolls) total += r;
 
+        // Visual roll display
         diceBox?.Clear();
         diceBox?.ShowRoll(rolls, actionData.flatBonus);
 
