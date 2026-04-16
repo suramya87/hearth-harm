@@ -1,129 +1,83 @@
-// using System.Collections;
-// using System.Collections.Generic;
-// using TMPro;
-// using UnityEngine;
-// using UnityEngine.UI;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using TMPro;
 
-// public class MainMenuController : MonoBehaviour
-// {
-//     [Header("Top Level Panels")]
-//     [SerializeField] private GameObject mainMenuPanel;
-//     [SerializeField] private GameObject modeSelectPanel; 
-//     [SerializeField] private GameObject multiplayerJoinPanel; // Panel with the Join Code input
-//     [SerializeField] private GameObject lobbyPanel;          // Panel where you see players/code
-//     [SerializeField] private GameObject loadingPanel;
+public class MainMenuController : MonoBehaviour
+{
+    [Header("Scenes")]
+    [SerializeField] private string singlePlayerScene = "SinglePlayerScene";
+    [SerializeField] private string multiplayerScene  = "MultiplayerScene";
 
-//     [Header("Multiplayer UI Elements")]
-//     [SerializeField] private TMP_InputField joinCodeInput;
-//     [SerializeField] private TextMeshProUGUI displayJoinCodeText; // Shows the code to the host
-//     [SerializeField] private TextMeshProUGUI statusText;         // "Connecting...", "Failed", etc.
-//     [SerializeField] private Button startAdventureButton;       // The final "Start Game" button
+    [Header("Panels")]
+    [SerializeField] private GameObject mainPanel;
+    [SerializeField] private GameObject charSelectPanel;
 
-//     private bool isSinglePlayer = false;
+    [Header("Character Selection UI")]
+    [SerializeField] private List<Button> characterButtons;
+    [SerializeField] private TextMeshProUGUI selectedNameText;
+    [SerializeField] private string[] characterNames = { "Warrior", "Mage", "Rogue" };
 
-//     private void Awake()
-//     {
-//         // Bind UI buttons to logic
-//         // (Assuming you have these buttons on your panels)
-//     }
+    private void Start()
+    {
+        // Ensure we start on the main panel
+        mainPanel.SetActive(true);
+        charSelectPanel.SetActive(false);
 
-//     private void Start()
-//     {
-//         ShowPanel(mainMenuPanel);
+        // Setup character buttons for single player
+        for (int i = 0; i < characterButtons.Count; i++)
+        {
+            int index = i;
+            characterButtons[i].onClick.AddListener(() => SelectCharacter(index));
+        }
+    }
 
-//         // Subscribe to Bootstrapper events so we know when the room is ready
-//         if (NetworkBootstrapper.Instance != null)
-//         {
-//             NetworkBootstrapper.Instance.OnJoinCodeReady += HandleJoinCodeGenerated;
-//             NetworkBootstrapper.Instance.OnConnectionFailed += HandleConnectionError;
-//         }
-//     }
+    // --- Navigation ---
 
-//     private void OnDestroy()
-//     {
-//         if (NetworkBootstrapper.Instance != null)
-//         {
-//             NetworkBootstrapper.Instance.OnJoinCodeReady -= HandleJoinCodeGenerated;
-//             NetworkBootstrapper.Instance.OnConnectionFailed -= HandleConnectionError;
-//         }
-//     }
+    public void OnSinglePlayerClicked()
+    {
+        // Instead of loading the scene, show the character select panel
+        mainPanel.SetActive(false);
+        charSelectPanel.SetActive(true);
+        UpdateSelectionVisuals(0); // Default to first character
+    }
 
-//     // ─── Flow Logic ────────────────────────────────────────────────────────
+    public void OnMultiplayerClicked()
+    {
+        SceneManager.LoadScene(multiplayerScene);
+    }
 
-//     public void OnPlayButtonClicked() => ShowPanel(modeSelectPanel);
+    public void OnBackToMainClicked()
+    {
+        charSelectPanel.SetActive(false);
+        mainPanel.SetActive(true);
+    }
 
-//     public void StartSinglePlayer()
-//     {
-//         isSinglePlayer = true;
-//         statusText.text = "Singleplayer Mode";
-//         ShowPanel(lobbyPanel); 
+    // --- Character Selection ---
+
+    private void SelectCharacter(int index)
+    {
+        // Set the static index that your Spawner script looks for
+        CharacterSelection.Index = index;
         
-//         // In SP, start button is always ready
-//         if (startAdventureButton != null) startAdventureButton.interactable = true;
-//         if (displayJoinCodeText != null) displayJoinCodeText.text = "OFFLINE";
-//     }
+        UpdateSelectionVisuals(index);
+    }
 
-//     public void OpenMultiplayerJoinMenu()
-//     {
-//         isSinglePlayer = false;
-//         ShowPanel(multiplayerJoinPanel);
-//     }
-
-//     public async void OnHostGameClicked()
-//     {
-//         UpdateStatus("Creating Relay Session...");
-//         await NetworkBootstrapper.Instance.HostGame();
-//         // The HandleJoinCodeGenerated callback will trigger showing the lobbyPanel
-//     }
-
-//     public async void OnJoinGameClicked()
-//     {
-//         string code = joinCodeInput.text;
-//         if (string.IsNullOrEmpty(code) || code.Length < 6)
-//         {
-//             UpdateStatus("Invalid Join Code");
-//             return;
-//         }
-
-//         UpdateStatus("Joining " + code + "...");
-//         await NetworkBootstrapper.Instance.JoinGame(code);
+    private void UpdateSelectionVisuals(int index)
+    {
+        if (selectedNameText != null && index < characterNames.Length)
+        {
+            selectedNameText.text = characterNames[index];
+        }
         
-//         // If successful, show the lobby
-//         ShowPanel(lobbyPanel);
-//         if (displayJoinCodeText != null) displayJoinCodeText.text = code.ToUpper();
-//     }
+        // You could add code here to highlight the button or show a preview model
+    }
 
-//     // ─── Event Handlers ────────────────────────────────────────────────────
-
-//     private void HandleJoinCodeGenerated(string code)
-//     {
-//         ShowPanel(lobbyPanel);
-//         if (displayJoinCodeText != null) displayJoinCodeText.text = code;
-//         UpdateStatus("Room Ready");
-//     }
-
-//     private void HandleConnectionError(string error)
-//     {
-//         UpdateStatus("Error: " + error);
-//         ShowPanel(multiplayerJoinPanel);
-//     }
-
-//     // ─── Helper Methods ────────────────────────────────────────────────────
-
-//     private void ShowPanel(GameObject target)
-//     {
-//         mainMenuPanel.SetActive(false);
-//         modeSelectPanel.SetActive(false);
-//         multiplayerJoinPanel.SetActive(false);
-//         lobbyPanel.SetActive(false);
-//         loadingPanel.SetActive(false);
-
-//         target.SetActive(true);
-//     }
-
-//     private void UpdateStatus(string msg)
-//     {
-//         if (statusText != null) statusText.text = msg;
-//         Debug.Log($"[UI Status] {msg}");
-//     }
-// }
+    public void OnStartGameClicked()
+    {
+        // Set mode to offline and go!
+        GameManager.SetMode(GameMode.Offline);
+        SceneManager.LoadScene(singlePlayerScene);
+    }
+}

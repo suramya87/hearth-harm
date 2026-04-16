@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb59b5874b6ab1540a599975a5ddb65e, type: 3}
   m_Name: Snowmen
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
-  enemyName: Enemy
+  enemyName: SNOWMEN
   maxHealth: 16
   moveRange: 1
   attackData: {fileID: 11400000, guid: 813eda885bd33d949986cec1f7ab62aa, type: 2}

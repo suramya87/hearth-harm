@@ -5279,7 +5279,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2868341513
+  GlobalObjectIdHash: 2270125987
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -7214,6 +7214,7 @@ GameObject:
   - component: {fileID: 1158815603}
   - component: {fileID: 1158815605}
   - component: {fileID: 1158815606}
+  - component: {fileID: 1158815607}
   m_Layer: 0
   m_Name: LevelGenerator
   m_TagString: Untagged
@@ -7248,12 +7249,6 @@ MonoBehaviour:
     cellSize: 0
   - prefab: {fileID: 4968128638377832015, guid: 2b4e251f8b96d814390b0141b5e20b40, type: 3}
     roomType: 1
-    spawnWeight: 1
-    width: 0
-    height: 0
-    cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 46a048b74b8d759459815d6e64c97d2b, type: 3}
-    roomType: 2
     spawnWeight: 1
     width: 0
     height: 0
@@ -7297,7 +7292,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2124695474
+  GlobalObjectIdHash: 3875004625
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -7328,6 +7323,19 @@ MonoBehaviour:
   - {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
   fallbackPrefab: {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
   spawnSpread: 1
+--- !u!114 &1158815607
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1158815602}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 512e3a2768b83074aa66d1076ca78760, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelCheats
+  levelGenerator: {fileID: 1158815603}
 --- !u!1 &1159171659
 GameObject:
   m_ObjectHideFlags: 0
@@ -10532,7 +10540,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1615606962
+  GlobalObjectIdHash: 3676868860
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1

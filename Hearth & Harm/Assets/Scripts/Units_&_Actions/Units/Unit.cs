@@ -1,15 +1,12 @@
 using System;
 using UnityEngine;
 
-/// <summary>
-/// Represents any player-controlled character on the grid.
-///
-/// 2D CHANGES
-///   - PlaceInRoom sets transform.position in XY (Z unchanged for sorting).
-///   - GetGridPosition reads from TilemapRoomGrid directly.
-/// </summary>
 public class Unit : MonoBehaviour
 {
+    [Header("Visual Settings")]
+    [Tooltip("Adjust this to center the sprite in the tile (usually 0.5, 0.5)")]
+    [SerializeField] private Vector2 visualOffset = new Vector2(0.5f, 0.5f);
+
     private GridPosition  gridPosition;
     private RoomGrid      currentRoomGrid;
     private bool          isInitialized;
@@ -39,7 +36,6 @@ public class Unit : MonoBehaviour
 
     // ── Grid placement ─────────────────────────────────────────────────────
 
-    /// <summary>Move this unit to a grid position inside a room.</summary>
     public void PlaceInRoom(RoomGrid room, GridPosition newPos)
     {
         if (currentRoomGrid != null && isInitialized)
@@ -48,9 +44,16 @@ public class Unit : MonoBehaviour
         currentRoomGrid = room;
         gridPosition    = newPos;
 
+        // 1. Get the base world position (the corner of the tile)
         Vector3 world = room.GetWorldPosition(newPos);
-        // Preserve Z so sprite sorting layers stay intact
-        transform.position = new Vector3(world.x, world.y, transform.position.z);
+
+        // 2. Apply the visual offset to the world position
+        // We add visualOffset.x to X and visualOffset.y to Y
+        transform.position = new Vector3(
+            world.x + visualOffset.x, 
+            world.y + visualOffset.y, 
+            transform.position.z
+        );
 
         room.AddUnitAtGridPosition(newPos, this);
         isInitialized = true;

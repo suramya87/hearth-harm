@@ -715,7 +715,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &143667717
 RectTransform:
   m_ObjectHideFlags: 0
@@ -6284,7 +6284,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9560d0e9b3c80134093c6de7c62ec71e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  isMultiplayer: 0
+  defaultMode: 0
 --- !u!4 &1059453624
 Transform:
   m_ObjectHideFlags: 0
@@ -11458,7 +11458,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1910377340
 RectTransform:
   m_ObjectHideFlags: 0
@@ -13133,3 +13133,4 @@ SceneRoots:
   - {fileID: 1163725320}
   - {fileID: 1617025422}
   - {fileID: 818118548}
+  - {fileID: 684972320}

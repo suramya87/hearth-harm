@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawnTable
   entries:
   - prefab: {fileID: 8194032206900855935, guid: 8cd4731a1b127bc4daea38829e31cffb, type: 3}
-    percentage: 0
+    percentage: 100
   roomType: 2
   minLevel: 1
   maxLevel: 99
-  _summary: "Levels 1-inf | Normal | WARNING: 0% (should be 100)\n  Wolf 0%"
+  _summary: "Levels 1-inf | Normal | OK\n  Wolf 100%"

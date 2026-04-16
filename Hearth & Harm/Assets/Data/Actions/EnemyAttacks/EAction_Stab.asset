@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a028d5cbccb09b4b83c80df1942443c, type: 3}
+  m_Name: EAction_Stab
+  m_EditorClassIdentifier: Assembly-CSharp::CombatActionData
+  actionName: Attack
+  icon: {fileID: 483832424, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  animationFrames:
+  - {fileID: 494746159, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -483947941, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -1871682699, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 894778454, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -117861461, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 1309994031, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -665337629, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -854450605, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 483832424, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: 1452335617, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -922745333, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  - {fileID: -512514818, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
+  useDiceDamage: 0
+  baseDamage: 3
+  diceCount: 1
+  dieType: 6
+  flatBonus: 0
+  damageMultiplier: 1
+  attackPattern: {fileID: 11400000, guid: 0306879d6e435c04086ec6fcb5381c0f, type: 2}
+  rotatesToFacing: 1
+  minRange: 0
+  maxRange: 1
+  canTargetSelf: 1
+  staminaCost: 0
+  requiresEnoughStamina: 0
+  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
+  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  showSpritePerTile: 0
+  _summary: 'Damage: 3
+
+    Stamina: 0
+
+    Pattern: ImpaleATP
+
+    Range: 0-1
+
+    Rotates:
+    True'
