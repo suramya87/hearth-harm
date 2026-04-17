@@ -84,15 +84,29 @@ public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerE
 
     private void ApplyMouseDisturbance()
     {
+        if (particleLayer == null) return;
+
+        Camera uiCamera = null;
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            uiCamera = canvas.worldCamera;
+
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            rect, Input.mousePosition, null, out var local);
-        if (!rect.rect.Contains(local)) return;
+            particleLayer, Input.mousePosition, uiCamera, out var local);
+
+        if (!particleLayer.rect.Contains(local)) return;
+
         foreach (var p in particles)
         {
-            var dir  = p.GetComponent<RectTransform>().anchoredPosition - local;
-            float d  = dir.magnitude;
-            if (d < MouseForceRadius)
-                p.ApplyForce(dir.normalized * (1f - d/MouseForceRadius) * MouseForceStrength * Time.deltaTime);
+            var particleRect = p.GetComponent<RectTransform>();
+            var dir = particleRect.anchoredPosition - local;
+            float d = dir.magnitude;
+
+            if (d < MouseForceRadius && d > 0.001f)
+            {
+                float strength = (1f - d / MouseForceRadius) * MouseForceStrength;
+                p.ApplyForce(dir.normalized * strength * Time.deltaTime);
+            }
         }
     }
 

@@ -66,7 +66,7 @@ public class DiceBoxUI : MonoBehaviour
         if (resultsText) resultsText.text = string.Join(", ", rolls);
         int sum = bonus; foreach (int r in rolls) sum += r;
         if (totalText) totalText.text = bonus != 0
-            ? $"{sum - bonus} +{bonus} = <b>{sum}</b>"
+            ? $"{sum - bonus} + {bonus} = <b>{sum}</b>"
             : $"{sum}";
     }
 }
