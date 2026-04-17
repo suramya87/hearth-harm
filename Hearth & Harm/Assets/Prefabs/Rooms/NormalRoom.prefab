@@ -1752,7 +1752,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CameraRoomBounds
   useCollider: 0
   padding: 1
-  boundsOverride: {x: 50, y: 50}
+  boundsOverride: {x: 40, y: 40}
 --- !u!114 &572400385253113238
 MonoBehaviour:
   m_ObjectHideFlags: 0

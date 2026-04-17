@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 /// <summary>
 /// Orthographic 2D camera controller.
@@ -21,6 +22,11 @@ public class CameraController2D : MonoBehaviour
     [Header("Pan")]
     [SerializeField] private float panSpeed     = 8f;
     [SerializeField] private float dragPanSpeed = 0.015f;
+
+    [Header("Edge Scrolling")]
+    [SerializeField] private bool useEdgeScroll = true;
+    [SerializeField] private float edgeSize = 25f;     
+    [SerializeField] private float edgePanSpeed = 8f;
 
     [Header("Zoom")]
     [SerializeField] private float zoomSpeed = 4f;
@@ -71,8 +77,6 @@ public class CameraController2D : MonoBehaviour
         transform.position = basePos + shakeOffset;
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
     public void SetRoomBounds(Bounds b) { roomBounds = b; hasBounds = true; }
     public void SnapToTarget()          { snapping = true; }
 
@@ -82,9 +86,6 @@ public class CameraController2D : MonoBehaviour
         shakeDur  = duration;
         shakeTime = duration;
     }
-
-    // ── Pan ────────────────────────────────────────────────────────────────
-
     private bool HasManualInput() =>
         Input.GetAxisRaw("Horizontal") != 0 ||
         Input.GetAxisRaw("Vertical")   != 0 ||
@@ -94,7 +95,19 @@ public class CameraController2D : MonoBehaviour
     {
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");
-        basePos += new Vector3(h, v, 0f).normalized * panSpeed * Time.deltaTime;
+
+        Vector2 edge = GetEdgeScrollInput();
+
+        // Combine inputs (keyboard + edge)
+        Vector2 moveInput = new Vector2(h, v) + edge;
+
+        // Normalize so diagonal isn't faster
+        if (moveInput.sqrMagnitude > 1f)
+            moveInput.Normalize();
+
+        // Apply movement
+        float speed = edge != Vector2.zero ? edgePanSpeed : panSpeed;
+        basePos += new Vector3(moveInput.x, moveInput.y, 0f) * speed * Time.deltaTime;
 
         if (Input.GetMouseButtonDown(1)) lastMouse = Input.mousePosition;
         if (Input.GetMouseButton(1))
@@ -103,6 +116,27 @@ public class CameraController2D : MonoBehaviour
             lastMouse = Input.mousePosition;
             basePos -= new Vector3(delta.x, delta.y, 0f) * dragPanSpeed;
         }
+    }
+
+    private Vector2 GetEdgeScrollInput()
+    {
+        if (!useEdgeScroll) return Vector2.zero;
+
+        if (Input.GetMouseButton(1)) return Vector2.zero;
+
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return Vector2.zero;
+
+        Vector2 input = Vector2.zero;
+        Vector3 mouse = Input.mousePosition;
+
+        if (mouse.x <= edgeSize) input.x = -1f;
+        else if (mouse.x >= Screen.width - edgeSize) input.x = 1f;
+
+        if (mouse.y <= edgeSize) input.y = -1f;
+        else if (mouse.y >= Screen.height - edgeSize) input.y = 1f;
+
+        return input;
     }
 
     private void DoSnap()
@@ -115,8 +149,6 @@ public class CameraController2D : MonoBehaviour
         basePos   = Vector3.Lerp(basePos, target, snapSmoothness * Time.deltaTime);
         if (Vector3.Distance(basePos, target) < 0.02f) { basePos = target; snapping = false; }
     }
-
-    // ── Zoom ───────────────────────────────────────────────────────────────
 
     private void DoZoom()
     {
@@ -139,8 +171,6 @@ public class CameraController2D : MonoBehaviour
         return ray.GetPoint(d);
     }
 
-    // ── Clamp ──────────────────────────────────────────────────────────────
-
     private void ClampToRoom()
     {
         if (!hasBounds || cam == null) return;
@@ -149,8 +179,6 @@ public class CameraController2D : MonoBehaviour
         basePos.x = Mathf.Clamp(basePos.x, roomBounds.min.x + w, roomBounds.max.x - w);
         basePos.y = Mathf.Clamp(basePos.y, roomBounds.min.y + h, roomBounds.max.y - h);
     }
-
-    // ── Shake ──────────────────────────────────────────────────────────────
 
     private void DoShake()
     {
