@@ -7,7 +7,9 @@ public enum GameMode
 {
     Offline,  // Single-player, no network
     Host,     // Multiplayer host (also runs server logic)
-    Client    // Multiplayer client (non-authoritative)
+    Client,    // Multiplayer client (non-authoritative)
+    None
+
 }
 
 /// <summary>
@@ -49,6 +51,7 @@ public class GameManager : MonoBehaviour
     {
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
+        DontDestroyOnLoad(gameObject);
         _mode = defaultMode;
         Debug.Log($"[GameManager] Mode = {_mode}");
     }

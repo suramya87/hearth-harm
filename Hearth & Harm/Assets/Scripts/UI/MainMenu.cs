@@ -1,83 +1,268 @@
+// MenuFlowController.cs
+// ─────────────────────────────────────────────────────────────────────────────
+// Single source-of-truth for every panel transition in the Main Menu scene.
+// Attach this to a persistent root GameObject (e.g. "MenuManager").
+//
+// Panel wiring (assign in Inspector):
+//   mainMenuPanel        – the "MainMenuPanel" with New Game / Continue / etc.
+//   modeSelectorPanel    – the "ModePanel" (SinglePlayer / Multiplayer / Exit)
+//   multiplayerPanel     – the "MultiplayerPanel" (Create / Join / code entry)
+//   lobbyPanel           – the "LobbyContent" panel
+//   charSelectPanel      – the "CharacterSelectPanel" (shared SP + MP)
+//   loadingPanel         – the "LOADING" overlay
+//
+// Dependencies:
+//   MultiplayerMenuController  – handles all networking; calls back into this
+//                                controller via the public Transition* methods.
+// ─────────────────────────────────────────────────────────────────────────────
+
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using TMPro;
 
-public class MainMenuController : MonoBehaviour
+public enum MenuState
 {
-    [Header("Scenes")]
-    [SerializeField] private string singlePlayerScene = "SinglePlayerScene";
-    [SerializeField] private string multiplayerScene  = "MultiplayerScene";
+    Main,
+    ModeSelect,
+    CharSelectSinglePlayer,
+    MultiplayerConnect,
+    Lobby,
+    CharSelectMultiplayer,
+    Loading
+}
 
+public class MenuFlowController : MonoBehaviour
+{
+    // ── Singleton ──────────────────────────────────────────────────────────
+    public static MenuFlowController Instance { get; private set; }
+
+    // ── Panels ─────────────────────────────────────────────────────────────
     [Header("Panels")]
-    [SerializeField] private GameObject mainPanel;
+    [SerializeField] private GameObject mainMenuPanel;
+    [SerializeField] private GameObject modeSelectorPanel;
+    [SerializeField] private GameObject multiplayerPanel;
+    [SerializeField] private GameObject lobbyPanel;
     [SerializeField] private GameObject charSelectPanel;
+    [SerializeField] private GameObject loadingPanel;
 
-    [Header("Character Selection UI")]
-    [SerializeField] private List<Button> characterButtons;
-    [SerializeField] private TextMeshProUGUI selectedNameText;
-    [SerializeField] private string[] characterNames = { "Warrior", "Mage", "Rogue" };
+    // ── Character Select UI (shared) ───────────────────────────────────────
+    [Header("Character Selection")]
+    [SerializeField] private List<Button>        characterButtons;
+    [SerializeField] private TextMeshProUGUI     selectedNameText;
+    [SerializeField] private string[]            characterNames = { "SmokeStack", "Sconstance" };
+
+    // ── SP-only: Start Game button (inside charSelectPanel) ────────────────
+    [Header("Single Player")]
+    [SerializeField] private Button spStartButton;          // only visible in SP flow
+    [SerializeField] private string singlePlayerScene = "SinglePlayerScene";
+
+    // ── Scene names ────────────────────────────────────────────────────────
+    [Header("Scenes")]
+    [SerializeField] private string mainMenuScene = "MainMenu";
+
+    // ── State ──────────────────────────────────────────────────────────────
+    private MenuState _currentState = MenuState.Main;
+    private readonly Stack<MenuState> _history = new();
+
+    // ── All panels list (for easy hide-all) ───────────────────────────────
+    private List<GameObject> _allPanels;
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Unity lifecycle
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        Instance = this;
+    }
 
     private void Start()
     {
-        // Ensure we start on the main panel
-        mainPanel.SetActive(true);
-        charSelectPanel.SetActive(false);
+        _allPanels = new List<GameObject>
+        {
+            mainMenuPanel, modeSelectorPanel, multiplayerPanel,
+            lobbyPanel, charSelectPanel, loadingPanel
+        };
 
-        // Setup character buttons for single player
+        // Wire shared character buttons once
         for (int i = 0; i < characterButtons.Count; i++)
         {
-            int index = i;
-            characterButtons[i].onClick.AddListener(() => SelectCharacter(index));
+            int captured = i;
+            characterButtons[i].onClick.AddListener(() => OnCharacterSelected(captured));
         }
+
+        if (spStartButton != null)
+            spStartButton.onClick.AddListener(OnSPStartClicked);
+
+        GoTo(MenuState.Main, clearHistory: true);
     }
 
-    // --- Navigation ---
+    // ══════════════════════════════════════════════════════════════════════
+    // Public navigation – called by UI buttons (no args needed)
+    // ══════════════════════════════════════════════════════════════════════
 
-    public void OnSinglePlayerClicked()
+    /// Main menu "New Game / Continue" → mode selector
+    public void OnNewGameClicked()    => GoTo(MenuState.ModeSelect);
+
+    /// Mode selector → single-player character select
+    public void OnSinglePlayerClicked() => GoTo(MenuState.CharSelectSinglePlayer);
+
+    /// Mode selector → multiplayer connection panel
+    public void OnMultiplayerClicked()  => GoTo(MenuState.MultiplayerConnect);
+
+    /// Any "Back" button – pops history
+    public void OnBackClicked()         => GoBack();
+
+    /// Exit to OS
+    public void OnExitClicked()
     {
-        // Instead of loading the scene, show the character select panel
-        mainPanel.SetActive(false);
-        charSelectPanel.SetActive(true);
-        UpdateSelectionVisuals(0); // Default to first character
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
-    public void OnMultiplayerClicked()
+    // ══════════════════════════════════════════════════════════════════════
+    // Called BY MultiplayerMenuController when networking events fire
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// Host created / client joined → show lobby
+    public void TransitionToLobby()           => GoTo(MenuState.Lobby);
+
+    /// From lobby "Begin Char Select" button → MP character select
+    public void TransitionToMPCharSelect()    => GoTo(MenuState.CharSelectMultiplayer);
+
+    /// Host hit Start → show loading overlay (scene load is in progress)
+    public void TransitionToLoading()         => GoTo(MenuState.Loading);
+
+    /// Network error → pop back to multiplayer connection panel
+    public void TransitionToConnectionFailed()
     {
-        SceneManager.LoadScene(multiplayerScene);
+        // Don't push to history – this is an error recovery
+        HideAll();
+        multiplayerPanel.SetActive(true);
+        _currentState = MenuState.MultiplayerConnect;
     }
 
-    public void OnBackToMainClicked()
-    {
-        charSelectPanel.SetActive(false);
-        mainPanel.SetActive(true);
-    }
+    // ══════════════════════════════════════════════════════════════════════
+    // Character selection (shared SP + MP logic)
+    // ══════════════════════════════════════════════════════════════════════
 
-    // --- Character Selection ---
-
-    private void SelectCharacter(int index)
+    private void OnCharacterSelected(int index)
     {
-        // Set the static index that your Spawner script looks for
         CharacterSelection.Index = index;
-        
         UpdateSelectionVisuals(index);
+
+        if (_currentState == MenuState.CharSelectSinglePlayer)
+        {
+            // SP: just update visuals; player presses the Start button to proceed
+        }
+        else if (_currentState == MenuState.CharSelectMultiplayer)
+        {
+            // MP: propagate over network via MultiplayerMenuController
+            MultiplayerMenuController.Instance?.NotifyCharacterSelected(index);
+        }
     }
 
     private void UpdateSelectionVisuals(int index)
     {
         if (selectedNameText != null && index < characterNames.Length)
-        {
             selectedNameText.text = characterNames[index];
-        }
-        
-        // You could add code here to highlight the button or show a preview model
+        // Add highlight / preview model logic here if needed
     }
 
-    public void OnStartGameClicked()
+    // ══════════════════════════════════════════════════════════════════════
+    // Single-player start
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void OnSPStartClicked()
     {
-        // Set mode to offline and go!
+        if (CharacterSelection.Index < 0)
+        {
+            Debug.LogWarning("[MenuFlow] No character selected yet.");
+            return;
+        }
         GameManager.SetMode(GameMode.Offline);
+        GoTo(MenuState.Loading, clearHistory: true);
         SceneManager.LoadScene(singlePlayerScene);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // State machine core
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void GoTo(MenuState next, bool clearHistory = false)
+    {
+        if (clearHistory) _history.Clear();
+        else              _history.Push(_currentState);
+
+        _currentState = next;
+        ApplyState(next);
+    }
+
+    private void GoBack()
+    {
+        if (_history.Count == 0) return;
+        _currentState = _history.Pop();
+        ApplyState(_currentState);
+    }
+
+    private void ApplyState(MenuState state)
+    {
+        HideAll();
+
+        switch (state)
+        {
+            case MenuState.Main:
+                mainMenuPanel.SetActive(true);
+                break;
+
+            case MenuState.ModeSelect:
+                modeSelectorPanel.SetActive(true);
+                break;
+
+            case MenuState.CharSelectSinglePlayer:
+                charSelectPanel.SetActive(true);
+                SetSPCharSelectMode(true);
+                UpdateSelectionVisuals(0);
+                break;
+
+            case MenuState.MultiplayerConnect:
+                multiplayerPanel.SetActive(true);
+                break;
+
+            case MenuState.Lobby:
+                lobbyPanel.SetActive(true);
+                break;
+
+            case MenuState.CharSelectMultiplayer:
+                charSelectPanel.SetActive(true);
+                SetSPCharSelectMode(false);
+                UpdateSelectionVisuals(0);
+                break;
+
+            case MenuState.Loading:
+                loadingPanel.SetActive(true);
+                break;
+        }
+
+        Debug.Log($"[MenuFlow] → {state}");
+    }
+
+    private void HideAll()
+    {
+        foreach (var p in _allPanels)
+            if (p != null) p.SetActive(false);
+    }
+
+    /// Toggle the SP-only "Start Game" button on/off depending on flow
+    private void SetSPCharSelectMode(bool isSP)
+    {
+        if (spStartButton != null)
+            spStartButton.gameObject.SetActive(isSP);
     }
 }
