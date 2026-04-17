@@ -6501,6 +6501,7 @@ GameObject:
   - component: {fileID: 1059453623}
   - component: {fileID: 1059453622}
   - component: {fileID: 1059453621}
+  - component: {fileID: 1059453625}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -6521,7 +6522,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TilemapHighlighter
   solidWhiteTile: {fileID: 11400000, guid: 63550933798cae548a04ac4b9d9cd3d3, type: 2}
-  moveColor: {r: 0.2, g: 0.6, b: 1, a: 1}
+  moveColor: {r: 0.2, g: 0.6, b: 1, a: 0.42745098}
   rangeColor: {r: 1, g: 0.85, b: 0, a: 1}
   aoeColor: {r: 1, g: 0.15, b: 0.15, a: 1}
   hoverColor: {r: 1, g: 1, b: 1, a: 0.4}
@@ -6567,6 +6568,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1059453625
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1059453620}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee9fb6f00b02e443bb5c95995b2fe99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GridCostVisualizer
+  costTextPrefab: {fileID: 2949930719687676758, guid: 9eddcada2cdaa9243ad22b9622aba2a6, type: 3}
 --- !u!1 &1091994230
 GameObject:
   m_ObjectHideFlags: 0
