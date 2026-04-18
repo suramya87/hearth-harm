@@ -9257,7 +9257,7 @@ MonoBehaviour:
   useEdgeScroll: 1
   edgeSize: 2
   edgePanSpeed: 8
-  zoomSpeed: 10
+  zoomSpeed: 15
   orthoMin: 3
   orthoMax: 8
   snapSmoothness: 10

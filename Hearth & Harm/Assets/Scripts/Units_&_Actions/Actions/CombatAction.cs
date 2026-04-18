@@ -99,6 +99,7 @@ public class CombatAction : BaseAction
         playerAnimator?.RefreshStaminaState();
 
         isActive = false;
+        SelectMoveAction();
         onActionComplete?.Invoke();
     }
 
@@ -251,5 +252,15 @@ public class CombatAction : BaseAction
         diceBox?.ShowRoll(rolls, actionData.flatBonus);
 
         return Mathf.Max(1, Mathf.RoundToInt(total * actionData.damageMultiplier));
+    }
+
+    private void SelectMoveAction()
+    {
+        MoveAction moveAction = GetComponent<MoveAction>();
+        if (moveAction == null) return;
+
+        if (UnitActionSystem.Instance == null) return;
+
+        UnitActionSystem.Instance.SetSelectedAction(moveAction);
     }
 }
