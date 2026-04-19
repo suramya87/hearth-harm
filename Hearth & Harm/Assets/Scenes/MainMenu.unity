@@ -1375,31 +1375,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 227102827}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 1367613124}
-        m_TargetAssemblyTypeName: MenuFlowController, Assembly-CSharp
-        m_MethodName: OnMultiplayerClicked
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-      - m_Target: {fileID: 1367613124}
-        m_TargetAssemblyTypeName: MenuFlowController, Assembly-CSharp
-        m_MethodName: TransitionToMPCharSelect
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &227102827
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2819,7 +2795,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 431982200}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1367613124}
+        m_TargetAssemblyTypeName: MenuFlowController, Assembly-CSharp
+        m_MethodName: OnHostClicked
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &431982200
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3289,7 +3277,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 166.7085, y: 540}
-  m_SizeDelta: {x: 100, y: 0}
+  m_SizeDelta: {x: 100, y: 81.62}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &605494628
 MonoBehaviour:
@@ -3358,16 +3346,17 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 607664607}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -2278.3228}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1048122070}
-  m_Father: {fileID: 1376668816}
+  - {fileID: 1071504408}
+  m_Father: {fileID: 1880068774}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 155.7085, y: 269}
+  m_AnchoredPosition: {x: -11, y: -271}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &607664609
@@ -4002,16 +3991,16 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 761718706}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -2278.3228}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1065862230}
-  m_Father: {fileID: 1376668816}
+  m_Father: {fileID: 1880068774}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 155.7085, y: 187}
+  m_AnchoredPosition: {x: -11, y: -353}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &761718708
@@ -4988,7 +4977,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1015072477}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1367613124}
+        m_TargetAssemblyTypeName: MenuFlowController, Assembly-CSharp
+        m_MethodName: OnJoinClicked
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &1015072477
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5591,16 +5592,16 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1071504407}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -2278.3228}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 578710916}
-  m_Father: {fileID: 1376668816}
+  m_Father: {fileID: 607664608}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 155.7085, y: 223}
+  m_AnchoredPosition: {x: 0, y: -46}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1071504409
@@ -5646,19 +5647,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1071504410}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 1367613127}
-        m_TargetAssemblyTypeName: MultiplayerMenuController, Assembly-CSharp
-        m_MethodName: set_enabled
-        m_Mode: 6
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 1
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &1071504410
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5863,7 +5852,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 166.7085, y: 540}
-  m_SizeDelta: {x: 100, y: 81.62}
+  m_SizeDelta: {x: 100, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1094981289
 MonoBehaviour:
@@ -7132,19 +7121,35 @@ MonoBehaviour:
   mainMenuPanel: {fileID: 1437983819}
   modeSelectorPanel: {fileID: 1437983819}
   multiplayerPanel: {fileID: 2101322248}
-  lobbyPanel: {fileID: 2101322248}
-  charSelectPanel: {fileID: 1507719184}
+  charSelectPanel: {fileID: 1880068773}
   loadingPanel: {fileID: 120456184}
+  joinCodeInput: {fileID: 0}
+  statusText: {fileID: 0}
+  sessionCodeText: {fileID: 152491497}
+  playerCountText: {fileID: 316356687}
+  feedbackText: {fileID: 0}
+  beginCharSelectButton: {fileID: 227102826}
   characterButtons:
   - {fileID: 1481506532}
   - {fileID: 1992466632}
   selectedNameText: {fileID: 0}
+  csStatusText: {fileID: 1048122071}
   characterNames:
   - SmokeStack
   - Sconstance
+  characterSprites:
+  - {fileID: 21300000, guid: 0a6e81c5fa4dfc54ea11b72a92e2c992, type: 3}
+  - {fileID: 21300000, guid: 0e20546249772374aa695758d1accf32, type: 3}
+  characterPrefabs:
+  - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
+  - {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
+  selectedTint: {r: 1, g: 0.85, b: 0.2, a: 1}
+  deselectedTint: {r: 1, g: 1, b: 1, a: 0.4}
   spStartButton: {fileID: 279185073}
   singlePlayerScene: SinglePlayertest
-  mainMenuScene: MainMenu
+  readyButton: {fileID: 607664609}
+  mpStartButton: {fileID: 1071504409}
+  multiplayerScene: MultiplayerTest
 --- !u!114 &1367613126
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7183,10 +7188,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MultiplayerMenuController
   joinCodeInput: {fileID: 126986828}
-  displayJoinCodeText: {fileID: 0}
-  statusText: {fileID: 0}
-  startButton: {fileID: 1071504409}
   beginCharSelectButton: {fileID: 227102826}
+  startButton: {fileID: 1071504409}
   gameSceneName: MultiplayerTest
 --- !u!1 &1376668815
 GameObject:
@@ -7218,13 +7221,10 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 605494627}
-  - {fileID: 607664608}
-  - {fileID: 761718707}
   - {fileID: 434146257}
   - {fileID: 1127001525}
   - {fileID: 1098892350}
   - {fileID: 26098588}
-  - {fileID: 1071504408}
   m_Father: {fileID: 1507719185}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1392397247
@@ -8022,7 +8022,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1507719185
 Transform:
   m_ObjectHideFlags: 0
@@ -8685,7 +8685,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1880068774
 Transform:
   m_ObjectHideFlags: 0
@@ -8700,6 +8700,8 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1489930132}
+  - {fileID: 607664608}
+  - {fileID: 761718707}
   m_Father: {fileID: 2130559005}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1979407022
@@ -8734,10 +8736,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 605494627}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 50, y: -40.81}
+  m_SizeDelta: {x: 100, y: 81.62}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1979407024
 MonoBehaviour:
@@ -9886,10 +9888,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 1094981288}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 50, y: -40.81}
-  m_SizeDelta: {x: 100, y: 81.62}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2099277901
 MonoBehaviour:

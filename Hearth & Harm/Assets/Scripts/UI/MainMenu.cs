@@ -1,23 +1,7 @@
-// MenuFlowController.cs
-// ─────────────────────────────────────────────────────────────────────────────
-// Single source-of-truth for every panel transition in the Main Menu scene.
-// Attach this to a persistent root GameObject (e.g. "MenuManager").
-//
-// Panel wiring (assign in Inspector):
-//   mainMenuPanel        – the "MainMenuPanel" with New Game / Continue / etc.
-//   modeSelectorPanel    – the "ModePanel" (SinglePlayer / Multiplayer / Exit)
-//   multiplayerPanel     – the "MultiplayerPanel" (Create / Join / code entry)
-//   lobbyPanel           – the "LobbyContent" panel
-//   charSelectPanel      – the "CharacterSelectPanel" (shared SP + MP)
-//   loadingPanel         – the "LOADING" overlay
-//
-// Dependencies:
-//   MultiplayerMenuController  – handles all networking; calls back into this
-//                                controller via the public Transition* methods.
-// ─────────────────────────────────────────────────────────────────────────────
-
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -26,51 +10,71 @@ public enum MenuState
 {
     Main,
     ModeSelect,
-    CharSelectSinglePlayer,
     MultiplayerConnect,
     Lobby,
-    CharSelectMultiplayer,
+    CharSelect,
     Loading
 }
 
 public class MenuFlowController : MonoBehaviour
 {
-    // ── Singleton ──────────────────────────────────────────────────────────
     public static MenuFlowController Instance { get; private set; }
 
-    // ── Panels ─────────────────────────────────────────────────────────────
     [Header("Panels")]
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject modeSelectorPanel;
     [SerializeField] private GameObject multiplayerPanel;
-    [SerializeField] private GameObject lobbyPanel;
     [SerializeField] private GameObject charSelectPanel;
     [SerializeField] private GameObject loadingPanel;
 
-    // ── Character Select UI (shared) ───────────────────────────────────────
-    [Header("Character Selection")]
-    [SerializeField] private List<Button>        characterButtons;
-    [SerializeField] private TextMeshProUGUI     selectedNameText;
-    [SerializeField] private string[]            characterNames = { "SmokeStack", "Sconstance" };
+    [Header("Multiplayer Panel")]
+    [SerializeField] private TMP_InputField  joinCodeInput;
+    [SerializeField] private TextMeshProUGUI statusText;
+    [SerializeField] private TextMeshProUGUI sessionCodeText;
+    [SerializeField] private TextMeshProUGUI playerCountText;
+    [SerializeField] private TextMeshProUGUI feedbackText;
+    [SerializeField] private Button          beginCharSelectButton;
 
-    // ── SP-only: Start Game button (inside charSelectPanel) ────────────────
+    [Header("Character Select")]
+    [SerializeField] private List<Button>     characterButtons;
+    [SerializeField] private TextMeshProUGUI  selectedNameText;
+    [SerializeField] private TextMeshProUGUI  csStatusText;
+
+    [Header("Character Data")]
+    [SerializeField] private List<string>     characterNames  = new() { "SmokeStack", "Sconstance" };
+    [SerializeField] private List<Sprite>     characterSprites;
+    [SerializeField] private List<GameObject> characterPrefabs;
+    [SerializeField] private Color            selectedTint   = new Color(1f, 0.85f, 0.2f, 1f);
+    [SerializeField] private Color            deselectedTint = new Color(1f, 1f, 1f, 0.4f);
+
     [Header("Single Player")]
-    [SerializeField] private Button spStartButton;          // only visible in SP flow
+    [SerializeField] private Button spStartButton;
     [SerializeField] private string singlePlayerScene = "SinglePlayerScene";
 
-    // ── Scene names ────────────────────────────────────────────────────────
+    [Header("Multiplayer Char Select")]
+    [SerializeField] private Button readyButton;
+    [SerializeField] private Button mpStartButton;
+
     [Header("Scenes")]
-    [SerializeField] private string mainMenuScene = "MainMenu";
+    [SerializeField] private string multiplayerScene = "MultiplayerTest";
 
-    // ── State ──────────────────────────────────────────────────────────────
-    private MenuState _currentState = MenuState.Main;
-    private readonly Stack<MenuState> _history = new();
+    // ── Runtime ────────────────────────────────────────────────────────────
+    private MenuState             _state        = MenuState.Main;
+    private readonly Stack<MenuState> _history  = new();
+    private List<GameObject>      _allPanels;
 
-    // ── All panels list (for easy hide-all) ───────────────────────────────
-    private List<GameObject> _allPanels;
+    private int  _selectedChar   = 0;
+    private bool _isReady        = false;
+    private bool _isSinglePlayer = false;
+
+    private readonly HashSet<ulong> _readyClients = new();
+    private readonly List<ulong>    _connectedIds = new();
+    private Coroutine               _feedbackCoroutine;
+
+    private bool _networkConnectedHandled = false;
 
     // ══════════════════════════════════════════════════════════════════════
-    // Unity lifecycle
+    // Lifecycle
     // ══════════════════════════════════════════════════════════════════════
 
     private void Awake()
@@ -84,39 +88,147 @@ public class MenuFlowController : MonoBehaviour
         _allPanels = new List<GameObject>
         {
             mainMenuPanel, modeSelectorPanel, multiplayerPanel,
-            lobbyPanel, charSelectPanel, loadingPanel
+            charSelectPanel, loadingPanel
         };
 
-        // Wire shared character buttons once
-        for (int i = 0; i < characterButtons.Count; i++)
+        WireCharacterButtons();
+        WireActionButtons();
+        HideAll();
+        ShowPanel(mainMenuPanel);
+
+        StartCoroutine(SubscribeToLobbyNetwork());
+        StartCoroutine(SubscribeToBootstrapper());
+        StartCoroutine(WatchForWidgetConnection());
+    }
+
+    private void OnDestroy()
+    {
+        if (LobbyNetwork.Instance != null)
         {
-            int captured = i;
-            characterButtons[i].onClick.AddListener(() => OnCharacterSelected(captured));
+            LobbyNetwork.Instance.OnReadyChanged    -= HandleReadyChanged;
+            LobbyNetwork.Instance.OnBeginCharSelect -= OnBeginCharSelectReceived;
         }
-
-        if (spStartButton != null)
-            spStartButton.onClick.AddListener(OnSPStartClicked);
-
-        GoTo(MenuState.Main, clearHistory: true);
+        if (NetworkBootstrapper.Instance != null)
+        {
+            NetworkBootstrapper.Instance.OnJoinCodeReady    -= OnJoinCodeReady;
+            NetworkBootstrapper.Instance.OnConnected        -= OnNetworkConnected;
+            NetworkBootstrapper.Instance.OnConnectionFailed -= OnNetworkConnectionFailed;
+        }
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback  -= OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Public navigation – called by UI buttons (no args needed)
+    // Subscriptions
     // ══════════════════════════════════════════════════════════════════════
 
-    /// Main menu "New Game / Continue" → mode selector
-    public void OnNewGameClicked()    => GoTo(MenuState.ModeSelect);
+    private IEnumerator SubscribeToLobbyNetwork()
+    {
+        LobbyNetwork lastSeen = null;
+        while (true)
+        {
+            var current = LobbyNetwork.Instance;
+            if (current != null && current != lastSeen)
+            {
+                if (lastSeen != null)
+                {
+                    lastSeen.OnReadyChanged    -= HandleReadyChanged;
+                    lastSeen.OnBeginCharSelect -= OnBeginCharSelectReceived;
+                }
+                current.OnReadyChanged    -= HandleReadyChanged;
+                current.OnBeginCharSelect -= OnBeginCharSelectReceived;
+                current.OnReadyChanged    += HandleReadyChanged;
+                current.OnBeginCharSelect += OnBeginCharSelectReceived;
+                lastSeen = current;
+                Debug.Log("[MenuFlow] Subscribed to LobbyNetwork.");
+            }
+            yield return new WaitForSeconds(0.2f);
+        }
+    }
 
-    /// Mode selector → single-player character select
-    public void OnSinglePlayerClicked() => GoTo(MenuState.CharSelectSinglePlayer);
+    private IEnumerator SubscribeToBootstrapper()
+    {
+        while (NetworkBootstrapper.Instance == null) yield return null;
+        NetworkBootstrapper.Instance.OnJoinCodeReady    += OnJoinCodeReady;
+        NetworkBootstrapper.Instance.OnConnected        += OnNetworkConnected;
+        NetworkBootstrapper.Instance.OnConnectionFailed += OnNetworkConnectionFailed;
+        Debug.Log("[MenuFlow] Subscribed to NetworkBootstrapper.");
+    }
 
-    /// Mode selector → multiplayer connection panel
-    public void OnMultiplayerClicked()  => GoTo(MenuState.MultiplayerConnect);
+    // Watches for Widget-based connections where NetworkBootstrapper
+    // OnConnected never fires — detects IsListening becoming true instead
+    private IEnumerator WatchForWidgetConnection()
+    {
+        bool wasListening = false;
+        while (true)
+        {
+            bool isListening = NetworkManager.Singleton != null
+                            && NetworkManager.Singleton.IsListening;
 
-    /// Any "Back" button – pops history
-    public void OnBackClicked()         => GoBack();
+            if (isListening && !wasListening && !_networkConnectedHandled
+                && _state == MenuState.MultiplayerConnect)
+            {
+                Debug.Log("[MenuFlow] Widget connection detected.");
+                OnNetworkConnected();
+            }
 
-    /// Exit to OS
+            if (!isListening && wasListening)
+                _networkConnectedHandled = false;
+
+            wasListening = isListening;
+            yield return null;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Button wiring
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void WireCharacterButtons()
+    {
+        for (int i = 0; i < characterButtons.Count; i++)
+        {
+            int idx = i;
+            characterButtons[i]?.onClick.AddListener(() => OnCharacterSelected(idx));
+
+            if (i < characterSprites.Count && characterSprites[i] != null)
+            {
+                var imgs = characterButtons[i]?.GetComponentsInChildren<Image>();
+                if (imgs != null && imgs.Length > 1)
+                    imgs[1].sprite = characterSprites[i];
+            }
+        }
+    }
+
+    private void WireActionButtons()
+    {
+        spStartButton        ?.onClick.AddListener(OnSPStartClicked);
+        readyButton          ?.onClick.AddListener(OnReadyClicked);
+        mpStartButton        ?.onClick.AddListener(OnMPStartClicked);
+        beginCharSelectButton?.onClick.AddListener(OnBeginCharSelectClicked);
+
+        spStartButton        ?.gameObject.SetActive(false);
+        readyButton          ?.gameObject.SetActive(false);
+        mpStartButton        ?.gameObject.SetActive(false);
+        beginCharSelectButton?.gameObject.SetActive(false);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Public navigation
+    // ══════════════════════════════════════════════════════════════════════
+
+    public void OnNewGameClicked()      => GoTo(MenuState.ModeSelect);
+    public void OnSinglePlayerClicked() => EnterSinglePlayerCharSelect();
+    public void OnMultiplayerClicked()
+    {
+        _networkConnectedHandled = false;
+        GoTo(MenuState.MultiplayerConnect);
+    }
+    public void OnBackClicked() => GoBack();
+
     public void OnExitClicked()
     {
 #if UNITY_EDITOR
@@ -126,130 +238,367 @@ public class MenuFlowController : MonoBehaviour
 #endif
     }
 
-    // ══════════════════════════════════════════════════════════════════════
-    // Called BY MultiplayerMenuController when networking events fire
-    // ══════════════════════════════════════════════════════════════════════
-
-    /// Host created / client joined → show lobby
-    public void TransitionToLobby()           => GoTo(MenuState.Lobby);
-
-    /// From lobby "Begin Char Select" button → MP character select
-    public void TransitionToMPCharSelect()    => GoTo(MenuState.CharSelectMultiplayer);
-
-    /// Host hit Start → show loading overlay (scene load is in progress)
-    public void TransitionToLoading()         => GoTo(MenuState.Loading);
-
-    /// Network error → pop back to multiplayer connection panel
-    public void TransitionToConnectionFailed()
+    public async void OnHostClicked()
     {
-        // Don't push to history – this is an error recovery
-        HideAll();
-        multiplayerPanel.SetActive(true);
-        _currentState = MenuState.MultiplayerConnect;
+        SetStatus("Creating session...");
+        await NetworkBootstrapper.Instance.HostGame();
     }
 
-    // ══════════════════════════════════════════════════════════════════════
-    // Character selection (shared SP + MP logic)
-    // ══════════════════════════════════════════════════════════════════════
-
-    private void OnCharacterSelected(int index)
+    public async void OnJoinClicked()
     {
-        CharacterSelection.Index = index;
-        UpdateSelectionVisuals(index);
-
-        if (_currentState == MenuState.CharSelectSinglePlayer)
+        string code = joinCodeInput != null ? joinCodeInput.text.Trim() : "";
+        if (string.IsNullOrEmpty(code) || code.Length < 6)
         {
-            // SP: just update visuals; player presses the Start button to proceed
+            SetStatus("Enter a valid 6-character code.");
+            return;
         }
-        else if (_currentState == MenuState.CharSelectMultiplayer)
-        {
-            // MP: propagate over network via MultiplayerMenuController
-            MultiplayerMenuController.Instance?.NotifyCharacterSelected(index);
-        }
+        SetStatus($"Joining {code.ToUpper()}...");
+        await NetworkBootstrapper.Instance.JoinGame(code);
     }
 
-    private void UpdateSelectionVisuals(int index)
+    public void OnDisconnectClicked()
     {
-        if (selectedNameText != null && index < characterNames.Length)
-            selectedNameText.text = characterNames[index];
-        // Add highlight / preview model logic here if needed
+        _networkConnectedHandled = false;
+        NetworkBootstrapper.Instance?.Disconnect();
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback  -= OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        }
+        GoTo(MenuState.Main, clearHistory: true);
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // Single-player start
+    // Bootstrapper callbacks
     // ══════════════════════════════════════════════════════════════════════
+
+    private void OnJoinCodeReady(string code)
+    {
+        if (sessionCodeText != null) sessionCodeText.text = $"{code}";
+        SetStatus($"{code}");
+    }
+
+    private void OnNetworkConnected()
+    {
+        if (_networkConnectedHandled) return;
+        _networkConnectedHandled = true;
+
+        Debug.Log($"[MenuFlow] Connected. IsHost={NetworkManager.Singleton?.IsHost}");
+
+        _connectedIds.Clear();
+        _readyClients.Clear();
+
+        if (NetworkManager.Singleton != null)
+            foreach (ulong id in NetworkManager.Singleton.ConnectedClientsIds)
+                if (!_connectedIds.Contains(id)) _connectedIds.Add(id);
+
+        GoTo(MenuState.Lobby);
+        RefreshPlayerCount();
+        SetStatus("Connected! Waiting for players...");
+
+        bool isHost = NetworkManager.Singleton?.IsHost ?? false;
+        beginCharSelectButton?.gameObject.SetActive(isHost);
+
+        if (isHost)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback  += OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+        }
+        else
+        {
+            StartCoroutine(WaitForClientHandshake());
+        }
+    }
+
+    private IEnumerator WaitForClientHandshake()
+    {
+        float timeout = 15f;
+        float elapsed = 0f;
+        while (elapsed < timeout)
+        {
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
+            {
+                Debug.Log("[MenuFlow] Client fully connected.");
+                yield break;
+            }
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        Debug.LogError("[MenuFlow] Client connection timed out.");
+        OnNetworkConnectionFailed("Connection timed out.");
+    }
+
+    private void OnNetworkConnectionFailed(string error)
+    {
+        _networkConnectedHandled = false;
+        SetStatus($"Failed: {error}");
+        GoTo(MenuState.MultiplayerConnect);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Player join / leave
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void OnClientConnected(ulong clientId)
+    {
+        if (!_connectedIds.Contains(clientId)) _connectedIds.Add(clientId);
+        _readyClients.Remove(clientId);
+        RefreshPlayerCount();
+        ShowFeedback($"Player {clientId} joined!");
+    }
+
+    private void OnClientDisconnected(ulong clientId)
+    {
+        _connectedIds.Remove(clientId);
+        _readyClients.Remove(clientId);
+        RefreshPlayerCount();
+        ShowFeedback($"Player {clientId} left.");
+        EvaluateMPStartButton();
+        UpdateCSStatus();
+    }
+
+    private void RefreshPlayerCount()
+    {
+        if (playerCountText == null) return;
+        int count = NetworkManager.Singleton?.ConnectedClientsIds.Count ?? _connectedIds.Count;
+        playerCountText.text = $"{count} / 4 players";
+    }
+
+    private void ShowFeedback(string msg)
+    {
+        if (feedbackText == null) return;
+        if (_feedbackCoroutine != null) StopCoroutine(_feedbackCoroutine);
+        _feedbackCoroutine = StartCoroutine(FeedbackRoutine(msg));
+    }
+
+    private IEnumerator FeedbackRoutine(string msg)
+    {
+        feedbackText.text  = msg;
+        feedbackText.color = Color.white;
+        yield return new WaitForSeconds(2f);
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime;
+            feedbackText.color = new Color(1f, 1f, 1f, 1f - t);
+            yield return null;
+        }
+        feedbackText.text = "";
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Begin Char Select
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void OnBeginCharSelectClicked()
+    {
+        if (!(NetworkManager.Singleton?.IsHost ?? false)) return;
+        beginCharSelectButton?.gameObject.SetActive(false);
+        LobbyNetwork.Instance?.BroadcastBeginCharSelect();
+        EnterMultiplayerCharSelect();
+    }
+
+    // Public so LobbyNetwork.OnNetworkSpawn can re-subscribe to it by name
+    public void OnBeginCharSelectReceived()
+    {
+        Debug.Log("[MenuFlow] OnBeginCharSelectReceived fired.");
+        if (_state != MenuState.CharSelect)
+            EnterMultiplayerCharSelect();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Single player char select
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void EnterSinglePlayerCharSelect()
+    {
+        _isSinglePlayer = true;
+        _selectedChar   = 0;
+
+        GoTo(MenuState.CharSelect);
+        RefreshCharacterButtons();
+
+        spStartButton ?.gameObject.SetActive(true);
+        readyButton   ?.gameObject.SetActive(false);
+        mpStartButton ?.gameObject.SetActive(false);
+
+        if (csStatusText != null) csStatusText.text = "";
+    }
 
     private void OnSPStartClicked()
     {
-        if (CharacterSelection.Index < 0)
-        {
-            Debug.LogWarning("[MenuFlow] No character selected yet.");
-            return;
-        }
+        CharacterSelection.Index  = _selectedChar;
+        CharacterSelection.Prefab = GetSelectedPrefab();
         GameManager.SetMode(GameMode.Offline);
         GoTo(MenuState.Loading, clearHistory: true);
         SceneManager.LoadScene(singlePlayerScene);
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // State machine core
+    // Multiplayer char select
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void EnterMultiplayerCharSelect()
+    {
+        _isSinglePlayer = false;
+        _isReady        = false;
+        _selectedChar   = 0;
+        _readyClients.Clear();
+
+        GoTo(MenuState.CharSelect);
+        RefreshCharacterButtons();
+        UpdateReadyVisual();
+        UpdateCSStatus();
+
+        readyButton  ?.gameObject.SetActive(true);
+        spStartButton?.gameObject.SetActive(false);
+
+        bool isHost = NetworkManager.Singleton?.IsHost ?? false;
+        mpStartButton?.gameObject.SetActive(isHost);
+        if (mpStartButton != null) mpStartButton.interactable = false;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Character selection
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void OnCharacterSelected(int index)
+    {
+        _selectedChar = index;
+        RefreshCharacterButtons();
+
+        if (!_isSinglePlayer)
+        {
+            CharacterSelectionSync.Instance?.SubmitCharacterIndex(index);
+            LobbyNetwork.Instance?.SetReadyServerRpc(
+                NetworkManager.Singleton.LocalClientId, true);
+        }
+    }
+
+    private void RefreshCharacterButtons()
+    {
+        for (int i = 0; i < characterButtons.Count; i++)
+        {
+            if (characterButtons[i] == null) continue;
+            bool sel = (i == _selectedChar);
+            var img = characterButtons[i].GetComponent<Image>();
+            if (img != null) img.color = sel ? selectedTint : deselectedTint;
+            characterButtons[i].transform.localScale =
+                sel ? new Vector3(1.1f, 1.1f, 1f) : Vector3.one;
+        }
+        if (selectedNameText != null && _selectedChar < characterNames.Count)
+            selectedNameText.text = characterNames[_selectedChar];
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Ready system
+    // ══════════════════════════════════════════════════════════════════════
+
+    private void OnReadyClicked()
+    {
+        _isReady = !_isReady;
+        LobbyNetwork.Instance?.SetReadyServerRpc(
+            NetworkManager.Singleton.LocalClientId, _isReady);
+        UpdateReadyVisual();
+    }
+
+    // Public so LobbyNetwork.OnNetworkSpawn can re-subscribe to it by name
+    public void HandleReadyChanged(ulong clientId, bool isReady)
+    {
+        if (isReady) _readyClients.Add(clientId);
+        else         _readyClients.Remove(clientId);
+        UpdateCSStatus();
+        EvaluateMPStartButton();
+    }
+
+    private void UpdateReadyVisual()
+    {
+        var txt = readyButton?.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null) txt.text = _isReady ? "Not Ready" : "Ready!";
+        var img = readyButton?.GetComponent<Image>();
+        if (img != null) img.color = _isReady
+            ? new Color(0.2f, 0.85f, 0.3f, 1f) : Color.white;
+    }
+
+    private void UpdateCSStatus()
+    {
+        if (csStatusText == null || NetworkManager.Singleton == null) return;
+        int  total    = NetworkManager.Singleton.ConnectedClientsIds.Count;
+        int  ready    = _readyClients.Count;
+        bool allReady = ready == total && total > 0;
+        csStatusText.text = allReady
+            ? "<color=#44DD66>All players ready!</color>"
+            : $"Waiting... ({ready}/{total} ready)";
+    }
+
+    private void EvaluateMPStartButton()
+    {
+        if (mpStartButton == null) return;
+        if (!(NetworkManager.Singleton?.IsHost ?? false)) return;
+
+        int  total    = NetworkManager.Singleton.ConnectedClientsIds.Count;
+        bool allReady = _readyClients.Count == total && total > 0;
+
+        mpStartButton.interactable = allReady;
+
+        var txt = mpStartButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null)
+        {
+            txt.text  = allReady ? "START!" : $"({_readyClients.Count}/{total} ready)";
+            txt.color = allReady ? Color.white : new Color(1f, 1f, 1f, 0.4f);
+        }
+    }
+
+    private void OnMPStartClicked()
+    {
+        if (!(NetworkManager.Singleton?.IsHost ?? false)) return;
+
+        CharacterSelection.Index  = _selectedChar;
+        CharacterSelection.Prefab = GetSelectedPrefab();
+
+        GoTo(MenuState.Loading, clearHistory: true);
+
+        var status = NetworkManager.Singleton.SceneManager.LoadScene(
+            multiplayerScene, LoadSceneMode.Single);
+
+        if (status != SceneEventProgressStatus.Started)
+        {
+            Debug.LogError($"[MenuFlow] Scene load failed: {status}");
+            EnterMultiplayerCharSelect();
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // State machine
     // ══════════════════════════════════════════════════════════════════════
 
     private void GoTo(MenuState next, bool clearHistory = false)
     {
         if (clearHistory) _history.Clear();
-        else              _history.Push(_currentState);
-
-        _currentState = next;
+        else              _history.Push(_state);
+        _state = next;
         ApplyState(next);
     }
 
     private void GoBack()
     {
         if (_history.Count == 0) return;
-        _currentState = _history.Pop();
-        ApplyState(_currentState);
+        _state = _history.Pop();
+        ApplyState(_state);
     }
 
     private void ApplyState(MenuState state)
     {
         HideAll();
-
         switch (state)
         {
-            case MenuState.Main:
-                mainMenuPanel.SetActive(true);
-                break;
-
-            case MenuState.ModeSelect:
-                modeSelectorPanel.SetActive(true);
-                break;
-
-            case MenuState.CharSelectSinglePlayer:
-                charSelectPanel.SetActive(true);
-                SetSPCharSelectMode(true);
-                UpdateSelectionVisuals(0);
-                break;
-
+            case MenuState.Main:              ShowPanel(mainMenuPanel);     break;
+            case MenuState.ModeSelect:        ShowPanel(modeSelectorPanel); break;
             case MenuState.MultiplayerConnect:
-                multiplayerPanel.SetActive(true);
-                break;
-
-            case MenuState.Lobby:
-                lobbyPanel.SetActive(true);
-                break;
-
-            case MenuState.CharSelectMultiplayer:
-                charSelectPanel.SetActive(true);
-                SetSPCharSelectMode(false);
-                UpdateSelectionVisuals(0);
-                break;
-
-            case MenuState.Loading:
-                loadingPanel.SetActive(true);
-                break;
+            case MenuState.Lobby:             ShowPanel(multiplayerPanel);  break;
+            case MenuState.CharSelect:        ShowPanel(charSelectPanel);   break;
+            case MenuState.Loading:           ShowPanel(loadingPanel);      break;
         }
-
         Debug.Log($"[MenuFlow] → {state}");
     }
 
@@ -259,10 +608,18 @@ public class MenuFlowController : MonoBehaviour
             if (p != null) p.SetActive(false);
     }
 
-    /// Toggle the SP-only "Start Game" button on/off depending on flow
-    private void SetSPCharSelectMode(bool isSP)
+    public void TransitionToLoading() => GoTo(MenuState.Loading, clearHistory: true);
+
+    private void ShowPanel(GameObject p) => p?.SetActive(true);
+
+    public void SetStatus(string msg)
     {
-        if (spStartButton != null)
-            spStartButton.gameObject.SetActive(isSP);
+        if (statusText != null) statusText.text = msg;
+    }
+
+    private GameObject GetSelectedPrefab()
+    {
+        if (characterPrefabs == null || _selectedChar >= characterPrefabs.Count) return null;
+        return characterPrefabs[_selectedChar];
     }
 }
