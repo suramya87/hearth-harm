@@ -15,6 +15,12 @@ public class NetworkGameManager : MonoBehaviour
     [Header("Session Settings")]
     [SerializeField] private int maxPlayers = 4;
 
+    // ── IMPORTANT: Drag your LobbySync prefab here in the Inspector ───────
+    // The prefab must have NetworkObject + LobbySync components.
+    // It must also be in NetworkManager's NetworkPrefabs list.
+    [Header("Lobby Sync")]
+    [SerializeField] private GameObject lobbySyncPrefab;
+
     // ── Public state ───────────────────────────────────────────────────────
     public ISession CurrentSession      { get; private set; }
     public bool     IsHost              => NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
@@ -112,7 +118,7 @@ public class NetworkGameManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Explicit session creation — used by Host / Join buttons
+    // Explicit session creation / joining
     // ─────────────────────────────────────────────────────────────────────
 
     public async Task CreateSessionAsync()
@@ -140,6 +146,9 @@ public class NetworkGameManager : MonoBehaviour
             Debug.Log($"[NetworkGameManager] Session created. Code: {CurrentSession.Code}");
             OnSessionCreated?.Invoke();
             RefreshPlayerList();
+
+            // Host is responsible for spawning LobbySync so NGO replicates it to all clients
+            StartCoroutine(SpawnLobbySyncAsHost());
         }
         catch (Exception e)
         {
@@ -184,12 +193,64 @@ public class NetworkGameManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Widget session fallback — polls for sessions created by the UGS Widget
+    // LobbySync spawning — host only
+    //
+    // The host waits for NGO to confirm it is listening, then instantiates
+    // and network-spawns the LobbySync prefab.  NGO automatically replicates
+    // the spawn to every connected client.
+    // ─────────────────────────────────────────────────────────────────────
+
+    private IEnumerator SpawnLobbySyncAsHost()
+    {
+        float elapsed = 0f;
+        while (NetworkManager.Singleton == null ||
+               !NetworkManager.Singleton.IsListening ||
+               !NetworkManager.Singleton.IsHost)
+        {
+            elapsed += Time.deltaTime;
+            if (elapsed > 15f)
+            {
+                Debug.LogError("[NetworkGameManager] Timed out waiting for NGO host — LobbySync NOT spawned. " +
+                               "Check that your NetworkManager is configured correctly.");
+                yield break;
+            }
+            yield return null;
+        }
+
+        if (LobbySync.Instance != null)
+        {
+            Debug.Log("[NetworkGameManager] LobbySync already exists — skipping spawn.");
+            yield break;
+        }
+
+        if (lobbySyncPrefab == null)
+        {
+            Debug.LogError("[NetworkGameManager] lobbySyncPrefab is not assigned! " +
+                           "Drag your LobbySync prefab into the NetworkGameManager Inspector field. " +
+                           "Character select will not work without it.");
+            yield break;
+        }
+
+        var go     = Instantiate(lobbySyncPrefab);
+        var netObj = go.GetComponent<NetworkObject>();
+
+        if (netObj == null)
+        {
+            Debug.LogError("[NetworkGameManager] LobbySync prefab is missing a NetworkObject component!");
+            Destroy(go);
+            yield break;
+        }
+
+        netObj.Spawn();
+        Debug.Log("[NetworkGameManager] LobbySync spawned by host.");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Widget session fallback
     // ─────────────────────────────────────────────────────────────────────
 
     private IEnumerator WatchForWidgetSession()
     {
-        // Wait for sign-in before polling
         while (string.IsNullOrEmpty(LocalPlayerId))
             yield return null;
 
@@ -197,7 +258,6 @@ public class NetworkGameManager : MonoBehaviour
         {
             yield return new WaitForSeconds(0.25f);
 
-            // Already have a session from explicit host/join — don't interfere
             if (CurrentSession != null || sessionEventFired) continue;
 
             var session = TryGetWidgetSession();
@@ -253,8 +313,15 @@ public class NetworkGameManager : MonoBehaviour
 
         Debug.Log($"[NetworkGameManager] Session synced. Code={session.Code} IsHost={IsHost}");
 
-        if (IsHost) OnSessionCreated?.Invoke();
-        else        OnSessionJoined?.Invoke();
+        if (IsHost)
+        {
+            OnSessionCreated?.Invoke();
+            StartCoroutine(SpawnLobbySyncAsHost());
+        }
+        else
+        {
+            OnSessionJoined?.Invoke();
+        }
 
         RefreshPlayerList();
     }
@@ -389,6 +456,11 @@ public class NetworkGameManager : MonoBehaviour
 
     // ─────────────────────────────────────────────────────────────────────
     // Session events
+    //
+    // PlayerJoined / PlayerLeft / Changed all use a one-frame delay before
+    // refreshing so the UGS session has time to fully hydrate the player data.
+    // Without the delay the host iterates CurrentSession.Players before the
+    // newly joined player is present in the list.
     // ─────────────────────────────────────────────────────────────────────
 
     private void SubscribeToSessionEvents()
@@ -410,15 +482,26 @@ public class NetworkGameManager : MonoBehaviour
     private void HandlePlayerJoined(string id)
     {
         Debug.Log($"[NetworkGameManager] Player joined: {id}");
-        RefreshPlayerList();
+        StartCoroutine(DelayedRefreshPlayerList());
     }
 
     private void HandlePlayerLeft(string id)
     {
         Debug.Log($"[NetworkGameManager] Player left: {id}");
         characterSelections.Remove(id);
-        RefreshPlayerList();
+        StartCoroutine(DelayedRefreshPlayerList());
     }
 
-    private void HandleSessionChanged() => RefreshPlayerList();
+    private void HandleSessionChanged()
+        => StartCoroutine(DelayedRefreshPlayerList());
+
+    /// <summary>
+    /// Yields one frame so the UGS lobby's internal player list is consistent
+    /// before we iterate CurrentSession.Players and fire OnPlayersUpdated.
+    /// </summary>
+    private IEnumerator DelayedRefreshPlayerList()
+    {
+        yield return null;
+        RefreshPlayerList();
+    }
 }
