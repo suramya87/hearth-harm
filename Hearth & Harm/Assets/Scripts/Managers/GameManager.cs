@@ -7,9 +7,8 @@ public enum GameMode
 {
     Offline,  // Single-player, no network
     Host,     // Multiplayer host (also runs server logic)
-    Client,    // Multiplayer client (non-authoritative)
+    Client,   // Multiplayer client (non-authoritative)
     None
-
 }
 
 /// <summary>
@@ -20,14 +19,14 @@ public enum GameMode
 ///   - Multiplayer: NetworkBootstrapper calls SetMode(Host/Client) before level loads
 ///
 /// Systems read GameManager.Mode to decide whether to activate networked behaviour.
-/// This replaces the old bool isMultiplayer flag (fully backwards compatible via IsMultiplayer).
+/// IsMultiplayer is fully backwards compatible with the old bool flag.
 /// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
     [Header("Mode")]
-    [Tooltip("Starting mode. Overridden at runtime by NetworkBootstrapper.")]
+    [Tooltip("Starting mode. Overridden at runtime by NetworkBootstrapper or MainMenuController.")]
     [SerializeField] private GameMode defaultMode = GameMode.Offline;
 
     // ── Static accessors ───────────────────────────────────────────────────
@@ -69,5 +68,26 @@ public class GameManager : MonoBehaviour
         }
         Instance._mode = mode;
         Debug.Log($"[GameManager] Mode → {mode}");
+    }
+
+    /// <summary>
+    /// Compatibility helper called by MainMenuController before scene load.
+    /// Translates the old bool into the correct GameMode.
+    /// Host vs Client is resolved from NGO at the moment of the call;
+    /// NetworkBootstrapper will correct it once the relay handshake finishes
+    /// if NGO isn't fully up yet.
+    /// </summary>
+    public static void SetMultiplayer(bool multiplayer)
+    {
+        if (!multiplayer)
+        {
+            SetMode(GameMode.Offline);
+            return;
+        }
+
+        bool isHost = Unity.Netcode.NetworkManager.Singleton != null
+                   && Unity.Netcode.NetworkManager.Singleton.IsHost;
+
+        SetMode(isHost ? GameMode.Host : GameMode.Client);
     }
 }
