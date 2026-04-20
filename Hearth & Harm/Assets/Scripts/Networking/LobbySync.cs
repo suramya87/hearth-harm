@@ -4,6 +4,15 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
+/// <summary>
+/// Syncs character selection, ready state, and phase transitions to all clients
+/// using NGO NetworkVariables and RPCs.
+///
+/// SETUP:
+///   - Create a prefab with NetworkObject + this component
+///   - Add it to NetworkManager's NetworkPrefabs list
+///   - The host spawns it; NGO replicates it to all clients
+/// </summary>
 public class LobbySync : NetworkBehaviour
 {
     public static LobbySync Instance { get; private set; }
@@ -11,7 +20,7 @@ public class LobbySync : NetworkBehaviour
     public event Action          OnCharSelectPhaseStarted;
     public event Action<ulong[]> OnPlayerDataUpdated;
 
-    // Persists the phase state so late-joining clients can catch up
+    // NetworkVariable persists phase state so late-joining clients catch up
     private NetworkVariable<bool> charSelectPhaseActive = new NetworkVariable<bool>(
         false,
         NetworkVariableReadPermission.Everyone,
@@ -40,8 +49,11 @@ public class LobbySync : NetworkBehaviour
 
         charSelectPhaseActive.OnValueChanged += OnCharSelectPhaseChanged;
 
+        // Register this client with the server so it appears in player lists
         RegisterClientServerRpc(NetworkManager.Singleton.LocalClientId);
 
+        // Late-join catch-up: if char select was already started before this client spawned,
+        // fire the event on the next frame (after NetworkVariable replication settles)
         if (charSelectPhaseActive.Value)
         {
             Debug.Log("[LobbySync] Char select already active on spawn — deferred fire.");
@@ -123,6 +135,8 @@ public class LobbySync : NetworkBehaviour
 
     // ─────────────────────────────────────────────────────────────────────
     // Phase transition
+    // Host calls BeginCharSelectPhase() → server sets NetworkVariable
+    // → ClientRpc fires OnCharSelectPhaseStarted on EVERY peer (host included)
     // ─────────────────────────────────────────────────────────────────────
 
     public void BeginCharSelectPhase()
@@ -152,14 +166,16 @@ public class LobbySync : NetworkBehaviour
         OnCharSelectPhaseStarted?.Invoke();
     }
 
+    // Log only — actual event is fired via ClientRpc above
     private void OnCharSelectPhaseChanged(bool oldVal, bool newVal)
     {
         if (newVal)
-            Debug.Log("[LobbySync] charSelectPhaseActive NetworkVariable → true");
+            Debug.Log("[LobbySync] charSelectPhaseActive NetworkVariable changed to true.");
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Player data broadcast
+    // Server pushes the full state to all clients after any change
     // ─────────────────────────────────────────────────────────────────────
 
     private void BroadcastPlayerData()
@@ -193,7 +209,7 @@ public class LobbySync : NetworkBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Reset (call when returning to menu)
+    // Reset — call when returning to menu between games
     // ─────────────────────────────────────────────────────────────────────
 
     public void ResetPhase()

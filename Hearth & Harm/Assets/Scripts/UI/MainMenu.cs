@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -33,8 +32,11 @@ public class MainMenuController : MonoBehaviour
 
     // ── Multiplayer panel ─────────────────────────────────────────────────
     [Header("Multiplayer Panel")]
-    [SerializeField] private TextMeshProUGUI ugsStatusText;       // "Signing in…" etc.
-    [SerializeField] private TextMeshProUGUI multiplayerErrorText; // surface errors if needed
+    [SerializeField] private Button          hostButton;
+    [SerializeField] private Button          joinButton;
+    [SerializeField] private TMP_InputField  joinCodeInput;
+    [SerializeField] private TextMeshProUGUI ugsStatusText;
+    [SerializeField] private TextMeshProUGUI multiplayerErrorText;
     [SerializeField] private Button          backToModeButton;
 
     // ── Player name ───────────────────────────────────────────────────────
@@ -43,11 +45,11 @@ public class MainMenuController : MonoBehaviour
 
     // ── Waiting lobby panel ───────────────────────────────────────────────
     [Header("Waiting Lobby Panel")]
-    [SerializeField] private TextMeshProUGUI sessionCodeText;       // shows join code
+    [SerializeField] private TextMeshProUGUI sessionCodeText;
     [SerializeField] private TextMeshProUGUI waitingPlayerCount;
     [SerializeField] private Transform       waitingPlayerList;
     [SerializeField] private GameObject      playerSlotPrefab;
-    [SerializeField] private Button          beginCharSelectButton; // host-only logic, visible to all
+    [SerializeField] private Button          beginCharSelectButton;
     [SerializeField] private Button          waitingLeaveButton;
 
     // ── Character select panel ────────────────────────────────────────────
@@ -61,7 +63,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Color            selectedTint   = new Color(1f, 0.85f, 0.2f, 1f);
     [SerializeField] private Color            deselectedTint = new Color(1f, 1f, 1f, 0.4f);
     [SerializeField] private Button           readyButton;
-    [SerializeField] private Button           startButton;           // host-only
+    [SerializeField] private Button           startButton;
     [SerializeField] private Button           singlePlayerStartButton;
     [SerializeField] private Button           charSelectLeaveButton;
 
@@ -75,10 +77,11 @@ public class MainMenuController : MonoBehaviour
     private bool isReady                  = false;
     private bool inCharSelectPhase        = false;
     private bool isSinglePlayer           = false;
+    private bool isConnecting             = false;
     private bool lobbySyncCoroutineActive = false;
 
     // ─────────────────────────────────────────────────────────────────────
-    // Awake
+    // Awake — wire up all button listeners
     // ─────────────────────────────────────────────────────────────────────
 
     private void Awake()
@@ -91,6 +94,9 @@ public class MainMenuController : MonoBehaviour
         startSinglePlayerButton?.onClick.AddListener(GoToSinglePlayerCharSelect);
         backToMainButton       ?.onClick.AddListener(() => ShowPanel(mainMenuPanel));
         backToModeButton       ?.onClick.AddListener(OnBackToModeClicked);
+
+        hostButton?.onClick.AddListener(OnHostClicked);
+        joinButton?.onClick.AddListener(OnJoinClicked);
 
         playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
 
@@ -123,7 +129,7 @@ public class MainMenuController : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Start
+    // Start — initial panel state
     // ─────────────────────────────────────────────────────────────────────
 
     private void Start()
@@ -135,12 +141,13 @@ public class MainMenuController : MonoBehaviour
         modePanel            ?.SetActive(false);
         multiplayerPanel     ?.SetActive(false);
 
+        // Hide lobby controls until we're connected and LobbySync is ready
+        beginCharSelectButton?.gameObject.SetActive(false);
+
         SetSessionCode("---");
         SetUgsStatus("Signing in…");
         SetMultiplayerError(string.Empty);
-
-        if (beginCharSelectButton != null)
-            beginCharSelectButton.interactable = false;
+        SetMultiplayerButtonsInteractable(false);
 
         RefreshCharacterButtons();
         ShowPanel(mainMenuPanel);
@@ -172,9 +179,15 @@ public class MainMenuController : MonoBehaviour
         while (string.IsNullOrEmpty(NetworkGameManager.Instance.LocalPlayerId))
             yield return null;
 
+        // Sign-in complete — enable multiplayer buttons
         SetUgsStatus(string.Empty);
+        SetMultiplayerButtonsInteractable(true);
     }
 
+    /// <summary>
+    /// Waits for LobbySync to be spawned by NGO (happens after NGO connects),
+    /// then subscribes to its events. Also handles late-join char-select catch-up.
+    /// </summary>
     private IEnumerator SubscribeToLobbySyncWhenReady()
     {
         lobbySyncCoroutineActive = true;
@@ -197,11 +210,18 @@ public class MainMenuController : MonoBehaviour
         UnsubscribeFromLobbySync();
         SubscribeToLobbySync();
 
+        // Only the host can begin char select
+        bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
         if (beginCharSelectButton != null)
-            beginCharSelectButton.interactable = true;
+        {
+            beginCharSelectButton.gameObject.SetActive(isHost);
+            beginCharSelectButton.interactable = isHost;
+        }
 
+        // Wait one frame to ensure NetworkVariable replication has settled
         yield return null;
 
+        // Late-join catch-up: char select already started before we subscribed
         if (!inCharSelectPhase && LobbySync.Instance.IsCharSelectPhaseActive)
         {
             Debug.Log("[MainMenuController] Char select already active — catching up.");
@@ -260,8 +280,17 @@ public class MainMenuController : MonoBehaviour
     // UGS callbacks
     // ─────────────────────────────────────────────────────────────────────
 
-    private void OnUgsSignedIn()    => SetUgsStatus(string.Empty);
-    private void OnUgsSignInFailed(string e) => SetUgsStatus("Sign-in failed. Check connection.");
+    private void OnUgsSignedIn()
+    {
+        SetUgsStatus(string.Empty);
+        SetMultiplayerButtonsInteractable(true);
+    }
+
+    private void OnUgsSignInFailed(string error)
+    {
+        SetUgsStatus("Sign-in failed. Check connection.");
+        SetMultiplayerButtonsInteractable(false);
+    }
 
     // ─────────────────────────────────────────────────────────────────────
     // Panel navigation
@@ -284,26 +313,61 @@ public class MainMenuController : MonoBehaviour
     private void GoToSinglePlayerCharSelect()
     {
         isSinglePlayer = true;
-        GameManager.SetMode(GameMode.Offline);
         SwitchToCharSelectPhase();
     }
 
     private void OnBackToModeClicked()
     {
-        // Just navigate back so the player can use the Widget UI again.
+        // Leave any active session if we navigate back from the multiplayer panel
+        if (NetworkGameManager.Instance?.CurrentSession != null)
+            _ = NetworkGameManager.Instance.LeaveSessionAsync();
+
+        isConnecting = false;
         SetMultiplayerError(string.Empty);
+        SetMultiplayerButtonsInteractable(true);
         ShowPanel(modePanel);
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Host / Join
+    // ─────────────────────────────────────────────────────────────────────
+
+    private void OnHostClicked()
+    {
+        if (isConnecting) return;
+        SetMultiplayerError(string.Empty);
+        isConnecting = true;
+        SetMultiplayerButtonsInteractable(false);
+        _ = NetworkGameManager.Instance?.CreateSessionAsync();
+    }
+
+    private void OnJoinClicked()
+    {
+        if (isConnecting) return;
+
+        string code = joinCodeInput != null ? joinCodeInput.text.Trim().ToUpper() : string.Empty;
+        if (string.IsNullOrEmpty(code))
+        {
+            SetMultiplayerError("Please enter a join code.");
+            return;
+        }
+
+        SetMultiplayerError(string.Empty);
+        isConnecting = true;
+        SetMultiplayerButtonsInteractable(false);
+        _ = NetworkGameManager.Instance?.JoinSessionAsync(code);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Session callbacks
+    // ─────────────────────────────────────────────────────────────────────
 
     private void HandleSessionCreated()
     {
-        GameManager.SetMode(GameMode.Host);
-
-        string code = NetworkGameManager.Instance?.GetJoinCode() ?? "---";
+        isConnecting = false;
+        string code  = NetworkGameManager.Instance?.GetJoinCode() ?? "---";
         SetSessionCode(code);
-
-        EnterWaitingLobby();
+        EnterWaitingLobby(isHost: true);
 
         if (!lobbySyncCoroutineActive)
             StartCoroutine(SubscribeToLobbySyncWhenReady());
@@ -311,11 +375,9 @@ public class MainMenuController : MonoBehaviour
 
     private void HandleSessionJoined()
     {
-        GameManager.SetMode(GameMode.Client);
-
-        SetSessionCode("---");
-
-        EnterWaitingLobby();
+        isConnecting = false;
+        SetSessionCode("---");          // clients don't need to display the code
+        EnterWaitingLobby(isHost: false);
 
         if (!lobbySyncCoroutineActive)
             StartCoroutine(SubscribeToLobbySyncWhenReady());
@@ -323,37 +385,50 @@ public class MainMenuController : MonoBehaviour
 
     private void HandleSessionLeft()
     {
+        isConnecting             = false;
         inCharSelectPhase        = false;
         isReady                  = false;
+        isSinglePlayer           = false;
         lobbySyncCoroutineActive = false;
 
         UnsubscribeFromLobbySync();
 
-        if (beginCharSelectButton != null)
-            beginCharSelectButton.interactable = false;
+        beginCharSelectButton?.gameObject.SetActive(false);
 
         SetSessionCode("---");
+        SetMultiplayerError(string.Empty);
+        SetMultiplayerButtonsInteractable(true);
         ShowPanel(mainMenuPanel);
     }
 
     private void HandleSessionError(string error)
     {
+        isConnecting = false;
+        SetMultiplayerButtonsInteractable(true);
         SetMultiplayerError(error);
-        ShowPanel(multiplayerPanel);
     }
 
     private void HandlePlayersUpdated(List<SessionPlayerInfo> players)
     {
+        // Once we're in char select, LobbySync handles the player list via NGO RPCs
         if (inCharSelectPhase) return;
         PopulateWaitingLobbySlots(players);
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Waiting lobby
+    // ─────────────────────────────────────────────────────────────────────
 
-    private void EnterWaitingLobby()
+    private void EnterWaitingLobby(bool isHost)
     {
         inCharSelectPhase = false;
         isReady           = false;
-        isSinglePlayer    = false;
+
+        // Show / hide the Begin Char Select button — hosts only,
+        // and it starts disabled until LobbySync finishes spawning
+        beginCharSelectButton?.gameObject.SetActive(isHost);
+        if (beginCharSelectButton != null)
+            beginCharSelectButton.interactable = false;
 
         var players = NetworkGameManager.Instance?.GetPlayerList();
         if (players != null) PopulateWaitingLobbySlots(players);
@@ -371,6 +446,7 @@ public class MainMenuController : MonoBehaviour
         {
             string charName = (info.CharacterIndex >= 0 && info.CharacterIndex < characterNames.Count)
                 ? characterNames[info.CharacterIndex] : "Not selected";
+
             var go = Instantiate(playerSlotPrefab, waitingPlayerList);
             go.GetComponent<PlayerSlotUI>()?.Setup(info, charName);
         }
@@ -384,6 +460,7 @@ public class MainMenuController : MonoBehaviour
 
     private void OnBeginCharSelectClicked()
     {
+        // Safety checks — button is host-only and only shown when LobbySync is ready
         bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
         if (!isHost) return;
 
@@ -393,6 +470,8 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+        // Sets NetworkVariable on server → NotifyCharSelectClientRpc fires on ALL peers
+        // → SwitchToCharSelectPhase is called on everyone (including host) via the event
         LobbySync.Instance.BeginCharSelectPhase();
     }
 
@@ -431,6 +510,11 @@ public class MainMenuController : MonoBehaviour
     // Character select
     // ─────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Called via LobbySync.OnCharSelectPhaseStarted on ALL peers (host + clients).
+    /// For single player it is called directly from GoToSinglePlayerCharSelect.
+    /// Guard against double-invocation.
+    /// </summary>
     private void SwitchToCharSelectPhase()
     {
         if (inCharSelectPhase) return;
@@ -444,16 +528,14 @@ public class MainMenuController : MonoBehaviour
 
         bool isHost = !isSinglePlayer && (NetworkGameManager.Instance?.IsHost ?? false);
 
-        if (singlePlayerStartButton != null)
-            singlePlayerStartButton.gameObject.SetActive(isSinglePlayer);
-
-        if (readyButton != null)
-            readyButton.gameObject.SetActive(!isSinglePlayer);
+        // Single player: show dedicated start button, hide multiplayer controls
+        singlePlayerStartButton?.gameObject.SetActive(isSinglePlayer);
+        readyButton            ?.gameObject.SetActive(!isSinglePlayer);
 
         if (startButton != null)
         {
             startButton.gameObject.SetActive(!isSinglePlayer && isHost);
-            startButton.interactable = false;
+            startButton.interactable = false;   // enabled by RefreshStartButton once all ready
         }
 
         ShowPanel(characterSelectPanel);
@@ -463,11 +545,13 @@ public class MainMenuController : MonoBehaviour
     private void SelectCharacter(int index)
     {
         selectedCharIndex = index;
+
         if (!isSinglePlayer)
         {
             LobbySync.Instance?.SetMyCharacter(index);
             NetworkGameManager.Instance?.SetLocalCharacterSelection(index);
         }
+
         RefreshCharacterButtons();
     }
 
@@ -477,7 +561,7 @@ public class MainMenuController : MonoBehaviour
         {
             if (characterButtons[i] == null) continue;
             bool sel = (i == selectedCharIndex);
-            var img  = characterButtons[i].GetComponent<Image>();
+            var  img = characterButtons[i].GetComponent<Image>();
             if (img != null) img.color = sel ? selectedTint : deselectedTint;
             characterButtons[i].transform.localScale = sel ? new Vector3(1.1f, 1.1f, 1f) : Vector3.one;
         }
@@ -496,6 +580,7 @@ public class MainMenuController : MonoBehaviour
         LobbySync.Instance?.SetMyReady(isReady);
         NetworkGameManager.Instance?.SetLocalReadyState(isReady);
         UpdateReadyVisual();
+        // Start button refresh happens via HandlePlayerDataUpdated after server ACKs
     }
 
     private void UpdateReadyVisual()
@@ -531,7 +616,7 @@ public class MainMenuController : MonoBehaviour
     private void OnSinglePlayerStartClicked()
     {
         if (!isSinglePlayer) return;
-        LaunchGame(false);
+        LaunchGame(isMultiplayer: false);
     }
 
     private void OnStartClicked()
@@ -544,14 +629,11 @@ public class MainMenuController : MonoBehaviour
                      ?? false;
         if (!allReady) return;
 
-        LaunchGame(true);
+        LaunchGame(isMultiplayer: true);
     }
 
     private void LaunchGame(bool isMultiplayer)
     {
-        if (CharacterSelectionSync.Instance != null)
-            CharacterSelectionSync.Instance.SubmitCharacterIndex(selectedCharIndex);
-
         CharacterSelection.Index  = selectedCharIndex;
         CharacterSelection.Prefab = GetSelectedPrefab();
 
@@ -559,17 +641,18 @@ public class MainMenuController : MonoBehaviour
         EnemyManager.Instance?.ClearAllEnemies();
 
         loadingPanel?.SetActive(true);
-        ShowPanel(null);
+        ShowPanel(null);   // hide all nav panels
 
         if (isMultiplayer)
         {
+            // Only the host triggers the scene load; NGO replicates it to all clients
             if (NetworkManager.Singleton?.IsHost ?? false)
             {
                 NetworkManager.Singleton.SceneManager.LoadScene(
                     multiplayerSceneName,
                     UnityEngine.SceneManagement.LoadSceneMode.Single);
             }
-            // Clients wait — NGO replicates scene load automatically
+            // Clients wait here — NGO scene replication handles their transition
         }
         else
         {
@@ -589,12 +672,14 @@ public class MainMenuController : MonoBehaviour
         if (isSinglePlayer)
         {
             isSinglePlayer = false;
-            GameManager.SetMode(GameMode.Offline);
             ShowPanel(modePanel);
         }
         else
         {
+            isConnecting = false;
+            SetMultiplayerButtonsInteractable(true);
             _ = NetworkGameManager.Instance?.LeaveSessionAsync();
+            // HandleSessionLeft fires → ShowPanel(mainMenuPanel)
         }
     }
 
@@ -615,6 +700,17 @@ public class MainMenuController : MonoBehaviour
         return characterPrefabs[selectedCharIndex];
     }
 
+    private void SetMultiplayerButtonsInteractable(bool interactable)
+    {
+        if (hostButton != null) hostButton.interactable = interactable;
+        if (joinButton != null) joinButton.interactable = interactable;
+    }
+
+    private void SetMultiplayerError(string msg)
+    {
+        if (multiplayerErrorText != null) multiplayerErrorText.text = msg;
+    }
+
     private void SetSessionCode(string code)
     {
         if (sessionCodeText != null) sessionCodeText.text = $"Code: {code}";
@@ -623,10 +719,5 @@ public class MainMenuController : MonoBehaviour
     private void SetUgsStatus(string msg)
     {
         if (ugsStatusText != null) ugsStatusText.text = msg;
-    }
-
-    private void SetMultiplayerError(string msg)
-    {
-        if (multiplayerErrorText != null) multiplayerErrorText.text = msg;
     }
 }
