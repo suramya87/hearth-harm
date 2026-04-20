@@ -70,17 +70,34 @@ public class TilemapHighlighter : MonoBehaviour
 
         ResetAll();
 
+        if (GridCostVisualizer.Instance != null)
+            GridCostVisualizer.Instance.ClearAll();
+
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
 
         if (action is MoveAction move)
         {
             Paint(move.GetValidActionGridPositionList(), moveColor);
+
+            if (room != null)
+            {
+                var mouseGP = room.GetGridPosition(MouseWorld2D.GetPosition());
+
+                if (move.IsValidTarget(mouseGP))
+                {
+                    int cost = move.GetMoveCost(mouseGP);
+                    if (cost >= 0 && GridCostVisualizer.Instance != null)
+                    {
+                        GridCostVisualizer.Instance.ShowCost(mouseGP, cost);
+                    }
+                }
+            }
         }
         else if (action is CombatAction combat)
         {
             Color rc = combat.ActionData != null ? combat.ActionData.rangeHighlightColor : rangeColor;
-            Color ac = combat.ActionData != null ? combat.ActionData.aoeHighlightColor   : aoeColor;
+            Color ac = combat.ActionData != null ? combat.ActionData.aoeHighlightColor : aoeColor;
 
             Paint(combat.GetValidActionGridPositionList(), rc);
 

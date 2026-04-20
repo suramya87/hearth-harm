@@ -16,8 +16,6 @@ public class MoveAction : BaseAction
 
     public override string GetActionName() => "Move";
 
-    // ── Execution ──────────────────────────────────────────────────────────
-
     public void Move(GridPosition target, Action onComplete)
     {
         if (!CanMove()) { onComplete?.Invoke(); return; }
@@ -76,8 +74,6 @@ public class MoveAction : BaseAction
         onComplete?.Invoke();
     }
 
-    // ── Facing helper ──────────────────────────────────────────────────────
-
     private void SetFacingToward(GridPosition next)
     {
         var current = unit.GetGridPosition();
@@ -91,8 +87,6 @@ public class MoveAction : BaseAction
 
         unitAnimator?.SetFacing(dir);
     }
-
-    // ── Validity ───────────────────────────────────────────────────────────
 
     public bool IsValidTarget(GridPosition gp) =>
         GetValidTargets().Contains(gp);
