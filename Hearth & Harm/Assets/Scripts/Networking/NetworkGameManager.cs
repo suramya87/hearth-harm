@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Netcode;
@@ -7,16 +8,6 @@ using Unity.Services.Core;
 using Unity.Services.Multiplayer;
 using UnityEngine;
 
-/// <summary>
-/// Manages UGS sign-in, session creation/joining, and player list sync.
-///
-/// FILE LOCATION: Assets/Scripts/Networking/NetworkGameManager.cs
-///
-/// SETUP:
-///   - Add to a persistent GameObject in your Menu scene (DontDestroyOnLoad).
-///   - Assign maxPlayers in the Inspector.
-///   - Requires Unity Gaming Services (Multiplayer, Authentication) packages.
-/// </summary>
 public class NetworkGameManager : MonoBehaviour
 {
     public static NetworkGameManager Instance { get; private set; }
@@ -34,18 +25,23 @@ public class NetworkGameManager : MonoBehaviour
     // ── Events ─────────────────────────────────────────────────────────────
     public event Action                          OnSignedIn;
     public event Action<string>                  OnSignInFailed;
-    public event Action                          OnSessionCreated;
-    public event Action                          OnSessionJoined;
+    public event Action                          OnSessionCreated;  
+    public event Action                          OnSessionJoined;   
     public event Action                          OnSessionLeft;
-    public event Action<string>                  OnSessionError;
+    public event Action<string>                  OnSessionError;    
     public event Action<List<SessionPlayerInfo>> OnPlayersUpdated;
 
     // ── Private state ──────────────────────────────────────────────────────
     private int  localCharacterIndex = 0;
     private bool localIsReady        = false;
+    private bool sessionEventFired   = false;
 
-    private Dictionary<string, int>   characterSelections = new();
-    private List<SessionPlayerInfo>   cachedPlayerList    = new();
+    private Dictionary<string, int> characterSelections = new();
+    private List<SessionPlayerInfo> cachedPlayerList    = new();
+
+    private System.Reflection.PropertyInfo widgetInstanceProp;
+    private System.Reflection.PropertyInfo widgetActiveSessionProp;
+    private bool                           widgetReflectionResolved = false;
 
     // ─────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -58,11 +54,16 @@ public class NetworkGameManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    private void Start()  => _ = InitializeAsync();
+    private void Start()
+    {
+        _ = InitializeAsync();
+        StartCoroutine(WatchForWidgetSession());
+    }
+
     private void OnDestroy() => _ = LeaveSessionAsync();
 
     // ─────────────────────────────────────────────────────────────────────
-    // UGS initialisation
+    // UGS initialisation — sign in only, Widget handles session
     // ─────────────────────────────────────────────────────────────────────
 
     private async Task InitializeAsync()
@@ -79,8 +80,6 @@ public class NetworkGameManager : MonoBehaviour
                 }
                 catch (Exception signInEx)
                 {
-                    // The Multiplayer Widgets package may have signed in concurrently.
-                    // If we're signed in now despite the exception, carry on.
                     if (!AuthenticationService.Instance.IsSignedIn)
                         throw signInEx;
                 }
@@ -102,12 +101,10 @@ public class NetworkGameManager : MonoBehaviour
         {
             Debug.LogError($"[NetworkGameManager] Sign-in failed: {e.Message}");
 
-            // If the Widget package already signed us in, recover gracefully
-            // instead of leaving LocalPlayerId null and blocking all coroutines.
             if (AuthenticationService.Instance.IsSignedIn)
             {
                 LocalPlayerId = AuthenticationService.Instance.PlayerId;
-                Debug.Log($"[NetworkGameManager] Recovered from existing session: {LocalPlayerId}");
+                Debug.Log($"[NetworkGameManager] Recovered — already signed in: {LocalPlayerId}");
                 OnSignedIn?.Invoke();
             }
             else
@@ -117,67 +114,88 @@ public class NetworkGameManager : MonoBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Session management
-    // ─────────────────────────────────────────────────────────────────────
-
-    public async Task CreateSessionAsync()
+    private IEnumerator WatchForWidgetSession()
     {
-        try
-        {
-            var options = new SessionOptions
-            {
-                MaxPlayers = maxPlayers,
-                Name       = $"{LocalPlayerName}'s Game"
-            }.WithRelayNetwork();
+        // Wait for sign-in before we start polling
+        while (string.IsNullOrEmpty(LocalPlayerId))
+            yield return null;
 
-            CurrentSession = await MultiplayerService.Instance.CreateSessionAsync(options);
-            SubscribeToSessionEvents();
-            if (LocalPlayerId != null)
-                characterSelections[LocalPlayerId] = localCharacterIndex;
-
-            Debug.Log($"[NetworkGameManager] Session created. Code: {CurrentSession.Code}");
-            OnSessionCreated?.Invoke();
-            RefreshPlayerList();
-        }
-        catch (Exception e)
+        while (true)
         {
-            Debug.LogError($"[NetworkGameManager] CreateSession failed: {e.Message}");
-            OnSessionError?.Invoke($"Failed to create session: {e.Message}");
+            yield return new WaitForSeconds(0.25f);
+
+            if (CurrentSession != null || sessionEventFired) continue;
+
+            var session = TryGetWidgetSession();
+            if (session == null) continue;
+
+            Debug.Log($"[NetworkGameManager] Widget session detected: {session.Id} Code={session.Code}");
+            SyncExternalSession(session);
         }
     }
 
-    public async Task JoinSessionAsync(string joinCode)
+    private ISession TryGetWidgetSession()
     {
-        if (string.IsNullOrWhiteSpace(joinCode))
+        // Resolve reflection once
+        if (!widgetReflectionResolved)
         {
-            OnSessionError?.Invoke("Please enter a join code.");
-            return;
+            widgetReflectionResolved = true;
+
+            var managerType = Type.GetType(
+                "Unity.Multiplayer.Widgets.SessionManager, Unity.Multiplayer.Widgets");
+            if (managerType == null) return null;
+
+            widgetInstanceProp = managerType.GetProperty(
+                "Instance",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+            widgetActiveSessionProp = managerType.GetProperty(
+                "ActiveSession",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
         }
 
-        try
-        {
-            CurrentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(joinCode.Trim().ToUpper());
-            SubscribeToSessionEvents();
-            if (LocalPlayerId != null)
-                characterSelections[LocalPlayerId] = localCharacterIndex;
+        if (widgetInstanceProp == null || widgetActiveSessionProp == null) return null;
 
-            Debug.Log($"[NetworkGameManager] Joined session: {CurrentSession.Id}");
-            OnSessionJoined?.Invoke();
-            RefreshPlayerList();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NetworkGameManager] JoinSession failed: {e.Message}");
-            OnSessionError?.Invoke($"Failed to join: {e.Message}");
-        }
+        var managerInstance = widgetInstanceProp.GetValue(null);
+        if (managerInstance == null) return null;
+
+        return widgetActiveSessionProp.GetValue(managerInstance) as ISession;
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // External session sync
+    // ─────────────────────────────────────────────────────────────────────
+
+    public void SyncExternalSession(ISession session)
+    {
+        if (CurrentSession != null || sessionEventFired) return;
+
+        CurrentSession    = session;
+        sessionEventFired = true;
+
+        SubscribeToSessionEvents();
+
+        if (LocalPlayerId != null)
+            characterSelections[LocalPlayerId] = localCharacterIndex;
+
+        Debug.Log($"[NetworkGameManager] Session synced. Code={session.Code} IsHost={IsHost}");
+
+        if (IsHost) OnSessionCreated?.Invoke();
+        else        OnSessionJoined?.Invoke();
+
+        RefreshPlayerList();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Leave session
+    // ─────────────────────────────────────────────────────────────────────
 
     public async Task LeaveSessionAsync()
     {
         if (CurrentSession == null) return;
 
         UnsubscribeFromSessionEvents();
+        sessionEventFired = false;
 
         try { await CurrentSession.LeaveAsync(); }
         catch (Exception e) { Debug.LogWarning($"[NetworkGameManager] Leave error: {e.Message}"); }
@@ -222,7 +240,7 @@ public class NetworkGameManager : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────
 
     public List<SessionPlayerInfo> GetPlayerList()  => cachedPlayerList;
-    public string                  GetJoinCode()    => CurrentSession?.Code ?? "N/A";
+    public string                  GetJoinCode()    => CurrentSession?.Code ?? "---";
     public int                     GetMaxPlayers()  => maxPlayers;
 
     public bool AllPlayersReady()
@@ -247,16 +265,16 @@ public class NetworkGameManager : MonoBehaviour
 
         foreach (var player in CurrentSession.Players)
         {
-            bool   isLocal  = player.Id == LocalPlayerId;
-            int    charIdx  = isLocal ? localCharacterIndex : 0;
-            bool   ready    = isLocal ? localIsReady : false;
-            string name     = isLocal ? LocalPlayerName : "Player";
+            bool   isLocal = player.Id == LocalPlayerId;
+            int    charIdx = isLocal ? localCharacterIndex : 0;
+            bool   ready   = isLocal ? localIsReady : false;
+            string name    = isLocal ? LocalPlayerName : "Player";
 
             if (player.Properties != null)
             {
-                if (player.Properties.TryGetValue("CharIdx",  out var cp)) int.TryParse(cp.Value, out charIdx);
-                if (player.Properties.TryGetValue("IsReady",  out var rp)) bool.TryParse(rp.Value, out ready);
-                if (player.Properties.TryGetValue("Name",     out var np) && !string.IsNullOrEmpty(np.Value))
+                if (player.Properties.TryGetValue("CharIdx", out var cp)) int.TryParse(cp.Value, out charIdx);
+                if (player.Properties.TryGetValue("IsReady", out var rp)) bool.TryParse(rp.Value, out ready);
+                if (player.Properties.TryGetValue("Name",    out var np) && !string.IsNullOrEmpty(np.Value))
                     name = np.Value;
             }
 
@@ -294,7 +312,7 @@ public class NetworkGameManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Session event subscription
+    // Session events
     // ─────────────────────────────────────────────────────────────────────
 
     private void SubscribeToSessionEvents()
@@ -313,29 +331,20 @@ public class NetworkGameManager : MonoBehaviour
         CurrentSession.Changed       -= HandleSessionChanged;
     }
 
-    private void HandlePlayerJoined(string id)  { Debug.Log($"[NetworkGameManager] Player joined: {id}"); RefreshPlayerList(); }
-    private void HandlePlayerLeft(string id)    { Debug.Log($"[NetworkGameManager] Player left: {id}"); characterSelections.Remove(id); RefreshPlayerList(); }
-    private void HandleSessionChanged()         { RefreshPlayerList(); }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // External session sync (for NetworkBootstrapper)
-    // ─────────────────────────────────────────────────────────────────────
-
-    public void SyncExternalSession(ISession session)
+    private void HandlePlayerJoined(string id)
     {
-        if (CurrentSession != null) return;
-        CurrentSession = session;
-        SubscribeToSessionEvents();
-        if (LocalPlayerId != null)
-            characterSelections[LocalPlayerId] = localCharacterIndex;
-
-        Debug.Log($"[NetworkGameManager] Synced external session. IsHost={IsHost}");
-
-        if (IsHost) OnSessionCreated?.Invoke();
-        else        OnSessionJoined?.Invoke();
-
+        Debug.Log($"[NetworkGameManager] Player joined: {id}");
         RefreshPlayerList();
     }
+
+    private void HandlePlayerLeft(string id)
+    {
+        Debug.Log($"[NetworkGameManager] Player left: {id}");
+        characterSelections.Remove(id);
+        RefreshPlayerList();
+    }
+
+    private void HandleSessionChanged() => RefreshPlayerList();
 
     public void RegisterCharacterSelection(string playerId, int index)
         => characterSelections[playerId] = index;

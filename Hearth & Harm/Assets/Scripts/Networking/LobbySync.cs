@@ -1,20 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
-/// <summary>
-/// Syncs character selection, ready state, and phase transitions to all clients
-/// using NGO NetworkVariables and ServerRpcs.
-///
-/// FILE LOCATION: Assets/Scripts/Networking/LobbySync.cs
-///
-/// SETUP:
-///   1. Create a prefab with NetworkObject + this component.
-///   2. Add the prefab to NetworkManager's NetworkPrefabs list.
-///   3. Also add it to NetworkManager's Default Player Prefabs (or spawn it manually
-///      in a NetworkBootstrapper after host connects).
-/// </summary>
 public class LobbySync : NetworkBehaviour
 {
     public static LobbySync Instance { get; private set; }
@@ -22,18 +11,20 @@ public class LobbySync : NetworkBehaviour
     public event Action          OnCharSelectPhaseStarted;
     public event Action<ulong[]> OnPlayerDataUpdated;
 
-    private NetworkVariable<bool> charSelectPhaseActive = new(
+    // Persists the phase state so late-joining clients can catch up
+    private NetworkVariable<bool> charSelectPhaseActive = new NetworkVariable<bool>(
         false,
         NetworkVariableReadPermission.Everyone,
         NetworkVariableWritePermission.Server);
 
-    private Dictionary<ulong, int>  characterIndexMap = new();
-    private Dictionary<ulong, bool> readyMap          = new();
+    private Dictionary<ulong, int>  characterIndexMap = new Dictionary<ulong, int>();
+    private Dictionary<ulong, bool> readyMap          = new Dictionary<ulong, bool>();
 
-    public ulong LocalClientId => NetworkManager.Singleton?.LocalClientId ?? 0;
+    public ulong LocalClientId           => NetworkManager.Singleton?.LocalClientId ?? 0;
+    public bool  IsCharSelectPhaseActive => charSelectPhaseActive.Value;
 
     // ─────────────────────────────────────────────────────────────────────
-    // Lifecycle
+    // Spawn / Despawn
     // ─────────────────────────────────────────────────────────────────────
 
     public override void OnNetworkSpawn()
@@ -49,8 +40,19 @@ public class LobbySync : NetworkBehaviour
 
         charSelectPhaseActive.OnValueChanged += OnCharSelectPhaseChanged;
 
-        // Register ourselves with the server
         RegisterClientServerRpc(NetworkManager.Singleton.LocalClientId);
+
+        if (charSelectPhaseActive.Value)
+        {
+            Debug.Log("[LobbySync] Char select already active on spawn — deferred fire.");
+            StartCoroutine(FireCharSelectNextFrame());
+        }
+    }
+
+    private IEnumerator FireCharSelectNextFrame()
+    {
+        yield return null;
+        OnCharSelectPhaseStarted?.Invoke();
     }
 
     public override void OnNetworkDespawn()
@@ -120,22 +122,44 @@ public class LobbySync : NetworkBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Phase transitions
+    // Phase transition
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>Host calls this to move all clients into character select phase.</summary>
     public void BeginCharSelectPhase()
     {
-        if (IsServer) charSelectPhaseActive.Value = true;
+        if (IsServer)
+        {
+            charSelectPhaseActive.Value = true;
+            NotifyCharSelectClientRpc();
+        }
+        else
+        {
+            BeginCharSelectPhaseServerRpc();
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void BeginCharSelectPhaseServerRpc()
+    {
+        charSelectPhaseActive.Value = true;
+        NotifyCharSelectClientRpc();
+    }
+
+    [ClientRpc]
+    private void NotifyCharSelectClientRpc()
+    {
+        Debug.Log("[LobbySync] NotifyCharSelectClientRpc → OnCharSelectPhaseStarted");
+        OnCharSelectPhaseStarted?.Invoke();
     }
 
     private void OnCharSelectPhaseChanged(bool oldVal, bool newVal)
     {
-        if (newVal) OnCharSelectPhaseStarted?.Invoke();
+        if (newVal)
+            Debug.Log("[LobbySync] charSelectPhaseActive NetworkVariable → true");
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Data broadcast
+    // Player data broadcast
     // ─────────────────────────────────────────────────────────────────────
 
     private void BroadcastPlayerData()
@@ -166,5 +190,14 @@ public class LobbySync : NetworkBehaviour
         }
 
         OnPlayerDataUpdated?.Invoke(ids);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Reset (call when returning to menu)
+    // ─────────────────────────────────────────────────────────────────────
+
+    public void ResetPhase()
+    {
+        if (IsServer) charSelectPhaseActive.Value = false;
     }
 }
