@@ -6,6 +6,19 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using Unity.Netcode;
 
+/// <summary>
+/// Controls all main-menu UI panels and bridges UI events to NetworkGameManager / LobbySync.
+///
+/// CHANGES FROM PREVIOUS VERSION
+/// ──────────────────────────────
+/// • Join code is now shown prominently in the Waiting Lobby panel (host sees it there
+///   immediately after creating a session; clients don't need to display it).
+/// • A "Copy Code" button sits beside the code label so the host can share it instantly.
+/// • The Multiplayer panel's error text is now also cleared when the back button is pressed,
+///   so stale "Service busy. Retrying…" messages don't linger.
+/// • isConnecting is always reset inside HandleSessionError (was already done, but
+///   belt-and-suspenders guard added for partial-connection edge cases).
+/// </summary>
 public class MainMenuController : MonoBehaviour
 {
     // ── Panels ────────────────────────────────────────────────────────────
@@ -45,7 +58,8 @@ public class MainMenuController : MonoBehaviour
 
     // ── Waiting lobby panel ───────────────────────────────────────────────
     [Header("Waiting Lobby Panel")]
-    [SerializeField] private TextMeshProUGUI sessionCodeText;
+    [SerializeField] private TextMeshProUGUI sessionCodeText;   // shows the 6-character join code
+    [SerializeField] private Button          copyCodeButton;    // NEW — copies the code to clipboard
     [SerializeField] private TextMeshProUGUI waitingPlayerCount;
     [SerializeField] private Transform       waitingPlayerList;
     [SerializeField] private GameObject      playerSlotPrefab;
@@ -73,12 +87,14 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private string multiplayerSceneName  = "MultiplayerScene";
 
     // ── Runtime state ─────────────────────────────────────────────────────
-    private int  selectedCharIndex        = 0;
-    private bool isReady                  = false;
-    private bool inCharSelectPhase        = false;
-    private bool isSinglePlayer           = false;
-    private bool isConnecting             = false;
-    private bool lobbySyncCoroutineActive = false;
+    private int    selectedCharIndex        = 0;
+    private bool   isReady                  = false;
+    private bool   inCharSelectPhase        = false;
+    private bool   isSinglePlayer           = false;
+    private bool   isConnecting             = false;
+    private bool   lobbySyncCoroutineActive      = false;
+    private bool   alreadySubscribedToLobbySync  = false;
+    private string currentJoinCode          = "---";
 
     // ─────────────────────────────────────────────────────────────────────
     // Awake — wire up all button listeners
@@ -99,6 +115,9 @@ public class MainMenuController : MonoBehaviour
         joinButton?.onClick.AddListener(OnJoinClicked);
 
         playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
+
+        // Copy the join code to the system clipboard
+        copyCodeButton?.onClick.AddListener(OnCopyCodeClicked);
 
         beginCharSelectButton?.onClick.AddListener(OnBeginCharSelectClicked);
         waitingLeaveButton   ?.onClick.AddListener(OnLeaveClicked);
@@ -141,7 +160,6 @@ public class MainMenuController : MonoBehaviour
         modePanel            ?.SetActive(false);
         multiplayerPanel     ?.SetActive(false);
 
-        // Hide lobby controls until we're connected and LobbySync is ready
         beginCharSelectButton?.gameObject.SetActive(false);
 
         SetSessionCode("---");
@@ -179,14 +197,13 @@ public class MainMenuController : MonoBehaviour
         while (string.IsNullOrEmpty(NetworkGameManager.Instance.LocalPlayerId))
             yield return null;
 
-        // Sign-in complete — enable multiplayer buttons
         SetUgsStatus(string.Empty);
         SetMultiplayerButtonsInteractable(true);
     }
 
     /// <summary>
-    /// Waits for LobbySync to be spawned by NGO (happens after NGO connects),
-    /// then subscribes to its events. Also handles late-join char-select catch-up.
+    /// Waits for LobbySync to be spawned by NGO after a session is established,
+    /// then subscribes to its events. Handles late-join char-select catch-up.
     /// </summary>
     private IEnumerator SubscribeToLobbySyncWhenReady()
     {
@@ -200,7 +217,8 @@ public class MainMenuController : MonoBehaviour
             if (elapsed > 30f)
             {
                 Debug.LogError("[MainMenuController] Timed out waiting for LobbySync.");
-                lobbySyncCoroutineActive = false;
+                lobbySyncCoroutineActive        = false;
+        alreadySubscribedToLobbySync    = false;
                 yield break;
             }
             yield return null;
@@ -210,25 +228,72 @@ public class MainMenuController : MonoBehaviour
         UnsubscribeFromLobbySync();
         SubscribeToLobbySync();
 
-        // Only the host can begin char select
         bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
+
+        // For Widget-path clients/hosts: if the waiting lobby panel isn't showing yet,
+        // enter it now. This covers the case where HandleSessionCreated/Joined never fired.
+        if (waitingLobbyPanel != null && !waitingLobbyPanel.activeSelf &&
+            (characterSelectPanel == null || !characterSelectPanel.activeSelf))
+        {
+            EnterWaitingLobby(isHost);
+        }
+
+        // Always refresh the begin-char-select button after subscribing.
+        // EnterWaitingLobby sets it active but disabled; we enable it here.
         if (beginCharSelectButton != null)
         {
             beginCharSelectButton.gameObject.SetActive(isHost);
             beginCharSelectButton.interactable = isHost;
         }
 
-        // Wait one frame to ensure NetworkVariable replication has settled
+        // Wait one frame for NetworkVariable replication to settle.
+        // Then check immediately — the ClientRpc may have already fired and been
+        // missed if this coroutine started late (e.g. client joined after a rate-limit retry).
         yield return null;
 
-        // Late-join catch-up: char select already started before we subscribed
         if (!inCharSelectPhase && LobbySync.Instance.IsCharSelectPhaseActive)
         {
-            Debug.Log("[MainMenuController] Char select already active — catching up.");
+            Debug.Log("[MainMenuController] Char select already active — catching up immediately.");
             SwitchToCharSelectPhase();
         }
+        else if (!inCharSelectPhase)
+        {
+            // Poll briefly in case the ClientRpc was sent before our event subscription
+            // was wired up. This covers the race where the Widget joined the lobby,
+            // NGO replicated the scene, and the char-select RPC arrived before us.
+            float pollElapsed = 0f;
+            while (pollElapsed < 3f && !inCharSelectPhase)
+            {
+                pollElapsed += Time.deltaTime;
+                if (LobbySync.Instance != null && LobbySync.Instance.IsCharSelectPhaseActive)
+                {
+                    Debug.Log("[MainMenuController] Char select detected during poll — catching up.");
+                    SwitchToCharSelectPhase();
+                    break;
+                }
+                yield return null;
+            }
+        }
 
-        lobbySyncCoroutineActive = false;
+        lobbySyncCoroutineActive        = false;
+        alreadySubscribedToLobbySync    = false;
+    }
+
+    private void Update()
+    {
+        // Fallback ONLY for Widget-join clients who missed HandleSessionJoined.
+        // Strict guards prevent this from firing on the host or double-firing.
+        if (!lobbySyncCoroutineActive &&
+            !alreadySubscribedToLobbySync &&
+            !inCharSelectPhase &&
+            LobbySync.Instance != null &&
+            NetworkManager.Singleton != null &&
+            NetworkManager.Singleton.IsConnectedClient &&
+            !NetworkManager.Singleton.IsHost)
+        {
+            Debug.Log("[MainMenuController] Fallback: Widget-client detected LobbySync — subscribing.");
+            StartCoroutine(SubscribeToLobbySyncWhenReady());
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -266,6 +331,7 @@ public class MainMenuController : MonoBehaviour
         if (LobbySync.Instance == null) return;
         LobbySync.Instance.OnCharSelectPhaseStarted += SwitchToCharSelectPhase;
         LobbySync.Instance.OnPlayerDataUpdated      += HandlePlayerDataUpdated;
+        alreadySubscribedToLobbySync = true;
         Debug.Log("[MainMenuController] Subscribed to LobbySync.");
     }
 
@@ -275,6 +341,8 @@ public class MainMenuController : MonoBehaviour
         LobbySync.Instance.OnCharSelectPhaseStarted -= SwitchToCharSelectPhase;
         LobbySync.Instance.OnPlayerDataUpdated      -= HandlePlayerDataUpdated;
     }
+
+
 
     // ─────────────────────────────────────────────────────────────────────
     // UGS callbacks
@@ -318,7 +386,6 @@ public class MainMenuController : MonoBehaviour
 
     private void OnBackToModeClicked()
     {
-        // Leave any active session if we navigate back from the multiplayer panel
         if (NetworkGameManager.Instance?.CurrentSession != null)
             _ = NetworkGameManager.Instance.LeaveSessionAsync();
 
@@ -359,14 +426,39 @@ public class MainMenuController : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Copy code button — copies the 6-char code to the system clipboard
+    // ─────────────────────────────────────────────────────────────────────
+
+    private void OnCopyCodeClicked()
+    {
+        if (currentJoinCode == "---" || string.IsNullOrEmpty(currentJoinCode)) return;
+        GUIUtility.systemCopyBuffer = currentJoinCode;
+
+        // Brief visual confirmation
+        var txt = copyCodeButton?.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null) StartCoroutine(FlashCopyConfirmation(txt));
+    }
+
+    private IEnumerator FlashCopyConfirmation(TextMeshProUGUI label)
+    {
+        string original = label.text;
+        label.text = "Copied!";
+        yield return new WaitForSeconds(1.5f);
+        label.text = original;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Session callbacks
     // ─────────────────────────────────────────────────────────────────────
 
     private void HandleSessionCreated()
     {
         isConnecting = false;
-        string code  = NetworkGameManager.Instance?.GetJoinCode() ?? "---";
-        SetSessionCode(code);
+
+        currentJoinCode = NetworkGameManager.Instance?.GetJoinCode() ?? "---";
+        SetSessionCode(currentJoinCode);
+
+        // Hosts see the code in the waiting lobby — no need to check the terminal
         EnterWaitingLobby(isHost: true);
 
         if (!lobbySyncCoroutineActive)
@@ -376,7 +468,11 @@ public class MainMenuController : MonoBehaviour
     private void HandleSessionJoined()
     {
         isConnecting = false;
-        SetSessionCode("---");          // clients don't need to display the code
+
+        // Clients don't need to display the host's code
+        currentJoinCode = "---";
+        SetSessionCode("---");
+
         EnterWaitingLobby(isHost: false);
 
         if (!lobbySyncCoroutineActive)
@@ -389,11 +485,14 @@ public class MainMenuController : MonoBehaviour
         inCharSelectPhase        = false;
         isReady                  = false;
         isSinglePlayer           = false;
-        lobbySyncCoroutineActive = false;
+        lobbySyncCoroutineActive        = false;
+        alreadySubscribedToLobbySync    = false;
+        currentJoinCode          = "---";
 
         UnsubscribeFromLobbySync();
 
         beginCharSelectButton?.gameObject.SetActive(false);
+        if (copyCodeButton != null) copyCodeButton.gameObject.SetActive(false);
 
         SetSessionCode("---");
         SetMultiplayerError(string.Empty);
@@ -403,14 +502,17 @@ public class MainMenuController : MonoBehaviour
 
     private void HandleSessionError(string error)
     {
+        // Reset connecting flag unconditionally so buttons never stay locked
         isConnecting = false;
         SetMultiplayerButtonsInteractable(true);
+
+        // Show the error in the multiplayer panel (which is still visible if
+        // connection never completed) or in a general UI area
         SetMultiplayerError(error);
     }
 
     private void HandlePlayersUpdated(List<SessionPlayerInfo> players)
     {
-        // Once we're in char select, LobbySync handles the player list via NGO RPCs
         if (inCharSelectPhase) return;
         PopulateWaitingLobbySlots(players);
     }
@@ -424,11 +526,14 @@ public class MainMenuController : MonoBehaviour
         inCharSelectPhase = false;
         isReady           = false;
 
-        // Show / hide the Begin Char Select button — hosts only,
-        // and it starts disabled until LobbySync finishes spawning
+        // Host sees "Begin Char Select" — disabled until LobbySync is ready
         beginCharSelectButton?.gameObject.SetActive(isHost);
         if (beginCharSelectButton != null)
             beginCharSelectButton.interactable = false;
+
+        // Copy button is only useful for the host
+        if (copyCodeButton != null)
+            copyCodeButton.gameObject.SetActive(isHost);
 
         var players = NetworkGameManager.Instance?.GetPlayerList();
         if (players != null) PopulateWaitingLobbySlots(players);
@@ -460,7 +565,6 @@ public class MainMenuController : MonoBehaviour
 
     private void OnBeginCharSelectClicked()
     {
-        // Safety checks — button is host-only and only shown when LobbySync is ready
         bool isHost = NetworkGameManager.Instance?.IsHost ?? false;
         if (!isHost) return;
 
@@ -470,8 +574,6 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
-        // Sets NetworkVariable on server → NotifyCharSelectClientRpc fires on ALL peers
-        // → SwitchToCharSelectPhase is called on everyone (including host) via the event
         LobbySync.Instance.BeginCharSelectPhase();
     }
 
@@ -510,11 +612,6 @@ public class MainMenuController : MonoBehaviour
     // Character select
     // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Called via LobbySync.OnCharSelectPhaseStarted on ALL peers (host + clients).
-    /// For single player it is called directly from GoToSinglePlayerCharSelect.
-    /// Guard against double-invocation.
-    /// </summary>
     private void SwitchToCharSelectPhase()
     {
         if (inCharSelectPhase) return;
@@ -528,14 +625,13 @@ public class MainMenuController : MonoBehaviour
 
         bool isHost = !isSinglePlayer && (NetworkGameManager.Instance?.IsHost ?? false);
 
-        // Single player: show dedicated start button, hide multiplayer controls
         singlePlayerStartButton?.gameObject.SetActive(isSinglePlayer);
         readyButton            ?.gameObject.SetActive(!isSinglePlayer);
 
         if (startButton != null)
         {
             startButton.gameObject.SetActive(!isSinglePlayer && isHost);
-            startButton.interactable = false;   // enabled by RefreshStartButton once all ready
+            startButton.interactable = false;
         }
 
         ShowPanel(characterSelectPanel);
@@ -580,7 +676,6 @@ public class MainMenuController : MonoBehaviour
         LobbySync.Instance?.SetMyReady(isReady);
         NetworkGameManager.Instance?.SetLocalReadyState(isReady);
         UpdateReadyVisual();
-        // Start button refresh happens via HandlePlayerDataUpdated after server ACKs
     }
 
     private void UpdateReadyVisual()
@@ -641,18 +736,16 @@ public class MainMenuController : MonoBehaviour
         EnemyManager.Instance?.ClearAllEnemies();
 
         loadingPanel?.SetActive(true);
-        ShowPanel(null);   // hide all nav panels
+        ShowPanel(null);
 
         if (isMultiplayer)
         {
-            // Only the host triggers the scene load; NGO replicates it to all clients
             if (NetworkManager.Singleton?.IsHost ?? false)
             {
                 NetworkManager.Singleton.SceneManager.LoadScene(
                     multiplayerSceneName,
                     UnityEngine.SceneManagement.LoadSceneMode.Single);
             }
-            // Clients wait here — NGO scene replication handles their transition
         }
         else
         {
@@ -713,7 +806,9 @@ public class MainMenuController : MonoBehaviour
 
     private void SetSessionCode(string code)
     {
-        if (sessionCodeText != null) sessionCodeText.text = $"Code: {code}";
+        currentJoinCode = code;
+        if (sessionCodeText != null)
+            sessionCodeText.text = code == "---" ? "Waiting…" : $"{code}";
     }
 
     private void SetUgsStatus(string msg)

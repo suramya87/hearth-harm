@@ -5641,7 +5641,7 @@ RectTransform:
   - {fileID: 959920917}
   - {fileID: 152491496}
   - {fileID: 641450828}
-  m_Father: {fileID: 2101322249}
+  m_Father: {fileID: 1317710241}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
@@ -5655,7 +5655,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1046629906}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ff7972ee9083a40b9a8ff20ae8150372, type: 3}
   m_Name: 
@@ -7610,6 +7610,7 @@ RectTransform:
   m_Children:
   - {fileID: 460494645}
   - {fileID: 227102825}
+  - {fileID: 1046629907}
   m_Father: {fileID: 2130559005}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -7799,7 +7800,8 @@ MonoBehaviour:
   multiplayerErrorText: {fileID: 0}
   backToModeButton: {fileID: 508928371}
   playerNameInput: {fileID: 0}
-  sessionCodeText: {fileID: 0}
+  sessionCodeText: {fileID: 152491497}
+  copyCodeButton: {fileID: 641450829}
   waitingPlayerCount: {fileID: 1252309877}
   waitingPlayerList: {fileID: 105969136}
   playerSlotPrefab: {fileID: 8551057882692085034, guid: f722d281552923c4fa323b513f77166a, type: 3}
@@ -10990,7 +10992,6 @@ RectTransform:
   - {fileID: 1258039519}
   - {fileID: 1392397248}
   - {fileID: 1020957358}
-  - {fileID: 1046629907}
   - {fileID: 1788727060}
   m_Father: {fileID: 2130559005}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

@@ -8,6 +8,17 @@ using Unity.Services.Core;
 using Unity.Services.Multiplayer;
 using UnityEngine;
 
+/// <summary>
+/// Manages UGS sign-in, session creation/joining, and player state.
+///
+/// STABILITY IMPROVEMENTS
+/// ──────────────────────
+/// • Exponential back-off with jitter on "Too Many Requests" (HTTP 429) from UGS Lobby.
+/// • Every error path resets isConnecting so buttons never stay permanently locked.
+/// • Widget-session watcher stops cleanly once a session is found.
+/// • SpawnLobbySyncAsHost waits properly for NGO to be fully listening before acting.
+/// • LeaveSessionAsync is idempotent and guards against double-shutdown.
+/// </summary>
 public class NetworkGameManager : MonoBehaviour
 {
     public static NetworkGameManager Instance { get; private set; }
@@ -15,9 +26,6 @@ public class NetworkGameManager : MonoBehaviour
     [Header("Session Settings")]
     [SerializeField] private int maxPlayers = 4;
 
-    // ── IMPORTANT: Drag your LobbySync prefab here in the Inspector ───────
-    // The prefab must have NetworkObject + LobbySync components.
-    // It must also be in NetworkManager's NetworkPrefabs list.
     [Header("Lobby Sync")]
     [SerializeField] private GameObject lobbySyncPrefab;
 
@@ -38,17 +46,24 @@ public class NetworkGameManager : MonoBehaviour
     public event Action<List<SessionPlayerInfo>> OnPlayersUpdated;
 
     // ── Private state ──────────────────────────────────────────────────────
-    private int  localCharacterIndex = 0;
-    private bool localIsReady        = false;
-    private bool sessionEventFired   = false;
+    private int  localCharacterIndex  = 0;
+    private bool localIsReady         = false;
+    private bool sessionEventFired    = false;
+    private bool isLeavingSession     = false;
 
     private Dictionary<string, int> characterSelections = new();
     private List<SessionPlayerInfo> cachedPlayerList    = new();
+
+    // Back-off constants for UGS rate-limit (HTTP 429) retries
+    private const int   MaxRetries       = 4;
+    private const float BaseDelaySeconds = 2f;   // doubles each attempt
+    private const float JitterSeconds    = 0.5f; // random ± jitter
 
     // Widget reflection — fallback if session was created by Unity Multiplayer Widget
     private System.Reflection.PropertyInfo widgetInstanceProp;
     private System.Reflection.PropertyInfo widgetActiveSessionProp;
     private bool                           widgetReflectionResolved = false;
+    private Coroutine                      widgetWatchCoroutine;
 
     // ─────────────────────────────────────────────────────────────────────
     // Lifecycle
@@ -64,7 +79,7 @@ public class NetworkGameManager : MonoBehaviour
     private void Start()
     {
         _ = InitializeAsync();
-        StartCoroutine(WatchForWidgetSession());
+        widgetWatchCoroutine = StartCoroutine(WatchForWidgetSession());
     }
 
     private void OnDestroy() => _ = LeaveSessionAsync();
@@ -118,7 +133,7 @@ public class NetworkGameManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Explicit session creation / joining
+    // Session creation — with exponential back-off on HTTP 429
     // ─────────────────────────────────────────────────────────────────────
 
     public async Task CreateSessionAsync()
@@ -129,33 +144,66 @@ public class NetworkGameManager : MonoBehaviour
             return;
         }
 
-        try
+        Exception lastException = null;
+
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            var options = new SessionOptions
+            if (attempt > 0)
             {
-                MaxPlayers = maxPlayers,
-                Name       = $"{LocalPlayerName}'s Game"
-            }.WithRelayNetwork();
+                // Exponential back-off: 2s, 4s, 8s, 16s  ± up to 0.5s jitter
+                float delay = BaseDelaySeconds * Mathf.Pow(2f, attempt - 1)
+                              + UnityEngine.Random.Range(-JitterSeconds, JitterSeconds);
+                delay = Mathf.Max(0.1f, delay);
 
-            CurrentSession    = await MultiplayerService.Instance.CreateSessionAsync(options);
-            sessionEventFired = true;
+                Debug.Log($"[NetworkGameManager] Rate-limited — retrying CreateSession in {delay:F1}s " +
+                          $"(attempt {attempt + 1}/{MaxRetries + 1})");
 
-            SubscribeToSessionEvents();
-            characterSelections[LocalPlayerId] = localCharacterIndex;
+                OnSessionError?.Invoke($"Service busy. Retrying in {Mathf.CeilToInt(delay)}s…");
+                await Task.Delay(Mathf.RoundToInt(delay * 1000));
+            }
 
-            Debug.Log($"[NetworkGameManager] Session created. Code: {CurrentSession.Code}");
-            OnSessionCreated?.Invoke();
-            RefreshPlayerList();
+            try
+            {
+                var options = new SessionOptions
+                {
+                    MaxPlayers = maxPlayers,
+                    Name       = $"{LocalPlayerName}'s Game"
+                }.WithRelayNetwork();
 
-            // Host is responsible for spawning LobbySync so NGO replicates it to all clients
-            StartCoroutine(SpawnLobbySyncAsHost());
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NetworkGameManager] CreateSession failed: {e.Message}");
-            OnSessionError?.Invoke($"Failed to create session: {e.Message}");
+                CurrentSession    = await MultiplayerService.Instance.CreateSessionAsync(options);
+                sessionEventFired = true;
+
+                SubscribeToSessionEvents();
+                characterSelections[LocalPlayerId] = localCharacterIndex;
+
+                Debug.Log($"[NetworkGameManager] Session created. Code: {CurrentSession.Code}");
+                OnSessionCreated?.Invoke();
+                RefreshPlayerList();
+
+                StartCoroutine(SpawnLobbySyncAsHost());
+                return; // success
+            }
+            catch (Exception e)
+            {
+                lastException = e;
+                bool isRateLimit = e.Message.Contains("429") ||
+                                   e.Message.Contains("Too Many Requests");
+
+                if (!isRateLimit || attempt == MaxRetries)
+                {
+                    // Non-retryable error OR we've exhausted retries
+                    Debug.LogError($"[NetworkGameManager] CreateSession failed: {e.Message}");
+                    OnSessionError?.Invoke($"Failed to create session: {e.Message}");
+                    return;
+                }
+                // else: rate-limited — loop around for back-off
+            }
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Session joining — with exponential back-off on HTTP 429
+    // ─────────────────────────────────────────────────────────────────────
 
     public async Task JoinSessionAsync(string joinCode)
     {
@@ -171,52 +219,102 @@ public class NetworkGameManager : MonoBehaviour
             return;
         }
 
-        try
+        string code = joinCode.Trim().ToUpper();
+
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            CurrentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(
-                joinCode.Trim().ToUpper());
+            if (attempt > 0)
+            {
+                float delay = BaseDelaySeconds * Mathf.Pow(2f, attempt - 1)
+                              + UnityEngine.Random.Range(-JitterSeconds, JitterSeconds);
+                delay = Mathf.Max(0.1f, delay);
 
-            sessionEventFired = true;
+                Debug.Log($"[NetworkGameManager] Rate-limited — retrying JoinSession in {delay:F1}s " +
+                          $"(attempt {attempt + 1}/{MaxRetries + 1})");
 
-            SubscribeToSessionEvents();
-            characterSelections[LocalPlayerId] = localCharacterIndex;
+                OnSessionError?.Invoke($"Service busy. Retrying in {Mathf.CeilToInt(delay)}s…");
+                await Task.Delay(Mathf.RoundToInt(delay * 1000));
+            }
 
-            Debug.Log($"[NetworkGameManager] Joined session: {CurrentSession.Id}");
-            OnSessionJoined?.Invoke();
-            RefreshPlayerList();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NetworkGameManager] JoinSession failed: {e.Message}");
-            OnSessionError?.Invoke($"Failed to join: {e.Message}");
+            try
+            {
+                CurrentSession = await MultiplayerService.Instance.JoinSessionByCodeAsync(code);
+                sessionEventFired = true;
+
+                SubscribeToSessionEvents();
+                characterSelections[LocalPlayerId] = localCharacterIndex;
+
+                Debug.Log($"[NetworkGameManager] Joined session: {CurrentSession.Id}");
+                OnSessionJoined?.Invoke();
+                RefreshPlayerList();
+                return; // success
+            }
+            catch (Exception e)
+            {
+                bool isRateLimit = e.Message.Contains("429") ||
+                                   e.Message.Contains("Too Many Requests");
+
+                // UGS returns "already a member" when the Widget joined the lobby
+                // in the background while we were retrying.  Treat it as success:
+                // the session is already live — just sync from the Widget path.
+                bool alreadyMember = e.Message.Contains("already a member") ||
+                                     e.Message.Contains("already in lobby");
+                if (alreadyMember)
+                {
+                    Debug.Log("[NetworkGameManager] Already a member — syncing from Widget session.");
+                    var widgetSession = TryGetWidgetSession();
+                    if (widgetSession != null)
+                    {
+                        SyncExternalSession(widgetSession);
+                    }
+                    else
+                    {
+                        // Widget session not available yet — fire OnSessionJoined so
+                        // MainMenuController enters the lobby panel and keeps waiting
+                        // for LobbySync to arrive via NGO replication.
+                        sessionEventFired = true;
+                        OnSessionJoined?.Invoke();
+                    }
+                    return;
+                }
+
+                if (!isRateLimit || attempt == MaxRetries)
+                {
+                    Debug.LogError($"[NetworkGameManager] JoinSession failed: {e.Message}");
+                    OnSessionError?.Invoke($"Failed to join: {e.Message}");
+                    return;
+                }
+            }
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // LobbySync spawning — host only
     //
-    // The host waits for NGO to confirm it is listening, then instantiates
-    // and network-spawns the LobbySync prefab.  NGO automatically replicates
-    // the spawn to every connected client.
+    // Waits for NGO to be fully listening (IsListening + IsHost) before
+    // instantiating and network-spawning the LobbySync prefab.
     // ─────────────────────────────────────────────────────────────────────
 
     private IEnumerator SpawnLobbySyncAsHost()
     {
         float elapsed = 0f;
-        while (NetworkManager.Singleton == null ||
+        const float timeout = 20f;
+
+        while (NetworkManager.Singleton == null  ||
                !NetworkManager.Singleton.IsListening ||
                !NetworkManager.Singleton.IsHost)
         {
             elapsed += Time.deltaTime;
-            if (elapsed > 15f)
+            if (elapsed > timeout)
             {
-                Debug.LogError("[NetworkGameManager] Timed out waiting for NGO host — LobbySync NOT spawned. " +
-                               "Check that your NetworkManager is configured correctly.");
+                Debug.LogError("[NetworkGameManager] Timed out waiting for NGO host. " +
+                               "LobbySync NOT spawned. Check NetworkManager configuration.");
                 yield break;
             }
             yield return null;
         }
 
+        // Another route (Widget) may have already spawned LobbySync
         if (LobbySync.Instance != null)
         {
             Debug.Log("[NetworkGameManager] LobbySync already exists — skipping spawn.");
@@ -225,9 +323,8 @@ public class NetworkGameManager : MonoBehaviour
 
         if (lobbySyncPrefab == null)
         {
-            Debug.LogError("[NetworkGameManager] lobbySyncPrefab is not assigned! " +
-                           "Drag your LobbySync prefab into the NetworkGameManager Inspector field. " +
-                           "Character select will not work without it.");
+            Debug.LogError("[NetworkGameManager] lobbySyncPrefab not assigned in Inspector! " +
+                           "Character select will not work.");
             yield break;
         }
 
@@ -236,7 +333,7 @@ public class NetworkGameManager : MonoBehaviour
 
         if (netObj == null)
         {
-            Debug.LogError("[NetworkGameManager] LobbySync prefab is missing a NetworkObject component!");
+            Debug.LogError("[NetworkGameManager] LobbySync prefab is missing a NetworkObject!");
             Destroy(go);
             yield break;
         }
@@ -246,11 +343,12 @@ public class NetworkGameManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Widget session fallback
+    // Widget session fallback — stops once a session is confirmed
     // ─────────────────────────────────────────────────────────────────────
 
     private IEnumerator WatchForWidgetSession()
     {
+        // Wait until signed in
         while (string.IsNullOrEmpty(LocalPlayerId))
             yield return null;
 
@@ -258,13 +356,21 @@ public class NetworkGameManager : MonoBehaviour
         {
             yield return new WaitForSeconds(0.25f);
 
-            if (CurrentSession != null || sessionEventFired) continue;
+            // Stop watching once we have a session through any path
+            if (CurrentSession != null || sessionEventFired)
+            {
+                widgetWatchCoroutine = null;
+                yield break;
+            }
 
             var session = TryGetWidgetSession();
             if (session == null) continue;
 
             Debug.Log($"[NetworkGameManager] Widget session detected: {session.Id} Code={session.Code}");
             SyncExternalSession(session);
+
+            widgetWatchCoroutine = null;
+            yield break;
         }
     }
 
@@ -327,21 +433,33 @@ public class NetworkGameManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Leave session
+    // Leave session — idempotent, guards against double-shutdown
     // ─────────────────────────────────────────────────────────────────────
 
     public async Task LeaveSessionAsync()
     {
-        if (CurrentSession == null) return;
+        if (CurrentSession == null || isLeavingSession) return;
 
+        isLeavingSession = true;
         UnsubscribeFromSessionEvents();
         sessionEventFired = false;
 
-        try { await CurrentSession.LeaveAsync(); }
-        catch (Exception e) { Debug.LogWarning($"[NetworkGameManager] Leave error: {e.Message}"); }
-
+        var sessionToLeave = CurrentSession;
         CurrentSession = null;
-        NetworkManager.Singleton?.Shutdown();
+
+        try   { await sessionToLeave.LeaveAsync(); }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[NetworkGameManager] Leave error (non-fatal): {e.Message}");
+        }
+
+        // Shut down NGO only if it was started
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening)
+        {
+            NetworkManager.Singleton.Shutdown();
+        }
+
+        isLeavingSession = false;
         OnSessionLeft?.Invoke();
     }
 
@@ -451,16 +569,14 @@ public class NetworkGameManager : MonoBehaviour
     private async Task SetAuthDisplayNameAsync(string name)
     {
         try   { await AuthenticationService.Instance.UpdatePlayerNameAsync(name); }
-        catch (Exception e) { Debug.LogWarning($"[NetworkGameManager] Could not set display name: {e.Message}"); }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[NetworkGameManager] Could not set display name: {e.Message}");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Session events
-    //
-    // PlayerJoined / PlayerLeft / Changed all use a one-frame delay before
-    // refreshing so the UGS session has time to fully hydrate the player data.
-    // Without the delay the host iterates CurrentSession.Players before the
-    // newly joined player is present in the list.
     // ─────────────────────────────────────────────────────────────────────
 
     private void SubscribeToSessionEvents()
@@ -496,8 +612,8 @@ public class NetworkGameManager : MonoBehaviour
         => StartCoroutine(DelayedRefreshPlayerList());
 
     /// <summary>
-    /// Yields one frame so the UGS lobby's internal player list is consistent
-    /// before we iterate CurrentSession.Players and fire OnPlayersUpdated.
+    /// Yields one frame so UGS internal player list is consistent
+    /// before iterating CurrentSession.Players.
     /// </summary>
     private IEnumerator DelayedRefreshPlayerList()
     {
