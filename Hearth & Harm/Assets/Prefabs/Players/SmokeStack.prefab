@@ -331,7 +331,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8dc9bde34533294692b3e2df9ea8af2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthComponent
-  damageNumberPrefab: {fileID: 0}
+  damageNumberPrefab: {fileID: 5794558428634855770, guid: d4a5670d4a79972499664c1786a8364f, type: 3}
   damageNumberOffset: {x: 0, y: 0.6, z: 0}
   damageFlashObject: {fileID: 6870659467898387669}
   flashDuration: 0.15

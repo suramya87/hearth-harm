@@ -734,8 +734,8 @@ public class MainMenuController : MonoBehaviour
         CharacterSelection.Index  = selectedCharIndex;
         CharacterSelection.Prefab = GetSelectedPrefab();
 
-        WaveManager.Instance?.ResetToLevel1();
-        EnemyManager.Instance?.ClearAllEnemies();
+        // Remove the manager calls — managers don't exist in the menu scene
+        // and will initialize fresh when the game scene loads
 
         loadingPanel?.SetActive(true);
         ShowPanel(null);

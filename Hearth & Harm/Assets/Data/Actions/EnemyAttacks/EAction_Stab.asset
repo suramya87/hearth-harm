@@ -28,7 +28,7 @@ MonoBehaviour:
   - {fileID: -922745333, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
   - {fileID: -512514818, guid: 1f6ac333d4e4eae4fbaac815b907d4c5, type: 3}
   useDiceDamage: 0
-  baseDamage: 3
+  baseDamage: 4
   diceCount: 1
   dieType: 6
   flatBonus: 0
@@ -43,7 +43,7 @@ MonoBehaviour:
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   showSpritePerTile: 0
-  _summary: 'Damage: 3
+  _summary: 'Damage: 4
 
     Stamina: 0
 

@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: SneakyBoi
   m_EditorClassIdentifier: Assembly-CSharp::EnemyStats
   enemyName: SNEAKY
-  maxHealth: 12
+  maxHealth: 10
   moveRange: 6
   attackData: {fileID: 11400000, guid: 08c32a82a22f786489f0c17c325cb00a, type: 2}
   kiteEnabled: 1
   kiteRange: 2
   alwaysChases: 1
   turnsBeforeFirstAction: 0
-  _summary: 'HP:12  Move:6  Range:1
+  _summary: 'HP:10  Move:6  Range:1
 
     Attack:Attack  Kite:True(2)'

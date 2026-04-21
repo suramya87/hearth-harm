@@ -20,26 +20,45 @@ public class EndRoomUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI nextLevelLabel;
 
     private bool shown;
+    
 
     private void Start()
     {
         nextLevelButton?.onClick.AddListener(OnNextLevel);
         mainMenuButton?.onClick.AddListener(OnMainMenu);
-        HidePanel();
+        shown = false;
+        HidePanel(); // already here, make sure panelRoot starts inactive in the prefab too
     }
 
-    private void OnEnable()
-    {
-        RoomManager.OnAnyRoomChanged += OnRoomChanged;
-        LevelGenerator.OnLevelReady  += OnLevelReady;
-    }
+    // private void OnEnable()
+    // {
+    //     RoomManager.OnAnyRoomChanged += OnRoomChanged;
+    //     LevelGenerator.OnLevelReady  += OnLevelReady;
+    // }
 
-    private void OnDisable()
-    {
-        RoomManager.OnAnyRoomChanged -= OnRoomChanged;
-        LevelGenerator.OnLevelReady  -= OnLevelReady;
-    }
+    // private void OnDisable()
+    // {
+    //     RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+    //     LevelGenerator.OnLevelReady  -= OnLevelReady;
+    // }
 
+
+// In LoseScreen
+private void OnEnable()
+{
+    if (GameStateManager.Instance != null)
+        GameStateManager.Instance.OnGameLost += ShowPanel;
+    RoomManager.OnAnyRoomChanged += OnRoomChanged;
+    LevelGenerator.OnLevelReady += OnLevelReady;
+}
+
+private void OnDisable()
+{
+    if (GameStateManager.Instance != null)
+        GameStateManager.Instance.OnGameLost -= ShowPanel;
+    RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+    LevelGenerator.OnLevelReady -= OnLevelReady;
+}
     private void OnRoomChanged(LevelGenerator.PlacedRoom room)
     {
         if (shown || room?.prefabData == null) return;
@@ -47,7 +66,12 @@ public class EndRoomUI : MonoBehaviour
         { shown = true; ShowPanel(); }
     }
 
-    private void OnLevelReady() { shown = false; HidePanel(); }
+    private void OnLevelReady() 
+    { 
+        shown = false; 
+        HidePanel(); 
+        Time.timeScale = 1f; // safety reset in case timeScale got stuck
+    }
 
     // ── Panel ──────────────────────────────────────────────────────────────
 
@@ -82,8 +106,6 @@ public class EndRoomUI : MonoBehaviour
     public void OnMainMenu()
     {
         Time.timeScale = 1f;
-        WaveManager.Instance?.ResetToLevel1();
-        EnemyManager.Instance?.ClearAllEnemies();
         SceneManager.LoadScene(mainMenuSceneName);
     }
 }

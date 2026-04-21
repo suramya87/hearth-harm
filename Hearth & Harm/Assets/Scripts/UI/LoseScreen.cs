@@ -19,8 +19,13 @@ public class LoseScreen : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject); // kill the newcomer, keep the original
+            return;
+        }
         Instance = this;
+        DontDestroyOnLoad(gameObject);
     }
 
     private void Start()
@@ -28,6 +33,27 @@ public class LoseScreen : MonoBehaviour
         retryButton?.onClick.AddListener(OnRetry);
         mainMenuButton?.onClick.AddListener(OnMainMenu);
         HidePanel();
+    }
+
+    // In LoseScreen
+    private void OnEnable()
+    {
+        if (GameStateManager.Instance != null)
+            GameStateManager.Instance.OnGameLost += ShowPanel;
+        LevelGenerator.OnLevelReady += OnLevelReady;
+    }
+
+    private void OnDisable()
+    {
+        if (GameStateManager.Instance != null)
+            GameStateManager.Instance.OnGameLost -= ShowPanel;
+        LevelGenerator.OnLevelReady -= OnLevelReady;
+    }
+
+    private void OnLevelReady()
+    {
+        HidePanel();
+        Time.timeScale = 1f; // safety
     }
 
     public static void Show() => Instance?.ShowPanel();
@@ -45,6 +71,14 @@ public class LoseScreen : MonoBehaviour
 
     private void HidePanel() { if (panelRoot) panelRoot.SetActive(false); }
 
-    public void OnRetry()    { Time.timeScale = 1f; HidePanel(); GameStateManager.Instance?.RestartGame(retryResetsProgress); }
-    public void OnMainMenu() { Time.timeScale = 1f; WaveManager.Instance?.ResetToLevel1(); SceneManager.LoadScene(mainMenuScene); }
+    public void OnRetry()    
+    { 
+        Time.timeScale = 1f; HidePanel(); 
+        GameStateManager.Instance?.RestartGame(retryResetsProgress); 
+    }
+    public void OnMainMenu()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(mainMenuScene);
+    }
 }

@@ -16,7 +16,7 @@ MonoBehaviour:
   icon: {fileID: 0}
   animationFrames: []
   useDiceDamage: 0
-  baseDamage: 2
+  baseDamage: 5
   diceCount: 1
   dieType: 6
   flatBonus: 0
@@ -27,11 +27,11 @@ MonoBehaviour:
   maxRange: 0
   canTargetSelf: 0
   staminaCost: 2
-  requiresEnoughStamina: 1
+  requiresEnoughStamina: 0
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   showSpritePerTile: 0
-  _summary: 'Damage: 2
+  _summary: 'Damage: 5
 
     Stamina: 2
 

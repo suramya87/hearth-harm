@@ -17,7 +17,7 @@ MonoBehaviour:
   animationFrames: []
   useDiceDamage: 1
   baseDamage: 10
-  diceCount: 6
+  diceCount: 4
   dieType: 6
   flatBonus: 5
   damageMultiplier: 1
@@ -31,7 +31,7 @@ MonoBehaviour:
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   showSpritePerTile: 0
-  _summary: 'Damage: 6d6+5
+  _summary: 'Damage: 4d6+5
 
     Stamina: 3
 
