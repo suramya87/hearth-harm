@@ -132,89 +132,112 @@ public class LevelGenerator : MonoBehaviour
         RoomManager.Instance?.ClearCurrentRoom();
     }
 
-        private bool GenerateLayout()
+    private bool GenerateLayout()
     {
         if (GetRandomPrefab(RoomType.End) == null)
-        { 
-            Debug.LogError("[LevelGenerator] No End room prefab!"); 
-            return false; 
+        {
+            Debug.LogError("[LevelGenerator] No End room prefab!");
+            return false;
         }
 
         PlacedRoom start = PlaceRoom(RoomType.Start, Vector2Int.zero, Vector3.zero);
         if (start == null) return false;
 
-        int targetCount = Random.Range(
+        int targetNormalRooms = Random.Range(
             WaveManager.Instance?.GetMinRooms() ?? minRooms,
             (WaveManager.Instance?.GetMaxRooms() ?? maxRooms) + 1);
 
-        var queue = new Queue<PlacedRoom>();
-        int count = 1;
-        bool bossPlaced = false;
+        // targetNormalRooms = number of non-Start, non-End, non-Boss rooms we want.
+        // Total layout = Start + normals/specials + (optional Boss) + End
 
-        var startDirs = GetAvailableDirections(start);
-        Shuffle(startDirs);
-        
-        // Pick exactly one direction to start the chain
-        Direction initialDir = startDirs[0]; 
-        RoomType secondRoomType = DetermineType(count, targetCount, bossPlaced);
-        PlacedRoom secondRoom = PlaceRoomInDirection(start, initialDir, secondRoomType);
+        var queue        = new Queue<PlacedRoom>();
+        int placedMiddle = 0;   // counts Normal/Special/Boss rooms placed so far
+        bool bossPlaced  = false;
 
-        if (secondRoom != null)
-        {
-            Connect(start, secondRoom, initialDir);
-            queue.Enqueue(secondRoom);
-            count++;
-            if (secondRoomType == RoomType.Boss) bossPlaced = true;
-        }
+        queue.Enqueue(start);
 
         int attempts = 0;
-        PlacedRoom lastNormal = secondRoom ?? start;
+        PlacedRoom lastPlaced = start;
 
-        while (queue.Count > 0 && count < targetCount && attempts < 500)
+        while (queue.Count > 0 && attempts < 1000)
         {
             attempts++;
             PlacedRoom current = queue.Dequeue();
-            
-            // Safety: If for some reason we dequeued the End room, don't grow from it
-            if (current.prefabData.roomType == RoomType.End) continue;
 
             var dirs = GetAvailableDirections(current);
             Shuffle(dirs);
 
-            foreach (var dir in dirs)
+            foreach (Direction dir in dirs)
             {
-                if (count >= targetCount) break;
+                // How many "middle" rooms do we still need?
+                int middleNeeded = targetNormalRooms - placedMiddle;
 
-                RoomType type = DetermineType(count, targetCount, bossPlaced);
-                
+                // Reserve slots: 1 for End, optionally 1 for Boss
+                bool needBoss = spawnBossRoom && !bossPlaced
+                                && GetRandomPrefab(RoomType.Boss) != null;
+                int reservedSlots = 1 + (needBoss ? 1 : 0); // End + maybe Boss
+
+                if (middleNeeded <= 0) break; // middle rooms done, stop expanding
+
+                RoomType type;
+                if (needBoss && middleNeeded == reservedSlots)
+                    type = RoomType.Boss;
+                else if (Random.value < specialRoomChance)
+                    type = RoomType.Special;
+                else
+                    type = RoomType.Normal;
+
                 PlacedRoom newRoom = PlaceRoomInDirection(current, dir, type);
                 if (newRoom == null) continue;
 
                 Connect(current, newRoom, dir);
-                lastNormal = newRoom;
+                lastPlaced = newRoom;
+                placedMiddle++;
 
                 if (type == RoomType.Boss) bossPlaced = true;
-                
-                if (type != RoomType.End) 
-                {
-                    queue.Enqueue(newRoom);
-                }
-                count++;
+
+                queue.Enqueue(newRoom);
+
+                if (placedMiddle >= targetNormalRooms) break;
             }
+
+            if (placedMiddle >= targetNormalRooms) break;
         }
 
-        if (!placedRooms.Exists(r => r.prefabData.roomType == RoomType.End))
+        // If we ran out of space before hitting the target, warn but continue
+        if (placedMiddle < targetNormalRooms)
+            Debug.LogWarning($"[LevelGenerator] Only placed {placedMiddle}/{targetNormalRooms} " +
+                            $"middle rooms. Consider increasing roomSpacing or reducing maxRooms.");
+
+        // Always cap with an End room attached to the last placed room
+        bool endPlaced = false;
+        var candidates = new List<PlacedRoom>(placedRooms);
+        // Try from the last placed room outward
+        candidates.Remove(lastPlaced);
+        candidates.Insert(0, lastPlaced);
+
+        foreach (PlacedRoom candidate in candidates)
         {
-            var from = lastNormal;
-            var available = GetAvailableDirections(from);
-            if (available.Count > 0)
+            if (candidate.prefabData.roomType == RoomType.End) continue;
+            var available = GetAvailableDirections(candidate);
+            if (available.Count == 0) continue;
+
+            PlacedRoom endRoom = PlaceRoomInDirection(candidate, available[0], RoomType.End);
+            if (endRoom != null)
             {
-                var er = PlaceRoomInDirection(from, available[0], RoomType.End);
-                if (er != null) Connect(from, er, available[0]);
+                Connect(candidate, endRoom, available[0]);
+                endPlaced = true;
+                break;
             }
         }
 
-        return placedRooms.Exists(r => r.prefabData.roomType == RoomType.End);
+        if (!endPlaced)
+        {
+            Debug.LogError("[LevelGenerator] Could not place End room!");
+            return false;
+        }
+
+        return true;
     }
 
     private PlacedRoom PlaceRoom(RoomType type, Vector2Int layoutPos, Vector3 worldPos)
