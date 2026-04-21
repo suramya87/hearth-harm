@@ -6289,6 +6289,8 @@ GameObject:
   - component: {fileID: 1059453623}
   - component: {fileID: 1059453622}
   - component: {fileID: 1059453621}
+  - component: {fileID: 1059453625}
+  - component: {fileID: 1059453626}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -6355,6 +6357,44 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1059453625
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1059453620}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 753267884
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 0
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
+--- !u!114 &1059453626
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1059453620}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66d0f354719da074fb85a87376efda38, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NetworkBootstrapper
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!1 &1086071259
 GameObject:
   m_ObjectHideFlags: 0
@@ -7326,7 +7366,7 @@ MonoBehaviour:
   playerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
   - {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
-  fallbackPrefab: {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
+  fallbackPrefab: {fileID: 0}
   spawnSpread: 1
 --- !u!1 &1159171659
 GameObject:
@@ -9017,6 +9057,9 @@ MonoBehaviour:
   cam: {fileID: 1434585242}
   panSpeed: 8
   dragPanSpeed: 0.015
+  useEdgeScroll: 1
+  edgeSize: 25
+  edgePanSpeed: 8
   zoomSpeed: 4
   orthoMin: 3
   orthoMax: 10

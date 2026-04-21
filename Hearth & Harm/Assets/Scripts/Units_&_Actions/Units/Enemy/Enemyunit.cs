@@ -3,7 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// Represents one enemy on the grid.
-/// Implements IHasHealth so HealthComponent auto-reads max HP from EnemyStats.
+/// In multiplayer, MoveToPosition automatically broadcasts to clients via NetworkedEnemyBridge.
+/// Enemy AI only runs on the server, so the server is always the source of truth.
 /// </summary>
 [RequireComponent(typeof(HealthComponent))]
 public class EnemyUnit : MonoBehaviour, IHasHealth
@@ -12,8 +13,8 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     [SerializeField] private EnemyStats stats;
 
     [Header("Debug")]
-    [SerializeField] private bool         showDebugLogs;
-    [SerializeField] private GameObject   selectedVisual;
+    [SerializeField] private bool       showDebugLogs;
+    [SerializeField] private GameObject selectedVisual;
 
     private GridPosition     gridPosition;
     private RoomGrid         currentRoomGrid;
@@ -36,7 +37,7 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
-    private void Awake()  { health = GetComponent<HealthComponent>(); }
+    private void Awake()  => health = GetComponent<HealthComponent>();
 
     private void Start()
     {
@@ -52,7 +53,7 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         EnemyManager.Instance?.UnregisterEnemy(this);
     }
 
-    // ── Grid placement ─────────────────────────────────────────────────────
+    // ── Grid placement (called by spawner, no broadcast needed — NGO spawns the GO) ──
 
     public void PlaceOnGrid(RoomGrid room, GridPosition pos)
     {
@@ -70,9 +71,12 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         if (showDebugLogs) Debug.Log($"[EnemyUnit] {stats?.enemyName} placed at {pos}");
     }
 
+    // ── Movement (called by EnemyAI on server) ─────────────────────────────
+
     public void MoveToPosition(GridPosition newPos)
     {
         if (!initialized) return;
+
         currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, this);
         gridPosition = newPos;
         currentRoomGrid.AddEnemyAtGridPosition(newPos, this);
@@ -81,6 +85,14 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         transform.position = new Vector3(world.x, world.y, transform.position.z);
 
         if (showDebugLogs) Debug.Log($"[EnemyUnit] {stats?.enemyName} moved to {newPos}");
+
+        // In multiplayer, enemy AI runs server-only. Broadcast the move so clients
+        // see the enemy actually walk to its new tile.
+        if (GameManager.IsMultiplayer)
+        {
+            var bridge = GetComponent<NetworkedEnemyBridge>();
+            bridge?.ServerBroadcastMove(newPos, currentRoomGrid);
+        }
     }
 
     // ── Turn gating ────────────────────────────────────────────────────────
@@ -105,8 +117,17 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     private void HandleDeath()
     {
         if (showDebugLogs) Debug.Log($"[EnemyUnit] {stats?.enemyName} died.");
+
         if (currentRoomGrid != null && initialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, this);
+
+        // In multiplayer, notify all clients of the death visual
+        if (GameManager.IsMultiplayer)
+        {
+            var bridge = GetComponent<NetworkedEnemyBridge>();
+            bridge?.NotifyDeathClientRpc();
+        }
+
         OnEnemyDied?.Invoke(this);
         EnemyManager.Instance?.UnregisterEnemy(this);
         Destroy(gameObject, 0.5f);

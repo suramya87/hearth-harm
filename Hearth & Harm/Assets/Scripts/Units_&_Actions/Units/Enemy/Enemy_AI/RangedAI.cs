@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Ranged enemy AI. Stays at range, uses Bresenham LoS, kites when player
-/// gets too close.  Attach INSTEAD of EnemyAI on ranged prefabs.
+/// Ranged enemy AI. In multiplayer runs server-only.
+/// Damage is routed through NetworkedHealthBridge so clients see HP changes.
 /// </summary>
 [RequireComponent(typeof(EnemyUnit))]
 public class RangedEnemyAI : MonoBehaviour
@@ -39,13 +39,12 @@ public class RangedEnemyAI : MonoBehaviour
             var flee = FindFleePos(myPos, playerPos, room, stats.moveRange);
             if (flee.HasValue)
             {
-                unit.MoveToPosition(flee.Value);
+                unit.MoveToPosition(flee.Value);   // auto-broadcasts in MP
                 yield return new WaitForSeconds(stepDelay);
                 myPos = unit.GridPosition;
                 dist  = myPos.ManhattanDistance(playerPos);
             }
         }
-        // Approach for range + LoS
         else if (dist > stats.attackRange || !HasLoS(myPos, playerPos, room))
         {
             var path  = new Pathfinder(room).FindPathToRange(myPos, playerPos, stats.attackRange);
@@ -57,7 +56,7 @@ public class RangedEnemyAI : MonoBehaviour
                 int nd   = next.ManhattanDistance(playerPos);
                 if (nd <= stats.attackRange && HasLoS(next, playerPos, room)) break;
                 if (IsTileOccupied(next, room)) break;
-                unit.MoveToPosition(next);
+                unit.MoveToPosition(next);         // auto-broadcasts in MP
                 yield return new WaitForSeconds(stepDelay);
             }
             myPos = unit.GridPosition;
@@ -73,6 +72,46 @@ public class RangedEnemyAI : MonoBehaviour
         }
 
         onComplete?.Invoke();
+    }
+
+    private void PerformAttack(Unit player)
+    {
+        var stats = unit.Stats;
+        if (stats.attackData == null) return;
+
+        int dmg = stats.attackData.CalculateDamage();
+        AttackSpritePopup.Show(stats.attackData, player.transform.position, new Vector3(0f, 0.5f, 0f));
+
+        if (stats.attackData.attackPattern != null)
+        {
+            var facing = Facing(unit.GridPosition, player.GetGridPosition());
+            var hits   = stats.attackData.attackPattern.GetAffectedPositions(unit.GridPosition, facing);
+            bool hit   = false;
+            foreach (var t in hits)
+            {
+                if (t != player.GetGridPosition()) continue;
+                DealDamage(player.gameObject, dmg);
+                hit = true;
+                break;
+            }
+            if (!hit) DealDamage(player.gameObject, dmg);
+        }
+        else
+        {
+            DealDamage(player.gameObject, dmg);
+        }
+
+        Debug.Log($"[RangedEnemyAI] {stats.enemyName} shot player for {dmg}.");
+    }
+
+    // ── Damage routing ─────────────────────────────────────────────────────
+
+    private static void DealDamage(GameObject target, int dmg)
+    {
+        if (GameManager.IsMultiplayer)
+            NetworkedHealthBridge.TakeDamage(target, dmg);
+        else
+            target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
     }
 
     // ── LoS (Bresenham) ────────────────────────────────────────────────────
@@ -94,8 +133,6 @@ public class RangedEnemyAI : MonoBehaviour
         return true;
     }
 
-    // ── Kite flee ──────────────────────────────────────────────────────────
-
     private GridPosition? FindFleePos(GridPosition my, GridPosition player,
                                       RoomGrid room, int moveRange)
     {
@@ -113,33 +150,6 @@ public class RangedEnemyAI : MonoBehaviour
         }
         return best;
     }
-
-    // ── Attack ─────────────────────────────────────────────────────────────
-
-    private void PerformAttack(Unit player)
-    {
-        var stats = unit.Stats;
-        if (stats.attackData == null) return;
-        var health = player.GetComponent<HealthComponent>();
-        if (health == null) return;
-
-        int dmg = stats.attackData.CalculateDamage();
-        AttackSpritePopup.Show(stats.attackData, player.transform.position, new Vector3(0f, 0.5f, 0f));
-
-        if (stats.attackData.attackPattern != null)
-        {
-            var facing = Facing(unit.GridPosition, player.GetGridPosition());
-            var hits   = stats.attackData.attackPattern.GetAffectedPositions(unit.GridPosition, facing);
-            bool hit = false;
-            foreach (var t in hits) if (t == player.GetGridPosition()) { health.TakeDamage(dmg); hit=true; break; }
-            if (!hit) health.TakeDamage(dmg);
-        }
-        else health.TakeDamage(dmg);
-
-        Debug.Log($"[RangedEnemyAI] {stats.enemyName} shot player for {dmg}.");
-    }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
 
     private bool IsTileOccupied(GridPosition pos, RoomGrid room)
     {

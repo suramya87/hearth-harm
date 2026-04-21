@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Melee enemy AI. Moves toward the nearest player and attacks when in range.
+/// Melee enemy AI. In multiplayer runs server-only.
+/// Damage is routed through NetworkedHealthBridge so clients see HP changes.
 /// </summary>
 [RequireComponent(typeof(EnemyUnit))]
 public class EnemyAI : MonoBehaviour
@@ -26,8 +27,8 @@ public class EnemyAI : MonoBehaviour
 
     private IEnumerator TurnRoutine(Unit player, Action onComplete)
     {
-        var stats     = unit.Stats;
-        var room      = unit.CurrentRoomGrid;
+        var stats = unit.Stats;
+        var room  = unit.CurrentRoomGrid;
         if (stats == null || room == null) { onComplete?.Invoke(); yield break; }
 
         var myPos     = unit.GridPosition;
@@ -43,7 +44,7 @@ public class EnemyAI : MonoBehaviour
             {
                 if (unit.IsDead) { onComplete?.Invoke(); yield break; }
                 if (IsTileOccupied(path[i], room)) break;
-                unit.MoveToPosition(path[i]);
+                unit.MoveToPosition(path[i]);   // auto-broadcasts in MP via EnemyUnit
                 yield return new WaitForSeconds(stepDelay);
             }
             myPos = unit.GridPosition;
@@ -65,10 +66,11 @@ public class EnemyAI : MonoBehaviour
     private void PerformAttack(Unit player)
     {
         var stats = unit.Stats;
-        if (stats.attackData == null) { Debug.LogWarning($"[EnemyAI] {stats?.enemyName} has no attackData."); return; }
-
-        var health = player.GetComponent<HealthComponent>();
-        if (health == null) return;
+        if (stats.attackData == null)
+        {
+            Debug.LogWarning($"[EnemyAI] {stats?.enemyName} has no attackData.");
+            return;
+        }
 
         int dmg = stats.attackData.CalculateDamage();
         AttackSpritePopup.Show(stats.attackData, player.transform.position);
@@ -77,13 +79,36 @@ public class EnemyAI : MonoBehaviour
         {
             var facing   = Facing(unit.GridPosition, player.GetGridPosition());
             var hitTiles = stats.attackData.attackPattern.GetAffectedPositions(unit.GridPosition, facing);
-            bool hit = false;
-            foreach (var t in hitTiles) if (t == player.GetGridPosition()) { health.TakeDamage(dmg); hit = true; break; }
-            if (!hit) health.TakeDamage(dmg);
+            bool hit     = false;
+            foreach (var t in hitTiles)
+            {
+                if (t != player.GetGridPosition()) continue;
+                DealDamage(player.gameObject, dmg);
+                hit = true;
+                break;
+            }
+            if (!hit) DealDamage(player.gameObject, dmg);
         }
-        else health.TakeDamage(dmg);
+        else
+        {
+            DealDamage(player.gameObject, dmg);
+        }
 
         Debug.Log($"[EnemyAI] {stats.enemyName} hit player for {dmg}.");
+    }
+
+    // ── Damage routing ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Routes damage through NetworkedHealthBridge in multiplayer so the server
+    /// stays authoritative and clients receive the HP sync RPC.
+    /// </summary>
+    private static void DealDamage(GameObject target, int dmg)
+    {
+        if (GameManager.IsMultiplayer)
+            NetworkedHealthBridge.TakeDamage(target, dmg);
+        else
+            target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

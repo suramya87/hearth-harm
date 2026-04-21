@@ -14,10 +14,10 @@ public class CombatAction : BaseAction
     [Header("Optional dice box UI")]
     [SerializeField] private DiceBoxUI diceBox;
 
-    private Vector2Int currentFacing = new(0, 1);
-    private List<GridPosition> lastPreview = new();
+    private Vector2Int         currentFacing = new(0, 1);
+    private List<GridPosition> lastPreview   = new();
 
-    public CombatActionData ActionData => actionData;
+    public CombatActionData ActionData     => actionData;
     public void SetActionData(CombatActionData d) => actionData = d;
 
     public override string GetActionName() =>
@@ -35,7 +35,6 @@ public class CombatAction : BaseAction
         if (actionData == null) return new();
 
         var unitGP = unit.GetGridPosition();
-
         if (actionData.rotatesToFacing)
             currentFacing = ApplyCorrection(FacingToward(unitGP, mouseGP));
 
@@ -49,25 +48,24 @@ public class CombatAction : BaseAction
         return positions;
     }
 
-    // ── Execution Logic ────────────────────────────────────────────────────
+    // ── Execution ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Singleplayer/Standard Execution
+    /// Main entry point. Automatically routes damage through NetworkedHealthBridge
+    /// when running in multiplayer — no need to call PerformAttackNetworked separately.
     /// </summary>
     public void PerformAttack(GridPosition targetGP, Action onComplete)
     {
-        ExecuteAttackFlow(targetGP, onComplete, useNetworkBridge: false);
+        ExecuteAttackFlow(targetGP, onComplete);
     }
 
-    /// <summary>
-    /// Multiplayer-safe attack. Routes damage through NetworkedHealthBridge.
-    /// </summary>
+    /// <summary>Explicit networked variant kept for API compatibility.</summary>
     public void PerformAttackNetworked(GridPosition targetGP, Action onComplete)
     {
-        ExecuteAttackFlow(targetGP, onComplete, useNetworkBridge: true);
+        ExecuteAttackFlow(targetGP, onComplete);
     }
 
-    private void ExecuteAttackFlow(GridPosition targetGP, Action onComplete, bool useNetworkBridge)
+    private void ExecuteAttackFlow(GridPosition targetGP, Action onComplete)
     {
         if (actionData == null) { onComplete?.Invoke(); return; }
 
@@ -78,7 +76,6 @@ public class CombatAction : BaseAction
         if (actionData.rotatesToFacing)
             currentFacing = ApplyCorrection(FacingToward(unitGP, targetGP));
 
-        // Visuals & Animation
         unitAnimator?.SetFacing(currentFacing);
         unitAnimator?.TriggerAttack();
 
@@ -87,11 +84,12 @@ public class CombatAction : BaseAction
             : PatternAt(unitGP, currentFacing);
 
         AttackSpritePopup.ShowOnTiles(actionData, hitPositions);
-        
-        // Resource & Damage
+
         SpendStamina();
-        
-        if (useNetworkBridge)
+
+        // Multiplayer: server is authoritative for damage — route through bridge.
+        // Single-player: apply directly.
+        if (GameManager.IsMultiplayer)
             ApplyDamageNetworked(hitPositions);
         else
             ApplyDamage(hitPositions);
@@ -141,7 +139,6 @@ public class CombatAction : BaseAction
         {
             if (!room.IsValidGridPosition(pos)) continue;
 
-            // Routes through NetworkedHealthBridge for Server Authority
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
@@ -163,7 +160,7 @@ public class CombatAction : BaseAction
         var valid = new List<GridPosition>();
         if (actionData == null) return valid;
 
-        var room = unit.GetCurrentRoomGrid();
+        var room   = unit.GetCurrentRoomGrid();
         if (room == null) return valid;
 
         var unitGP = unit.GetGridPosition();
@@ -235,7 +232,7 @@ public class CombatAction : BaseAction
             : (dx >= 0 ? new(1, 0) : new(-1, 0));
     }
 
-    private static readonly Vector2Int[] _cardinals = { new(0, 1), new(0, -1), new(1, 0), new(-1, 0) };
+    private static readonly Vector2Int[] _cardinals = { new(0,1), new(0,-1), new(1,0), new(-1,0) };
     private static IEnumerable<Vector2Int> Cardinals() => _cardinals;
 
     private int RollDamage()
@@ -247,7 +244,6 @@ public class CombatAction : BaseAction
         int total = actionData.flatBonus;
         foreach (int r in rolls) total += r;
 
-        // Visual roll display
         diceBox?.Clear();
         diceBox?.ShowRoll(rolls, actionData.flatBonus);
 
@@ -256,11 +252,8 @@ public class CombatAction : BaseAction
 
     private void SelectMoveAction()
     {
-        MoveAction moveAction = GetComponent<MoveAction>();
-        if (moveAction == null) return;
-
-        if (UnitActionSystem.Instance == null) return;
-
+        var moveAction = GetComponent<MoveAction>();
+        if (moveAction == null || UnitActionSystem.Instance == null) return;
         UnitActionSystem.Instance.SetSelectedAction(moveAction);
     }
 }

@@ -454,6 +454,7 @@ public class MainMenuController : MonoBehaviour
     private void HandleSessionCreated()
     {
         isConnecting = false;
+        GameManager.SetMode(GameMode.Host);
 
         currentJoinCode = NetworkGameManager.Instance?.GetJoinCode() ?? "---";
         SetSessionCode(currentJoinCode);
@@ -468,6 +469,7 @@ public class MainMenuController : MonoBehaviour
     private void HandleSessionJoined()
     {
         isConnecting = false;
+        GameManager.SetMode(GameMode.Client);
 
         // Clients don't need to display the host's code
         currentJoinCode = "---";

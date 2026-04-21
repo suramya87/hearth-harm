@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 
 public class Unit : MonoBehaviour
@@ -15,6 +16,11 @@ public class Unit : MonoBehaviour
     private BaseAction[]  allActions;
     private PlayerStats   playerStats;
 
+    // ── Used by NetworkedPlayerBridge to prevent re-entrant sync RPCs ─────
+    // Set to true while NetworkedPlayerBridge is applying a server-driven sync,
+    // so PlaceInRoom doesn't fire another ServerRpc back.
+    internal bool IsSyncingFromNetwork { get; set; }
+
     private void Awake()
     {
         moveAction  = GetComponent<MoveAction>();
@@ -24,14 +30,25 @@ public class Unit : MonoBehaviour
 
     private void Start()
     {
-        if (TurnSystem.Instance != null)
+        if (GameManager.IsMultiplayer)
+            StartCoroutine(SubscribeToNetworkedTurnSystem());
+        else if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
+    }
+
+    private IEnumerator SubscribeToNetworkedTurnSystem()
+    {
+        while (NetworkedTurnSystem.Instance == null) yield return null;
+        NetworkedTurnSystem.Instance.OnTurnChanged += OnTurnChanged;
     }
 
     private void OnDestroy()
     {
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
+
+        if (NetworkedTurnSystem.Instance != null)
+            NetworkedTurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
     }
 
     // ── Grid placement ─────────────────────────────────────────────────────
@@ -44,19 +61,25 @@ public class Unit : MonoBehaviour
         currentRoomGrid = room;
         gridPosition    = newPos;
 
-        // 1. Get the base world position (the corner of the tile)
         Vector3 world = room.GetWorldPosition(newPos);
-
-        // 2. Apply the visual offset to the world position
-        // We add visualOffset.x to X and visualOffset.y to Y
         transform.position = new Vector3(
-            world.x + visualOffset.x, 
-            world.y + visualOffset.y, 
+            world.x + visualOffset.x,
+            world.y + visualOffset.y,
             transform.position.z
         );
 
         room.AddUnitAtGridPosition(newPos, this);
         isInitialized = true;
+
+        // ── Multiplayer: auto-sync grid position to server ─────────────────
+        // Only fires when the OWNING client moves (not when receiving a sync
+        // back from the server — IsSyncingFromNetwork guards that loop).
+        if (GameManager.IsMultiplayer && !IsSyncingFromNetwork)
+        {
+            var bridge = GetComponent<NetworkedPlayerBridge>();
+            if (bridge != null && bridge.IsSpawned && bridge.IsOwner)
+                bridge.SyncGridPosition(room, newPos);
+        }
     }
 
     // ── Turn events ────────────────────────────────────────────────────────
@@ -69,9 +92,9 @@ public class Unit : MonoBehaviour
 
     // ── Accessors ──────────────────────────────────────────────────────────
 
-    public GridPosition  GetGridPosition()   => isInitialized ? gridPosition : default;
-    public RoomGrid      GetCurrentRoomGrid() => currentRoomGrid;
-    public bool          IsInitialized()      => isInitialized;
-    public MoveAction    GetMoveAction()      => moveAction;
-    public BaseAction[]  GetBaseActionArray() => allActions;
+    public GridPosition  GetGridPosition()    => isInitialized ? gridPosition : default;
+    public RoomGrid      GetCurrentRoomGrid()  => currentRoomGrid;
+    public bool          IsInitialized()       => isInitialized;
+    public MoveAction    GetMoveAction()       => moveAction;
+    public BaseAction[]  GetBaseActionArray()  => allActions;
 }

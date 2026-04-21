@@ -1,16 +1,31 @@
 using Unity.Collections;
 using Unity.Netcode;
-using Unity.Netcode.Components;
 using UnityEngine;
 
-
+/// <summary>
+/// Bridges Unit grid position and room state to all peers via NGO.
+///
+/// HOW MOVEMENT FLOWS (MoveAction needs ZERO changes):
+///   1. Owner's Unit.PlaceInRoom() fires (from MoveAction, or anywhere)
+///   2. Unit.PlaceInRoom() calls bridge.SyncGridPosition() — owner + multiplayer only
+///   3. SyncGridPosition sends RequestMoveServerRpc
+///   4. Server updates gridX/gridY NetworkVariables
+///   5. Non-owner peers: OnGridPositionChanged → ApplyRoomSync → Unit.PlaceInRoom
+///      (unit.IsSyncingFromNetwork = true, so step 2 cannot loop)
+///
+/// ROOM TRANSITIONS:
+///   RoomDoor calls bridge.TransitionToRoom() in multiplayer.
+///   This applies locally, sends a ServerRpc, and broadcasts RoomManager update.
+///
+/// PREFAB REQUIREMENTS:
+///   NetworkObject + NetworkTransform + Unit + NetworkedPlayerBridge
+/// </summary>
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(Unit))]
 public class NetworkedPlayerBridge : NetworkBehaviour
 {
     // ── Network state ──────────────────────────────────────────────────────
 
-    /// <summary>Name of the RoomGrid GameObject this player is currently in.</summary>
     private NetworkVariable<FixedString64Bytes> currentRoomName = new("",
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
@@ -20,78 +35,92 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     private NetworkVariable<int> gridY = new(0,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // ── Cached refs ────────────────────────────────────────────────────────
-
     private Unit unit;
 
-    private void Awake()
-    {
-        unit = GetComponent<Unit>();
-    }
+    // Guards TransitionToRoom from firing a duplicate RequestMoveServerRpc
+    // (because unit.PlaceInRoom auto-calls SyncGridPosition).
+    private bool isTransitioning;
+
+    private void Awake() => unit = GetComponent<Unit>();
 
     public override void OnNetworkSpawn()
     {
         if (!GameManager.IsMultiplayer) return;
 
         currentRoomName.OnValueChanged += OnRoomNameChanged;
+        gridX.OnValueChanged           += OnGridPositionChanged;
+        gridY.OnValueChanged           += OnGridPositionChanged;
 
-        // Non-owner clients: if the room name is already set, apply it
-        if (!IsOwner && !string.IsNullOrEmpty(currentRoomName.Value.ToString()))
-            ApplyRoomSync(currentRoomName.Value.ToString());
+        // Late-join: apply existing state immediately
+        string existing = currentRoomName.Value.ToString();
+        if (!IsOwner && !string.IsNullOrEmpty(existing))
+            ApplyRoomSync(existing, gridX.Value, gridY.Value);
     }
 
     public override void OnNetworkDespawn()
     {
         currentRoomName.OnValueChanged -= OnRoomNameChanged;
+        gridX.OnValueChanged           -= OnGridPositionChanged;
+        gridY.OnValueChanged           -= OnGridPositionChanged;
     }
 
-    // ── Public API — replaces Unit.PlaceInRoom() in networked contexts ─────
+    // ─────────────────────────────────────────────────────────────────────
+    // Called by Unit.PlaceInRoom (auto, owner only)
+    // ─────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Network-safe placement. Owner calls this; it syncs to all peers.
-    /// In SP: just calls Unit.PlaceInRoom() directly.
-    /// </summary>
-    public void PlaceInRoom(RoomGrid room, GridPosition pos)
+    public void SyncGridPosition(RoomGrid room, GridPosition pos)
     {
-        if (!GameManager.IsMultiplayer)
-        {
-            unit.PlaceInRoom(room, pos);
-            return;
-        }
-
-        // Apply locally for the owner (feels instant)
-        if (IsOwner)
-        {
-            unit.PlaceInRoom(room, pos);
-            // Tell server to validate and broadcast
-            RequestPlaceInRoomServerRpc(room.gameObject.name, pos.x, pos.y);
-        }
+        if (isTransitioning) return;
+        RequestMoveServerRpc(room.gameObject.name, pos.x, pos.y);
     }
 
-    /// <summary>
-    /// Network-safe room transition from a door click.
-    /// Owner calls this; server confirms and broadcasts to all.
-    /// </summary>
+    // ─────────────────────────────────────────────────────────────────────
+    // Called by NetworkedPlayerSpawner after spawn
+    // ─────────────────────────────────────────────────────────────────────
+
+    public void InitialPlacement(RoomGrid room, GridPosition pos)
+    {
+        if (!GameManager.IsMultiplayer || !IsServer) return;
+        currentRoomName.Value = room.gameObject.name;
+        gridX.Value = pos.x;
+        gridY.Value = pos.y;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Called by RoomDoor in multiplayer
+    // ─────────────────────────────────────────────────────────────────────
+
     public void TransitionToRoom(RoomGrid newRoom, GridPosition spawnPos)
     {
         if (!GameManager.IsMultiplayer)
         {
             unit.PlaceInRoom(newRoom, spawnPos);
-            RoomManager.Instance?.SetCurrentRoom(
-                FindPlacedRoomForGrid(newRoom));
+            RoomManager.Instance?.SetCurrentRoom(FindPlacedRoomForGrid(newRoom));
             return;
         }
 
-        if (IsOwner)
-            RequestRoomTransitionServerRpc(newRoom.gameObject.name, spawnPos.x, spawnPos.y);
+        if (!IsOwner) return;
+
+        isTransitioning = true;
+        unit.PlaceInRoom(newRoom, spawnPos);
+        isTransitioning = false;
+
+        RoomManager.Instance?.SetCurrentRoom(FindPlacedRoomForGrid(newRoom));
+        CameraController2D.Instance?.SnapToTarget();
+
+        RequestRoomTransitionServerRpc(newRoom.gameObject.name, spawnPos.x, spawnPos.y);
     }
 
-    // ── Server RPCs ────────────────────────────────────────────────────────
+    /// <summary>Server-authoritative grid position — use this for enemy AI targeting.</summary>
+    public GridPosition GetNetworkGridPosition() => new(gridX.Value, gridY.Value);
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Server RPCs
+    // ─────────────────────────────────────────────────────────────────────
 
     [ServerRpc]
-    private void RequestPlaceInRoomServerRpc(string roomName, int x, int y)
+    private void RequestMoveServerRpc(string roomName, int x, int y)
     {
-        // Update network variables — all clients get notified via OnRoomNameChanged
         currentRoomName.Value = roomName;
         gridX.Value = x;
         gridY.Value = y;
@@ -103,57 +132,69 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         currentRoomName.Value = roomName;
         gridX.Value = spawnX;
         gridY.Value = spawnY;
-
-        // Notify all clients of the room transition
         BroadcastRoomTransitionClientRpc(roomName, spawnX, spawnY);
     }
 
-    // ── Client RPCs ────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Client RPCs
+    // ─────────────────────────────────────────────────────────────────────
 
     [ClientRpc]
     private void BroadcastRoomTransitionClientRpc(string roomName, int spawnX, int spawnY)
     {
-        if (IsOwner) return; // Owner already applied it locally
+        if (IsOwner) return; // Owner already applied locally
 
-        var room = FindRoomGridByName(roomName);
-        if (room == null)
+        ApplyRoomSync(roomName, spawnX, spawnY);
+
+        // If this is the local player's object (edge case guard), snap camera
+        if (IsLocalPlayer)
         {
-            Debug.LogWarning($"[NetworkedPlayerBridge] Could not find room '{roomName}' on client.");
-            return;
+            var room = FindRoomGridByName(roomName);
+            if (room != null) RoomManager.Instance?.SetCurrentRoom(FindPlacedRoomForGrid(room));
+            CameraController2D.Instance?.SnapToTarget();
         }
-
-        var pos = new GridPosition(spawnX, spawnY);
-        unit.PlaceInRoom(room, pos);
     }
 
-    // ── NetworkVariable callbacks ──────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // NetworkVariable callbacks
+    // ─────────────────────────────────────────────────────────────────────
 
     private void OnRoomNameChanged(FixedString64Bytes oldVal, FixedString64Bytes newVal)
     {
-        if (IsOwner || IsServer) return;
-        ApplyRoomSync(newVal.ToString());
+        if (IsOwner) return;
+        ApplyRoomSync(newVal.ToString(), gridX.Value, gridY.Value);
     }
 
-    private void ApplyRoomSync(string roomName)
+    private void OnGridPositionChanged(int oldVal, int newVal)
+    {
+        if (IsOwner) return;
+        string room = currentRoomName.Value.ToString();
+        if (!string.IsNullOrEmpty(room))
+            ApplyRoomSync(room, gridX.Value, gridY.Value);
+    }
+
+    private void ApplyRoomSync(string roomName, int x, int y)
     {
         var room = FindRoomGridByName(roomName);
         if (room == null) return;
-        var pos = new GridPosition(gridX.Value, gridY.Value);
-        unit.PlaceInRoom(room, pos);
+
+        // IsSyncingFromNetwork prevents Unit.PlaceInRoom from calling SyncGridPosition
+        unit.IsSyncingFromNetwork = true;
+        unit.PlaceInRoom(room, new GridPosition(x, y));
+        unit.IsSyncingFromNetwork = false;
     }
 
-    // ── Room lookup helpers ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────
 
     private RoomGrid FindRoomGridByName(string roomName)
     {
         var gen = FindAnyObjectByType<LevelGenerator>();
         if (gen == null) return null;
-
         foreach (var placed in gen.GetAllRooms())
-            if (placed.roomGrid != null &&
-                placed.roomGrid.gameObject.name == roomName)
+            if (placed.roomGrid != null && placed.roomGrid.gameObject.name == roomName)
                 return placed.roomGrid;
-
         return null;
     }
 
@@ -161,20 +202,8 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     {
         var gen = FindAnyObjectByType<LevelGenerator>();
         if (gen == null) return null;
-
         foreach (var placed in gen.GetAllRooms())
             if (placed.roomGrid == grid) return placed;
-
         return null;
     }
-
-    // ── Enemy AI support — expose synced grid position ─────────────────────
-
-    /// <summary>
-    /// Returns the authoritative grid position of this player.
-    /// Enemy AI on the server should call this instead of unit.GetGridPosition()
-    /// if they need to be safe about network order.
-    /// </summary>
-    public GridPosition GetNetworkGridPosition() =>
-        new GridPosition(gridX.Value, gridY.Value);
 }

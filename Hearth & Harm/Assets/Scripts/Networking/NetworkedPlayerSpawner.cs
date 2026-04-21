@@ -3,9 +3,17 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
+/// <summary>
+/// Server-only. Spawns one player prefab per connected client once the level is ready.
+///
+/// Character index priority:
+///   1. LobbySync (populated during menu char-select via NGO RPCs — always present)
+///   2. CharacterSelectionSync (legacy fallback if you spawn it separately)
+///   3. CharacterSelection.Index static (single-player / editor fallback)
+/// </summary>
 public class NetworkedPlayerSpawner : NetworkBehaviour
 {
-    [Header("Player Prefabs (index matches CharacterSelection.Index)")]
+    [Header("Player Prefabs (index matches character selection)")]
     [SerializeField] private List<GameObject> playerPrefabs;
 
     [Header("Fallback if selection index is out of range")]
@@ -60,17 +68,17 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
 
         var offsets = new Vector2Int[]
         {
-            new(0, 0), new(-spawnSpread, 0), new(spawnSpread, 0),
-            new(0, -spawnSpread), new(0, spawnSpread)
+            new(0, 0),
+            new(-spawnSpread, 0),
+            new( spawnSpread, 0),
+            new(0, -spawnSpread),
+            new(0,  spawnSpread)
         };
 
         for (int i = 0; i < clients.Count; i++)
         {
-            ulong clientId  = clients[i].ClientId;
-
-            int charIndex = CharacterSelectionSync.Instance != null
-                ? CharacterSelectionSync.Instance.GetCharacterIndex(clientId)
-                : 0;
+            ulong clientId = clients[i].ClientId;
+            int   charIndex = ResolveCharacterIndex(clientId);
 
             GameObject prefab = GetPrefab(charIndex);
             if (prefab == null) continue;
@@ -100,18 +108,68 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             unit?.PlaceInRoom(startRoom.roomGrid, spawnGP);
 
             var bridge = go.GetComponent<NetworkedPlayerBridge>();
-            bridge?.PlaceInRoom(startRoom.roomGrid, spawnGP);
+            bridge?.InitialPlacement(startRoom.roomGrid, spawnGP);
+
+            // Tell this client which character index they are for local UI
+            NotifyClientCharIndexClientRpc(charIndex, new ClientRpcParams
+            {
+                Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } }
+            });
 
             Debug.Log($"[NetworkedPlayerSpawner] Spawned player {clientId} (char {charIndex}) at {spawnGP}");
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Character index resolution
+    // Priority: LobbySync → CharacterSelectionSync → static fallback
+    // ─────────────────────────────────────────────────────────────────────
+
+    private int ResolveCharacterIndex(ulong clientId)
+    {
+        // Primary: LobbySync is always present — it was populated during char-select
+        if (LobbySync.Instance != null)
+        {
+            int idx = LobbySync.Instance.GetCharacterIndex(clientId);
+            Debug.Log($"[NetworkedPlayerSpawner] Client {clientId} char index from LobbySync: {idx}");
+            return idx;
+        }
+
+        // Legacy: CharacterSelectionSync if someone spawned it separately
+        if (CharacterSelectionSync.Instance != null)
+        {
+            int idx = CharacterSelectionSync.Instance.GetCharacterIndex(clientId);
+            Debug.Log($"[NetworkedPlayerSpawner] Client {clientId} char index from CharacterSelectionSync: {idx}");
+            return idx;
+        }
+
+        // Last resort: static value (only valid for the host / single-player testing)
+        Debug.LogWarning($"[NetworkedPlayerSpawner] No sync source for client {clientId} — using CharacterSelection.Index={CharacterSelection.Index}");
+        return CharacterSelection.Index;
+    }
+
+    [ClientRpc]
+    private void NotifyClientCharIndexClientRpc(int charIndex, ClientRpcParams rpcParams = default)
+    {
+        // Keep the static class in sync so UI that reads CharacterSelection.Index is correct
+        CharacterSelection.Index = charIndex;
+        Debug.Log($"[NetworkedPlayerSpawner] Local char index confirmed: {charIndex}");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Prefab lookup
+    // ─────────────────────────────────────────────────────────────────────
+
     private GameObject GetPrefab(int index)
     {
         if (playerPrefabs != null && index >= 0 && index < playerPrefabs.Count)
             return playerPrefabs[index];
-        if (fallbackPrefab != null) return fallbackPrefab;
-        Debug.LogError("[NetworkedPlayerSpawner] No valid player prefab for index " + index);
+        if (fallbackPrefab != null)
+        {
+            Debug.LogWarning($"[NetworkedPlayerSpawner] Index {index} out of range — using fallback prefab.");
+            return fallbackPrefab;
+        }
+        Debug.LogError($"[NetworkedPlayerSpawner] No prefab for index {index} and no fallback assigned!");
         return null;
     }
 }
