@@ -7335,7 +7335,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 512e3a2768b83074aa66d1076ca78760, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LevelCheats
-  levelGenerator: {fileID: 1158815603}
 --- !u!1 &1159171659
 GameObject:
   m_ObjectHideFlags: 0
@@ -9025,6 +9024,9 @@ MonoBehaviour:
   cam: {fileID: 1434585242}
   panSpeed: 8
   dragPanSpeed: 0.015
+  useEdgeScroll: 1
+  edgeSize: 25
+  edgePanSpeed: 8
   zoomSpeed: 4
   orthoMin: 3
   orthoMax: 10
@@ -10140,6 +10142,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1624180979}
   - component: {fileID: 1624180978}
+  - component: {fileID: 1624180981}
+  - component: {fileID: 1624180980}
   m_Layer: 0
   m_Name: GameStateManager
   m_TagString: Untagged
@@ -10174,6 +10178,45 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1624180980
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1624180977}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21d37b8540aa6cd48b8e130972afb0a6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LoseScreen
+  panelRoot: {fileID: 0}
+  titleLabel: {fileID: 0}
+  stagesClearedLabel: {fileID: 0}
+  levelReachedLabel: {fileID: 0}
+  retryButton: {fileID: 0}
+  mainMenuButton: {fileID: 0}
+  mainMenuScene: MainMenu
+  retryResetsProgress: 1
+--- !u!114 &1624180981
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1624180977}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51272f107d962604fa3c0277262b55ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EndRoomUI
+  mainMenuSceneName: MainMenu
+  panelRoot: {fileID: 0}
+  nextLevelButton: {fileID: 0}
+  mainMenuButton: {fileID: 0}
+  levelLabel: {fileID: 0}
+  stagesClearedLabel: {fileID: 0}
+  nextLevelLabel: {fileID: 0}
 --- !u!1 &1650586709
 GameObject:
   m_ObjectHideFlags: 0
