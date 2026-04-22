@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1770711336715564346}
   - component: {fileID: 790465868522593215}
   - component: {fileID: 8855281746317194327}
+  - component: {fileID: 5321578405837209885}
   m_Layer: 5
   m_Name: WolfOrderTokenPF (1)
   m_TagString: Untagged
@@ -77,6 +78,20 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &5321578405837209885
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 853479801715776760}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d39b2abe18187514691e8fa97e7032ed, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurnOrderTokenUI
+  nameText: {fileID: 9138775452870705834}
+  iconImage: {fileID: 1818678204773424404}
 --- !u!1 &1711271562773945485
 GameObject:
   m_ObjectHideFlags: 0
