@@ -6983,7 +6983,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkGameManager
   maxPlayers: 4
-  lobbySyncPrefab: {fileID: 0}
+  lobbySyncPrefab: {fileID: 8407996902548054810}
 --- !u!1 &1139707726
 GameObject:
   m_ObjectHideFlags: 0
@@ -11477,6 +11477,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 2d187dd69a5baf34eb17c36a378f7235, type: 3}
+--- !u!1 &8407996902548054810 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2798852619848293388, guid: 2d187dd69a5baf34eb17c36a378f7235, type: 3}
+  m_PrefabInstance: {fileID: 8407996902548054809}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

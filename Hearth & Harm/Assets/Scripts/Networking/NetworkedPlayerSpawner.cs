@@ -4,172 +4,234 @@ using Unity.Netcode;
 using UnityEngine;
 
 /// <summary>
-/// Server-only. Spawns one player prefab per connected client once the level is ready.
+/// Spawns one networked player prefab per connected client after the level is ready.
 ///
-/// Character index priority:
-///   1. LobbySync (populated during menu char-select via NGO RPCs — always present)
-///   2. CharacterSelectionSync (legacy fallback if you spawn it separately)
-///   3. CharacterSelection.Index static (single-player / editor fallback)
+/// SETUP:
+///   1. Add this component to the same GameObject as LevelSyncBridge / LevelGenerator
+///   2. Assign your networked player prefabs in the Inspector (must have NetworkObject +
+///      NetworkedPlayerBridge + Unit)
+///   3. Make sure each player prefab is registered in NetworkManager's NetworkPrefabs list
+///
+/// FLOW:
+///   LevelSyncBridge.OnNetworkLevelReady fires on all peers
+///   → Host calls SpawnAllPlayers()
+///   → For each client: Instantiate prefab, NetworkObject.SpawnAsPlayerObject(clientId)
+///   → NetworkedPlayerBridge.InitialPlacement() sets starting room + grid position
+///   → NetworkVariables replicate to all peers automatically
 /// </summary>
 public class NetworkedPlayerSpawner : NetworkBehaviour
 {
-    [Header("Player Prefabs (index matches character selection)")]
-    [SerializeField] private List<GameObject> playerPrefabs;
+    [Header("Player Prefabs")]
+    [Tooltip("Index matches character selection (0=Knight, 1=Rogue …). " +
+             "Must be registered in NetworkManager NetworkPrefabs list.")]
+    [SerializeField] private List<GameObject> networkedPlayerPrefabs;
 
-    [Header("Fallback if selection index is out of range")]
-    [SerializeField] private GameObject fallbackPrefab;
+    [Tooltip("Offset each player slightly so they don't stack on spawn.")]
+    [SerializeField] private bool offsetSpawnPositions = true;
 
-    [Header("Spawn spread (grid units apart)")]
-    [SerializeField] private int spawnSpread = 1;
+    private LevelGenerator levelGenerator;
 
-    public override void OnNetworkSpawn()
+    private void Awake()
     {
+        levelGenerator = GetComponent<LevelGenerator>();
+        if (levelGenerator == null)
+            levelGenerator = FindAnyObjectByType<LevelGenerator>();
+    }
+
+    private void OnEnable()
+    {
+        LevelSyncBridge.OnNetworkLevelReady += OnNetworkLevelReady;
+    }
+
+    private void OnDisable()
+    {
+        LevelSyncBridge.OnNetworkLevelReady -= OnNetworkLevelReady;
+    }
+
+    private void OnNetworkLevelReady()
+    {
+        // Only the host spawns players
         if (!IsServer) return;
-        LevelSyncBridge.OnNetworkLevelReady += OnLevelReady;
+        StartCoroutine(SpawnAllPlayers());
     }
 
-    public override void OnNetworkDespawn()
-    {
-        LevelSyncBridge.OnNetworkLevelReady -= OnLevelReady;
-    }
+    // ─────────────────────────────────────────────────────────────────────
+    // Spawn all players (host only)
+    // ─────────────────────────────────────────────────────────────────────
 
-    private void OnLevelReady()
+    private IEnumerator SpawnAllPlayers()
     {
-        if (!IsServer) return;
-        StartCoroutine(SpawnAllPlayersNextFrame());
-    }
-
-    private IEnumerator SpawnAllPlayersNextFrame()
-    {
+        // Wait one frame to ensure all room grids are fully initialized
         yield return null;
-        SpawnAllPlayers();
-    }
 
-    private void SpawnAllPlayers()
-    {
-        var gen = FindAnyObjectByType<LevelGenerator>();
-        if (gen == null) { Debug.LogError("[NetworkedPlayerSpawner] No LevelGenerator!"); return; }
+        if (levelGenerator == null)
+        {
+            Debug.LogError("[NetworkedPlayerSpawner] No LevelGenerator found!");
+            yield break;
+        }
 
-        var startRoom = gen.GetAllRooms().Find(r =>
-            r.prefabData.roomType == LevelGenerator.RoomType.Start &&
-            r.roomGrid != null && r.roomGrid.IsInitialized());
+        var startRoom = levelGenerator.GetAllRooms()
+            ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start
+                     && r.roomGrid != null
+                     && r.roomGrid.IsInitialized());
 
         if (startRoom == null)
         {
             Debug.LogError("[NetworkedPlayerSpawner] No valid start room found!");
-            return;
+            yield break;
         }
 
-        RoomManager.Instance?.SetCurrentRoom(startRoom);
-
         var clients = NetworkManager.Singleton.ConnectedClientsList;
-        int cx = startRoom.roomGrid.GetWidth()  / 2;
-        int cy = startRoom.roomGrid.GetHeight() / 2;
+        Debug.Log($"[NetworkedPlayerSpawner] Spawning {clients.Count} players.");
 
-        var offsets = new Vector2Int[]
+        int slotIndex = 0;
+        foreach (var client in clients)
         {
-            new(0, 0),
-            new(-spawnSpread, 0),
-            new( spawnSpread, 0),
-            new(0, -spawnSpread),
-            new(0,  spawnSpread)
-        };
+            // Get this client's character selection from LobbySync
+            int charIndex = 0;
+            if (LobbySync.Instance != null)
+                charIndex = LobbySync.Instance.GetCharacterIndex(client.ClientId);
 
-        for (int i = 0; i < clients.Count; i++)
-        {
-            ulong clientId = clients[i].ClientId;
-            int   charIndex = ResolveCharacterIndex(clientId);
+            // Clamp to valid prefab range
+            charIndex = Mathf.Clamp(charIndex, 0, networkedPlayerPrefabs.Count - 1);
 
-            GameObject prefab = GetPrefab(charIndex);
-            if (prefab == null) continue;
-
-            var offset  = i < offsets.Length ? offsets[i] : new Vector2Int(i, 0);
-            var spawnGP = new GridPosition(cx + offset.x, cy + offset.y);
-
-            if (!startRoom.roomGrid.IsValidGridPosition(spawnGP) ||
-                !startRoom.roomGrid.IsWalkableIgnoreOccupancy(spawnGP))
-                spawnGP = new GridPosition(cx, cy);
-
-            Vector3 spawnWorld = startRoom.roomGrid.GetWorldPosition(spawnGP);
-
-            var go     = Instantiate(prefab, spawnWorld, Quaternion.identity);
-            var netObj = go.GetComponent<NetworkObject>();
-
-            if (netObj == null)
+            GameObject prefab = networkedPlayerPrefabs[charIndex];
+            if (prefab == null)
             {
-                Debug.LogError($"[NetworkedPlayerSpawner] {prefab.name} missing NetworkObject!");
-                Destroy(go);
+                Debug.LogError($"[NetworkedPlayerSpawner] Prefab at index {charIndex} is null!");
+                slotIndex++;
                 continue;
             }
 
-            netObj.SpawnAsPlayerObject(clientId, destroyWithScene: true);
-
-            var unit = go.GetComponent<Unit>();
-            unit?.PlaceInRoom(startRoom.roomGrid, spawnGP);
-
-            var bridge = go.GetComponent<NetworkedPlayerBridge>();
-            bridge?.InitialPlacement(startRoom.roomGrid, spawnGP);
-
-            // Tell this client which character index they are for local UI
-            NotifyClientCharIndexClientRpc(charIndex, new ClientRpcParams
+            // Find a spawn position — try spawn points first, fall back to centre
+            GridPosition? spawnPos = FindSpawnPosition(startRoom, slotIndex);
+            if (spawnPos == null)
             {
-                Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } }
-            });
+                Debug.LogError($"[NetworkedPlayerSpawner] No spawn position for client {client.ClientId}!");
+                slotIndex++;
+                continue;
+            }
 
-            Debug.Log($"[NetworkedPlayerSpawner] Spawned player {clientId} (char {charIndex}) at {spawnGP}");
+            // Instantiate and network-spawn as the player object for this client
+            Vector3 worldPos = startRoom.roomGrid.GetWorldPosition(spawnPos.Value);
+            var go = Instantiate(prefab, worldPos, Quaternion.identity);
+            go.name = $"Player_{client.ClientId}";
+
+            var netObj = go.GetComponent<NetworkObject>();
+            if (netObj == null)
+            {
+                Debug.LogError($"[NetworkedPlayerSpawner] Player prefab missing NetworkObject!");
+                Destroy(go);
+                slotIndex++;
+                continue;
+            }
+
+            // SpawnAsPlayerObject assigns ownership to the client automatically
+            netObj.SpawnAsPlayerObject(client.ClientId);
+
+            // Set initial grid position via NetworkedPlayerBridge (server-authoritative)
+            var bridge = go.GetComponent<NetworkedPlayerBridge>();
+            if (bridge != null)
+                bridge.InitialPlacement(startRoom.roomGrid, spawnPos.Value);
+
+            // Place the Unit locally on the server too
+            var unit = go.GetComponent<Unit>();
+            if (unit != null)
+            {
+                unit.IsSyncingFromNetwork = true;
+                unit.PlaceInRoom(startRoom.roomGrid, spawnPos.Value);
+                unit.IsSyncingFromNetwork = false;
+            }
+
+            Debug.Log($"[NetworkedPlayerSpawner] Spawned client {client.ClientId} " +
+                      $"(char {charIndex}) at {spawnPos.Value}");
+
+            slotIndex++;
+            yield return null; // slight stagger between spawns
         }
+
+        // Tell all clients to set their RoomManager to the start room
+        SetStartRoomClientRpc(startRoom.roomInstance.name);
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Character index resolution
-    // Priority: LobbySync → CharacterSelectionSync → static fallback
+    // Tell all clients which room to set as current
     // ─────────────────────────────────────────────────────────────────────
-
-    private int ResolveCharacterIndex(ulong clientId)
-    {
-        // Primary: LobbySync is always present — it was populated during char-select
-        if (LobbySync.Instance != null)
-        {
-            int idx = LobbySync.Instance.GetCharacterIndex(clientId);
-            Debug.Log($"[NetworkedPlayerSpawner] Client {clientId} char index from LobbySync: {idx}");
-            return idx;
-        }
-
-        // Legacy: CharacterSelectionSync if someone spawned it separately
-        if (CharacterSelectionSync.Instance != null)
-        {
-            int idx = CharacterSelectionSync.Instance.GetCharacterIndex(clientId);
-            Debug.Log($"[NetworkedPlayerSpawner] Client {clientId} char index from CharacterSelectionSync: {idx}");
-            return idx;
-        }
-
-        // Last resort: static value (only valid for the host / single-player testing)
-        Debug.LogWarning($"[NetworkedPlayerSpawner] No sync source for client {clientId} — using CharacterSelection.Index={CharacterSelection.Index}");
-        return CharacterSelection.Index;
-    }
 
     [ClientRpc]
-    private void NotifyClientCharIndexClientRpc(int charIndex, ClientRpcParams rpcParams = default)
+    private void SetStartRoomClientRpc(string startRoomName)
     {
-        // Keep the static class in sync so UI that reads CharacterSelection.Index is correct
-        CharacterSelection.Index = charIndex;
-        Debug.Log($"[NetworkedPlayerSpawner] Local char index confirmed: {charIndex}");
+        if (levelGenerator == null)
+            levelGenerator = FindAnyObjectByType<LevelGenerator>();
+
+        var rooms = levelGenerator?.GetAllRooms();
+        if (rooms == null) return;
+
+        foreach (var placed in rooms)
+        {
+            if (placed.roomInstance != null &&
+                placed.roomInstance.name == startRoomName)
+            {
+                RoomManager.Instance?.SetCurrentRoom(placed);
+                Debug.Log($"[NetworkedPlayerSpawner] Client set start room → {startRoomName}");
+                return;
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Prefab lookup
+    // Spawn position helpers
     // ─────────────────────────────────────────────────────────────────────
 
-    private GameObject GetPrefab(int index)
+    private GridPosition? FindSpawnPosition(LevelGenerator.PlacedRoom room, int slotIndex)
     {
-        if (playerPrefabs != null && index >= 0 && index < playerPrefabs.Count)
-            return playerPrefabs[index];
-        if (fallbackPrefab != null)
+        // Try directional spawn points first
+        var reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
+        if (reader != null)
         {
-            Debug.LogWarning($"[NetworkedPlayerSpawner] Index {index} out of range — using fallback prefab.");
-            return fallbackPrefab;
+            var all = reader.GetAll();
+            var dirs = new[]
+            {
+                LevelGenerator.Direction.South,
+                LevelGenerator.Direction.North,
+                LevelGenerator.Direction.West,
+                LevelGenerator.Direction.East
+            };
+
+            // Each player gets a different directional spawn point if available
+            int dirIndex = slotIndex % dirs.Length;
+            for (int i = 0; i < dirs.Length; i++)
+            {
+                var dir = dirs[(dirIndex + i) % dirs.Length];
+                if (all.TryGetValue(dir, out var pos))
+                    return pos;
+            }
         }
-        Debug.LogError($"[NetworkedPlayerSpawner] No prefab for index {index} and no fallback assigned!");
+
+        // Fall back to walkable tile near centre
+        return FindWalkableTileNearCentre(room.roomGrid, slotIndex);
+    }
+
+    private GridPosition? FindWalkableTileNearCentre(RoomGrid roomGrid, int offset)
+    {
+        var tilemap = roomGrid.GetFloorTilemap();
+        if (tilemap == null) return null;
+
+        var bounds = tilemap.cellBounds;
+        int cx = (bounds.xMin + bounds.xMax) / 2 + (offset % 3) - 1;
+        int cy = (bounds.yMin + bounds.yMax) / 2 + (offset / 3);
+
+        var center = new GridPosition(cx, cy);
+        if (roomGrid.IsWalkable(center)) return center;
+
+        for (int r = 1; r < Mathf.Max(bounds.size.x, bounds.size.y); r++)
+        for (int x = cx - r; x <= cx + r; x++)
+        for (int y = cy - r; y <= cy + r; y++)
+        {
+            if (Mathf.Abs(x - cx) != r && Mathf.Abs(y - cy) != r) continue;
+            var c = new GridPosition(x, y);
+            if (roomGrid.IsWalkable(c)) return c;
+        }
         return null;
     }
 }

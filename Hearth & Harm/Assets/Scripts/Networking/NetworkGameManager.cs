@@ -94,20 +94,32 @@ public class NetworkGameManager : MonoBehaviour
         {
             await UnityServices.InitializeAsync();
 
-            if (!AuthenticationService.Instance.IsSignedIn)
+            if (AuthenticationService.Instance.IsSignedIn)
             {
-                try   { await AuthenticationService.Instance.SignInAnonymouslyAsync(); }
-                catch (Exception signInEx)
-                {
-                    if (!AuthenticationService.Instance.IsSignedIn) throw signInEx;
-                }
+                LocalPlayerId = AuthenticationService.Instance.PlayerId;
+                Debug.Log($"[NetworkGameManager] Already signed in: {LocalPlayerId}");
+                OnSignedIn?.Invoke();
+                return;
+            }
+
+            try
+            {
+                await AuthenticationService.Instance.SignInAnonymouslyAsync();
+            }
+            catch (Exception signInEx)
+            {
+                // If the Widget already signed in between our check and our attempt,
+                // just recover gracefully
+                if (!AuthenticationService.Instance.IsSignedIn)
+                    throw signInEx;
             }
 
             LocalPlayerId = AuthenticationService.Instance.PlayerId;
 
             string nameKey   = $"PlayerName_{LocalPlayerId}";
-            string savedName = PlayerPrefs.GetString(nameKey, "Player" + UnityEngine.Random.Range(100, 999));
-            LocalPlayerName  = savedName;
+            string savedName = PlayerPrefs.GetString(nameKey,
+                            "Player" + UnityEngine.Random.Range(100, 999));
+            LocalPlayerName = savedName;
             PlayerPrefs.SetString(nameKey, savedName);
 
             await SetAuthDisplayNameAsync(savedName);
@@ -136,70 +148,76 @@ public class NetworkGameManager : MonoBehaviour
     // Session creation — with exponential back-off on HTTP 429
     // ─────────────────────────────────────────────────────────────────────
 
-    public async Task CreateSessionAsync()
+public async Task CreateSessionAsync()
+{
+    if (string.IsNullOrEmpty(LocalPlayerId))
     {
-        if (string.IsNullOrEmpty(LocalPlayerId))
+        OnSessionError?.Invoke("Not signed in yet. Please wait.");
+        return;
+    }
+
+    for (int attempt = 0; attempt <= MaxRetries; attempt++)
+    {
+        if (attempt > 0)
         {
-            OnSessionError?.Invoke("Not signed in yet. Please wait.");
-            return;
+            float delay = BaseDelaySeconds * Mathf.Pow(2f, attempt - 1)
+                          + UnityEngine.Random.Range(-JitterSeconds, JitterSeconds);
+            delay = Mathf.Max(0.1f, delay);
+
+            Debug.Log($"[NetworkGameManager] Rate-limited — retrying in {delay:F1}s " +
+                      $"(attempt {attempt + 1}/{MaxRetries + 1})");
+
+            OnSessionError?.Invoke($"Service busy. Retrying in {Mathf.CeilToInt(delay)}s…");
+            await Task.Delay(Mathf.RoundToInt(delay * 1000));
         }
 
-        Exception lastException = null;
-
-        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        try
         {
-            if (attempt > 0)
+            var options = new SessionOptions
             {
-                // Exponential back-off: 2s, 4s, 8s, 16s  ± up to 0.5s jitter
-                float delay = BaseDelaySeconds * Mathf.Pow(2f, attempt - 1)
-                              + UnityEngine.Random.Range(-JitterSeconds, JitterSeconds);
-                delay = Mathf.Max(0.1f, delay);
+                MaxPlayers = maxPlayers,
+                Name       = $"{LocalPlayerName}'s Game"
+            }.WithRelayNetwork();
 
-                Debug.Log($"[NetworkGameManager] Rate-limited — retrying CreateSession in {delay:F1}s " +
-                          $"(attempt {attempt + 1}/{MaxRetries + 1})");
+            CurrentSession    = await MultiplayerService.Instance.CreateSessionAsync(options);
+            sessionEventFired = true;
 
-                OnSessionError?.Invoke($"Service busy. Retrying in {Mathf.CeilToInt(delay)}s…");
-                await Task.Delay(Mathf.RoundToInt(delay * 1000));
-            }
+            SubscribeToSessionEvents();
+            characterSelections[LocalPlayerId] = localCharacterIndex;
 
-            try
+            Debug.Log($"[NetworkGameManager] Session created. Code: {CurrentSession.Code}");
+            OnSessionCreated?.Invoke();
+            RefreshPlayerList();
+
+            StartCoroutine(SpawnLobbySyncAsHost());
+            return;
+        }
+    catch (Unity.Services.Multiplayer.SessionException se)
+    {
+        bool isRateLimit = se.Message.Contains("Too Many Requests") ||
+                        se.Message.Contains("429");
+
+        if (!isRateLimit || attempt == MaxRetries)
+        {
+            Debug.LogError($"[NetworkGameManager] CreateSession failed: {se.Message}");
+            OnSessionError?.Invoke($"Failed to create session: {se.Message}");
+            return;
+        }
+    }
+        catch (Exception e)
+        {
+            bool isRateLimit = e.Message.Contains("429") ||
+                               e.Message.Contains("Too Many Requests");
+
+            if (!isRateLimit || attempt == MaxRetries)
             {
-                var options = new SessionOptions
-                {
-                    MaxPlayers = maxPlayers,
-                    Name       = $"{LocalPlayerName}'s Game"
-                }.WithRelayNetwork();
-
-                CurrentSession    = await MultiplayerService.Instance.CreateSessionAsync(options);
-                sessionEventFired = true;
-
-                SubscribeToSessionEvents();
-                characterSelections[LocalPlayerId] = localCharacterIndex;
-
-                Debug.Log($"[NetworkGameManager] Session created. Code: {CurrentSession.Code}");
-                OnSessionCreated?.Invoke();
-                RefreshPlayerList();
-
-                StartCoroutine(SpawnLobbySyncAsHost());
-                return; // success
-            }
-            catch (Exception e)
-            {
-                lastException = e;
-                bool isRateLimit = e.Message.Contains("429") ||
-                                   e.Message.Contains("Too Many Requests");
-
-                if (!isRateLimit || attempt == MaxRetries)
-                {
-                    // Non-retryable error OR we've exhausted retries
-                    Debug.LogError($"[NetworkGameManager] CreateSession failed: {e.Message}");
-                    OnSessionError?.Invoke($"Failed to create session: {e.Message}");
-                    return;
-                }
-                // else: rate-limited — loop around for back-off
+                Debug.LogError($"[NetworkGameManager] CreateSession failed: {e.Message}");
+                OnSessionError?.Invoke($"Failed to create session: {e.Message}");
+                return;
             }
         }
     }
+}
 
     // ─────────────────────────────────────────────────────────────────────
     // Session joining — with exponential back-off on HTTP 429
