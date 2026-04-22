@@ -6336,7 +6336,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1059453620}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9560d0e9b3c80134093c6de7c62ec71e, type: 3}
   m_Name: 
@@ -7254,6 +7254,7 @@ GameObject:
   - component: {fileID: 1158815603}
   - component: {fileID: 1158815605}
   - component: {fileID: 1158815606}
+  - component: {fileID: 1158815607}
   m_Layer: 0
   m_Name: LevelGenerator
   m_TagString: Untagged
@@ -7363,11 +7364,24 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedPlayerSpawner
   ShowTopMostFoldoutHeaderGroup: 1
-  playerPrefabs:
+  networkedPlayerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
   - {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
-  fallbackPrefab: {fileID: 0}
-  spawnSpread: 1
+  offsetSpawnPositions: 1
+--- !u!114 &1158815607
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1158815602}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 854ff1accbc358b41ae39a4782d77a21, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelSyncBridge
+  ShowTopMostFoldoutHeaderGroup: 1
+  clientReadyTimeout: 30
 --- !u!1 &1159171659
 GameObject:
   m_ObjectHideFlags: 0

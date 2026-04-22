@@ -734,8 +734,12 @@ public class MainMenuController : MonoBehaviour
         CharacterSelection.Index  = selectedCharIndex;
         CharacterSelection.Prefab = GetSelectedPrefab();
 
-        // Remove the manager calls — managers don't exist in the menu scene
-        // and will initialize fresh when the game scene loads
+        // Set mode BEFORE loading the scene so GameManager has it ready
+        if (isMultiplayer)
+            GameManager.SetMode(NetworkManager.Singleton?.IsHost ?? false 
+                ? GameMode.Host : GameMode.Client);
+        else
+            GameManager.SetMode(GameMode.Offline);
 
         loadingPanel?.SetActive(true);
         ShowPanel(null);

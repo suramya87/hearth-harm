@@ -6874,6 +6874,7 @@ GameObject:
   - component: {fileID: 1127715950}
   - component: {fileID: 1127715949}
   - component: {fileID: 1127715952}
+  - component: {fileID: 1127715953}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -6984,6 +6985,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkGameManager
   maxPlayers: 4
   lobbySyncPrefab: {fileID: 8407996902548054810}
+--- !u!114 &1127715953
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1127715948}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9560d0e9b3c80134093c6de7c62ec71e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  defaultMode: 0
 --- !u!1 &1139707726
 GameObject:
   m_ObjectHideFlags: 0

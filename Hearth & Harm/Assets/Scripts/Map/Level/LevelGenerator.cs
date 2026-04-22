@@ -448,27 +448,30 @@ public class LevelGenerator : MonoBehaviour
 
     private void SpawnPlayer(PlacedRoom start)
     {
+        // Multiplayer: NetworkedPlayerSpawner handles all spawning after level sync
+        if (GameManager.IsMultiplayer) return;
+    
         RoomManager.Instance?.SetCurrentRoom(start);
-
+    
         int index = CharacterSelection.Index;
         GameObject prefab = (index >= 0 && index < playerPrefabs.Count)
             ? playerPrefabs[index] : playerPrefabs[0];
         if (prefab == null) { Debug.LogError("[LevelGenerator] Player prefab null!"); return; }
-
-        // No manual Initialize() call needed here anymore
+    
         GridPosition? sp = FindSpawnTileFromSpawnPoints(start)
                         ?? FindSpawnTile(start.roomGrid);
-
+    
         if (sp == null) { Debug.LogError("[LevelGenerator] No spawn tile in start room!"); return; }
-
+    
         spawnedPlayer = Instantiate(prefab);
         spawnedPlayer.name = "Player";
-
+    
         var unit = spawnedPlayer.GetComponent<Unit>();
         unit?.PlaceInRoom(start.roomGrid, sp.Value);
-
+    
         Debug.Log($"[LevelGenerator] Player spawned at {sp.Value}");
     }
+
 
     private GridPosition? FindSpawnTileFromSpawnPoints(PlacedRoom room)
     {

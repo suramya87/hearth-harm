@@ -93,8 +93,12 @@ public class LevelSyncBridge : NetworkBehaviour
     private void FireLevelReady()
     {
         Debug.Log("[LevelSyncBridge] All peers ready — firing OnNetworkLevelReady");
+        // Fire server-side first so NetworkedPlayerSpawner can start spawning
+        OnNetworkLevelReady?.Invoke();
+        // Then notify all clients
         NotifyAllPeersLevelReadyClientRpc();
     }
+
 
     // ── Client side ────────────────────────────────────────────────────────
 

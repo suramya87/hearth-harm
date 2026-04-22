@@ -31,29 +31,31 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
 
     private LevelGenerator levelGenerator;
 
-    private void Awake()
-    {
-        levelGenerator = GetComponent<LevelGenerator>();
-        if (levelGenerator == null)
-            levelGenerator = FindAnyObjectByType<LevelGenerator>();
-    }
+    // private void Awake()
+    // {
+    //     levelGenerator = GetComponent<LevelGenerator>();
+    //     if (levelGenerator == null)
+    //         levelGenerator = FindAnyObjectByType<LevelGenerator>();
+    // }
 
-    private void OnEnable()
+    public override void OnNetworkSpawn()
     {
+        // Only the server needs to listen — clients just receive spawned objects
+        if (!IsServer) return;
         LevelSyncBridge.OnNetworkLevelReady += OnNetworkLevelReady;
     }
-
-    private void OnDisable()
+ 
+    public override void OnNetworkDespawn()
     {
         LevelSyncBridge.OnNetworkLevelReady -= OnNetworkLevelReady;
     }
-
+ 
     private void OnNetworkLevelReady()
     {
-        // Only the host spawns players
         if (!IsServer) return;
         StartCoroutine(SpawnAllPlayers());
     }
+
 
     // ─────────────────────────────────────────────────────────────────────
     // Spawn all players (host only)
@@ -61,23 +63,39 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
 
     private IEnumerator SpawnAllPlayers()
     {
-        // Wait one frame to ensure all room grids are fully initialized
         yield return null;
+
+        // Retry finding LevelGenerator for a few frames
+        int attempts = 0;
+        while (levelGenerator == null && attempts < 10)
+        {
+            levelGenerator = FindAnyObjectByType<LevelGenerator>();
+            attempts++;
+            yield return null;
+        }
 
         if (levelGenerator == null)
         {
-            Debug.LogError("[NetworkedPlayerSpawner] No LevelGenerator found!");
+            Debug.LogError("[NetworkedPlayerSpawner] No LevelGenerator found after retrying!");
             yield break;
         }
 
-        var startRoom = levelGenerator.GetAllRooms()
-            ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start
-                     && r.roomGrid != null
-                     && r.roomGrid.IsInitialized());
+        // Retry finding start room
+        LevelGenerator.PlacedRoom startRoom = null;
+        attempts = 0;
+        while (startRoom == null && attempts < 10)
+        {
+            startRoom = levelGenerator.GetAllRooms()
+                ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start
+                        && r.roomGrid != null
+                        && r.roomGrid.IsInitialized());
+            attempts++;
+            if (startRoom == null) yield return null;
+        }
 
         if (startRoom == null)
         {
-            Debug.LogError("[NetworkedPlayerSpawner] No valid start room found!");
+            Debug.LogError("[NetworkedPlayerSpawner] No valid start room found after retrying!");
             yield break;
         }
 
@@ -87,12 +105,12 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
         int slotIndex = 0;
         foreach (var client in clients)
         {
-            // Get this client's character selection from LobbySync
             int charIndex = 0;
             if (LobbySync.Instance != null)
                 charIndex = LobbySync.Instance.GetCharacterIndex(client.ClientId);
+            else if (CharacterSelectionSync.Instance != null)
+                charIndex = CharacterSelectionSync.Instance.GetCharacterIndex(client.ClientId);
 
-            // Clamp to valid prefab range
             charIndex = Mathf.Clamp(charIndex, 0, networkedPlayerPrefabs.Count - 1);
 
             GameObject prefab = networkedPlayerPrefabs[charIndex];
@@ -103,7 +121,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                 continue;
             }
 
-            // Find a spawn position — try spawn points first, fall back to centre
             GridPosition? spawnPos = FindSpawnPosition(startRoom, slotIndex);
             if (spawnPos == null)
             {
@@ -112,7 +129,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                 continue;
             }
 
-            // Instantiate and network-spawn as the player object for this client
             Vector3 worldPos = startRoom.roomGrid.GetWorldPosition(spawnPos.Value);
             var go = Instantiate(prefab, worldPos, Quaternion.identity);
             go.name = $"Player_{client.ClientId}";
@@ -126,15 +142,12 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                 continue;
             }
 
-            // SpawnAsPlayerObject assigns ownership to the client automatically
             netObj.SpawnAsPlayerObject(client.ClientId);
 
-            // Set initial grid position via NetworkedPlayerBridge (server-authoritative)
             var bridge = go.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null)
                 bridge.InitialPlacement(startRoom.roomGrid, spawnPos.Value);
 
-            // Place the Unit locally on the server too
             var unit = go.GetComponent<Unit>();
             if (unit != null)
             {
@@ -144,16 +157,14 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             }
 
             Debug.Log($"[NetworkedPlayerSpawner] Spawned client {client.ClientId} " +
-                      $"(char {charIndex}) at {spawnPos.Value}");
+                    $"(char {charIndex}) at {spawnPos.Value}");
 
             slotIndex++;
-            yield return null; // slight stagger between spawns
+            yield return null;
         }
 
-        // Tell all clients to set their RoomManager to the start room
         SetStartRoomClientRpc(startRoom.roomInstance.name);
     }
-
     // ─────────────────────────────────────────────────────────────────────
     // Tell all clients which room to set as current
     // ─────────────────────────────────────────────────────────────────────

@@ -98,7 +98,7 @@ public class NetworkGameManager : MonoBehaviour
             {
                 LocalPlayerId = AuthenticationService.Instance.PlayerId;
                 Debug.Log($"[NetworkGameManager] Already signed in: {LocalPlayerId}");
-                OnSignedIn?.Invoke();
+                await FinishSignIn();
                 return;
             }
 
@@ -106,42 +106,50 @@ public class NetworkGameManager : MonoBehaviour
             {
                 await AuthenticationService.Instance.SignInAnonymouslyAsync();
             }
-            catch (Exception signInEx)
+            catch
             {
-                // If the Widget already signed in between our check and our attempt,
-                // just recover gracefully
+                // Widget may have signed in between our check and our attempt
+                // Wait briefly for it to complete
+                int waited = 0;
+                while (!AuthenticationService.Instance.IsSignedIn && waited < 50)
+                {
+                    await Task.Delay(100);
+                    waited++;
+                }
+
                 if (!AuthenticationService.Instance.IsSignedIn)
-                    throw signInEx;
+                {
+                    OnSignInFailed?.Invoke("Sign-in failed.");
+                    return;
+                }
             }
 
-            LocalPlayerId = AuthenticationService.Instance.PlayerId;
-
-            string nameKey   = $"PlayerName_{LocalPlayerId}";
-            string savedName = PlayerPrefs.GetString(nameKey,
-                            "Player" + UnityEngine.Random.Range(100, 999));
-            LocalPlayerName = savedName;
-            PlayerPrefs.SetString(nameKey, savedName);
-
-            await SetAuthDisplayNameAsync(savedName);
-
-            Debug.Log($"[NetworkGameManager] Signed in as {LocalPlayerId}");
-            OnSignedIn?.Invoke();
+            await FinishSignIn();
         }
         catch (Exception e)
         {
             Debug.LogError($"[NetworkGameManager] Sign-in failed: {e.Message}");
-
             if (AuthenticationService.Instance.IsSignedIn)
-            {
-                LocalPlayerId = AuthenticationService.Instance.PlayerId;
-                Debug.Log($"[NetworkGameManager] Recovered — already signed in: {LocalPlayerId}");
-                OnSignedIn?.Invoke();
-            }
+                await FinishSignIn();
             else
-            {
                 OnSignInFailed?.Invoke(e.Message);
-            }
         }
+    }
+
+    private async Task FinishSignIn()
+    {
+        LocalPlayerId = AuthenticationService.Instance.PlayerId;
+
+        string nameKey   = $"PlayerName_{LocalPlayerId}";
+        string savedName = PlayerPrefs.GetString(nameKey,
+                        "Player" + UnityEngine.Random.Range(100, 999));
+        LocalPlayerName = savedName;
+        PlayerPrefs.SetString(nameKey, savedName);
+
+        await SetAuthDisplayNameAsync(savedName);
+
+        Debug.Log($"[NetworkGameManager] Signed in as {LocalPlayerId}");
+        OnSignedIn?.Invoke();
     }
 
     // ─────────────────────────────────────────────────────────────────────
