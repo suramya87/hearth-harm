@@ -1,7 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
 
-
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(HealthComponent))]
 public class NetworkedHealthBridge : NetworkBehaviour
@@ -13,8 +12,7 @@ public class NetworkedHealthBridge : NetworkBehaviour
         health = GetComponent<HealthComponent>();
     }
 
-    // ── Static helper ──────────────────────────────────────────────────────
-
+    // ── Static helpers ─────────────────────────────────────────────────────
 
     public static void TakeDamage(GameObject target, int amount)
     {
@@ -26,9 +24,9 @@ public class NetworkedHealthBridge : NetworkBehaviour
 
         var bridge = target.GetComponent<NetworkedHealthBridge>();
         if (bridge != null)
-            bridge.TakeDamage(amount);
+            bridge.TakeDamageInstance(amount);
         else
-            target.GetComponent<HealthComponent>()?.TakeDamage(amount); // fallback
+            target.GetComponent<HealthComponent>()?.TakeDamage(amount);
     }
 
     public static void Heal(GameObject target, int amount)
@@ -48,8 +46,7 @@ public class NetworkedHealthBridge : NetworkBehaviour
 
     // ── Instance API ───────────────────────────────────────────────────────
 
-    /// <summary>Safe damage call — works in SP and MP.</summary>
-    public void TakeDamage(int amount)
+    public void TakeDamageInstance(int amount)
     {
         if (!GameManager.IsMultiplayer)
         {
@@ -57,7 +54,12 @@ public class NetworkedHealthBridge : NetworkBehaviour
             return;
         }
 
-        // Any peer can request damage — server is the authority
+        if (!IsSpawned)
+        {
+            health.TakeDamage(amount);
+            return;
+        }
+
         RequestTakeDamageServerRpc(amount);
     }
 
@@ -77,11 +79,7 @@ public class NetworkedHealthBridge : NetworkBehaviour
     private void RequestTakeDamageServerRpc(int amount)
     {
         if (health.IsDead) return;
-
-        // Server applies the damage
         health.TakeDamage(amount);
-
-        // Broadcast result to all clients for visual feedback
         SyncHealthClientRpc(health.CurrentHealth, health.MaxHealth, amount, health.IsDead);
     }
 
@@ -89,7 +87,6 @@ public class NetworkedHealthBridge : NetworkBehaviour
     private void RequestHealServerRpc(int amount)
     {
         if (health.IsDead) return;
-
         health.Heal(amount);
         SyncHealthClientRpc(health.CurrentHealth, health.MaxHealth, 0, false);
     }
@@ -99,14 +96,11 @@ public class NetworkedHealthBridge : NetworkBehaviour
     [ClientRpc]
     private void SyncHealthClientRpc(int currentHp, int maxHp, int damageDealt, bool isDead)
     {
-        if (IsServer) return; // Server already applied it
+        if (IsServer) return;
 
         if (damageDealt > 0)
-            health.TakeDamage(damageDealt); // This triggers flash + damage number locally
+            health.TakeDamage(damageDealt);
         else
-            health.SetHealth(currentHp);    // Heal — just sync value
-
+            health.SetHealth(currentHp);
     }
-
-
 }

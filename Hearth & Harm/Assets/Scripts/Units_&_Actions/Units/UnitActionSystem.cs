@@ -58,20 +58,62 @@ public class UnitActionSystem : MonoBehaviour
     /// SP:  finds the unit in 1-2 frames (spawned synchronously by LevelGenerator).
     /// MP:  waits up to ~4 seconds for the host to spawn and replicate our object.
     /// </summary>
+    // private IEnumerator FindAndSelectUnit()
+    // {
+    //     int maxAttempts = GameManager.IsMultiplayer ? 240 : 10;
+
+    //     for (int attempt = 0; attempt < maxAttempts && selectedUnit == null; attempt++)
+    //     {
+    //         yield return null;
+    //         TrySelectOwnedUnit();
+    //     }
+
+    //     if (selectedUnit == null)
+    //         Debug.LogWarning("[UnitActionSystem] Could not find a unit to select after waiting.");
+    //     else
+    //         Debug.Log($"[UnitActionSystem] Selected unit: {selectedUnit.name}");
+    // }
     private IEnumerator FindAndSelectUnit()
     {
-        int maxAttempts = GameManager.IsMultiplayer ? 240 : 10;
+        yield return null;
 
-        for (int attempt = 0; attempt < maxAttempts && selectedUnit == null; attempt++)
+        // In multiplayer wait longer — player spawning happens after level ready
+        if (GameManager.IsMultiplayer)
         {
-            yield return null;
-            TrySelectOwnedUnit();
+            float waited = 0f;
+            while (waited < 5f)
+            {
+                waited += Time.deltaTime;
+                var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
+                foreach (var u in units)
+                {
+                    var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
+                    if (netObj != null && netObj.IsOwner)
+                    {
+                        SetSelectedUnit(u);
+                        Debug.Log($"[UnitActionSystem] MP unit found: {u.name}");
+                        yield break;
+                    }
+                }
+                yield return null;
+            }
+            Debug.LogWarning("[UnitActionSystem] Timed out waiting for owned unit.");
+            yield break;
         }
 
-        if (selectedUnit == null)
-            Debug.LogWarning("[UnitActionSystem] Could not find a unit to select after waiting.");
-        else
-            Debug.Log($"[UnitActionSystem] Selected unit: {selectedUnit.name}");
+        // Single player — retry a few frames
+        int attempts = 0;
+        while (selectedUnit == null && attempts < 10)
+        {
+            var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
+            foreach (var u in units)
+            {
+                SetSelectedUnit(u);
+                break;
+            }
+            attempts++;
+            yield return null;
+        }
     }
 
     // ── Update ─────────────────────────────────────────────────────────────

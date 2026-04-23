@@ -147,9 +147,8 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             yield return null;
         }
 
-        // Tell every peer which room is the start room.
-        // Grid position is used (not roomInstance.name) because NGO-instantiated
-        // GameObjects can get different names on different peers.
+        RoomManager.Instance?.SetCurrentRoom(startRoom);
+        
         SetStartRoomClientRpc(startRoom.gridPosition.x, startRoom.gridPosition.y);
     }
 
