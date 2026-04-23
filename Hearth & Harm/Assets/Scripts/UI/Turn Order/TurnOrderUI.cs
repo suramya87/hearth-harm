@@ -43,9 +43,21 @@ public class TurnOrderUI : MonoBehaviour
     private readonly List<GameObject> playerTokenObjects = new();
     private readonly List<GameObject> enemyTokenObjects = new();
 
+
+    private void HandleLevelReady()
+    {
+        RefreshAll();
+    }
+
+    private void HandleRoomChanged(LevelGenerator.PlacedRoom _)
+    {
+        RefreshAll();
+    }
+
     private void OnEnable()
     {
-        // Intentionally left blank for now.
+        LevelGenerator.OnLevelReady += HandleLevelReady;
+        RoomManager.OnAnyRoomChanged += HandleRoomChanged;
     }
 
     private void Start()
@@ -102,6 +114,9 @@ public class TurnOrderUI : MonoBehaviour
         {
             EnemyManager.Instance.OnEnemyListChanged -= RefreshEnemyTokens;
         }
+
+        LevelGenerator.OnLevelReady -= HandleLevelReady;
+        RoomManager.OnAnyRoomChanged -= HandleRoomChanged;
     }
 
     // ── Refresh ───────────────────────────────────────────────────────────
@@ -168,9 +183,35 @@ public class TurnOrderUI : MonoBehaviour
 
     private void RefreshPlayerTokens()
     {
-        // Draft 1:
-        // Leaving player population simple for now.
-        // This method exists so we can add player roster population cleanly next.
+        ClearPlayerTokens();
+
+        if (playerTurnsRoot == null || playerTokenPrefabs == null || playerTokenPrefabs.Count == 0)
+            return;
+
+        Unit[] allUnits = FindObjectsByType<Unit>(FindObjectsSortMode.None);
+
+        foreach (Unit unit in allUnits)
+        {
+            if (unit == null) continue;
+
+            PlayerStats stats = unit.GetComponent<PlayerStats>();
+            if (stats == null) continue;
+
+            GameObject prefab = GetPlayerTokenPrefab(unit);
+            if (prefab == null) continue;
+
+            GameObject tokenObj = Instantiate(prefab, playerTurnsRoot);
+            playerTokenObjects.Add(tokenObj);
+
+            TurnOrderTokenUI tokenUI = tokenObj.GetComponent<TurnOrderTokenUI>();
+            if (tokenUI != null)
+            {
+                tokenUI.BindPlayer(unit);
+            }
+
+            if (showDebugLogs)
+                Debug.Log($"[TurnOrderUI] Added player token for {unit.name}");
+        }
     }
 
     private void ClearEnemyTokens()
@@ -229,14 +270,18 @@ public class TurnOrderUI : MonoBehaviour
         if (enemyTokenPrefabs == null || enemyTokenPrefabs.Count == 0)
             return null;
 
-        string enemyName = enemy.name;
+        string enemyName = enemy.Stats != null && !string.IsNullOrWhiteSpace(enemy.Stats.enemyName)
+            ? enemy.Stats.enemyName.ToLowerInvariant()
+            : enemy.name.ToLowerInvariant();
 
         foreach (var entry in enemyTokenPrefabs)
         {
             if (entry == null || entry.tokenPrefab == null) continue;
             if (string.IsNullOrWhiteSpace(entry.enemyNameContains)) continue;
 
-            if (enemyName.Contains(entry.enemyNameContains))
+            string matchText = entry.enemyNameContains.ToLowerInvariant();
+
+            if (enemyName.Contains(matchText))
                 return entry.tokenPrefab;
         }
 

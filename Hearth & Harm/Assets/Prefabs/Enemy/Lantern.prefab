@@ -108,7 +108,7 @@ GameObject:
   - component: {fileID: 2892949379739715270}
   - component: {fileID: 9082106860478271940}
   m_Layer: 0
-  m_Name: SneakyBoi
+  m_Name: Lantern
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

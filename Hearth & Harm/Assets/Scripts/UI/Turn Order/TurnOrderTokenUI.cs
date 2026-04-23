@@ -21,7 +21,15 @@ public class TurnOrderTokenUI : MonoBehaviour
         boundPlayer = null;
 
         if (nameText != null)
-            nameText.text = enemy != null ? enemy.name : "Enemy";
+        {
+            string displayName = enemy != null && enemy.Stats != null
+                ? enemy.Stats.enemyName
+                : enemy != null
+                    ? enemy.name.Replace("(Clone)", "").Trim()
+                    : "Enemy";
+
+            nameText.text = displayName;
+        }
     }
 
     public void BindPlayer(Unit player)

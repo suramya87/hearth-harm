@@ -944,8 +944,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 25.49, y: -266.27}
-  m_SizeDelta: {x: 44.03, y: 392.66}
+  m_AnchoredPosition: {x: 25.49, y: -254.48}
+  m_SizeDelta: {x: 44.03, y: 369.08}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &156160873
 MonoBehaviour:
@@ -2504,8 +2504,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -25.68, y: -266.27002}
-  m_SizeDelta: {x: 44.03, y: 392.66}
+  m_AnchoredPosition: {x: -25.68, y: -254.48}
+  m_SizeDelta: {x: 44.03, y: 369.08}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &407720609
 MonoBehaviour:
@@ -5428,7 +5428,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.4245283, g: 0.4245283, b: 0.4245283, a: 0.3137255}
+  m_Color: {r: 0.4245283, g: 0.4245283, b: 0.4245283, a: 0.72156864}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -6481,6 +6481,7 @@ GameObject:
   - component: {fileID: 1034143644}
   - component: {fileID: 1034143646}
   - component: {fileID: 1034143645}
+  - component: {fileID: 1034143647}
   m_Layer: 5
   m_Name: Player Turns
   m_TagString: Untagged
@@ -6504,8 +6505,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -25.57, y: -266.27}
-  m_SizeDelta: {x: 44.03, y: 392.66}
+  m_AnchoredPosition: {x: -25.57, y: -254.48}
+  m_SizeDelta: {x: 44.03, y: 369.08}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1034143645
 MonoBehaviour:
@@ -6545,6 +6546,32 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1034143643}
   m_CullTransparentMesh: 1
+--- !u!114 &1034143647
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1034143643}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 59f8146938fff824cb5fd77236b75775, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.VerticalLayoutGroup
+  m_Padding:
+    m_Left: 0
+    m_Right: 0
+    m_Top: 10
+    m_Bottom: 0
+  m_ChildAlignment: 1
+  m_Spacing: 17
+  m_ChildForceExpandWidth: 0
+  m_ChildForceExpandHeight: 0
+  m_ChildControlWidth: 0
+  m_ChildControlHeight: 0
+  m_ChildScaleWidth: 1
+  m_ChildScaleHeight: 1
+  m_ReverseArrangement: 0
 --- !u!1 &1044467599
 GameObject:
   m_ObjectHideFlags: 0
@@ -9120,6 +9147,7 @@ GameObject:
   - component: {fileID: 1399719691}
   - component: {fileID: 1399719693}
   - component: {fileID: 1399719692}
+  - component: {fileID: 1399719694}
   m_Layer: 5
   m_Name: Enemy turns
   m_TagString: Untagged
@@ -9143,8 +9171,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 25.49, y: -266.27}
-  m_SizeDelta: {x: 44.03, y: 392.66}
+  m_AnchoredPosition: {x: 25.49, y: -254.48}
+  m_SizeDelta: {x: 44.03, y: 369.08}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1399719692
 MonoBehaviour:
@@ -9184,6 +9212,32 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1399719690}
   m_CullTransparentMesh: 1
+--- !u!114 &1399719694
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1399719690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 59f8146938fff824cb5fd77236b75775, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.VerticalLayoutGroup
+  m_Padding:
+    m_Left: 0
+    m_Right: 0
+    m_Top: 10
+    m_Bottom: 0
+  m_ChildAlignment: 1
+  m_Spacing: 17
+  m_ChildForceExpandWidth: 0
+  m_ChildForceExpandHeight: 0
+  m_ChildControlWidth: 0
+  m_ChildControlHeight: 0
+  m_ChildScaleWidth: 1
+  m_ChildScaleHeight: 1
+  m_ReverseArrangement: 0
 --- !u!1 &1429315923
 GameObject:
   m_ObjectHideFlags: 0
@@ -14089,7 +14143,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.6132076, g: 0.6132076, b: 0.6132076, a: 0.36078432}
+  m_Color: {r: 0.20754719, g: 0.20754719, b: 0.20754719, a: 0.85882354}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
