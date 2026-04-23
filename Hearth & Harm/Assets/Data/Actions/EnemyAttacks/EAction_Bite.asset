@@ -21,11 +21,11 @@ MonoBehaviour:
   dieType: 6
   flatBonus: 0
   damageMultiplier: 1
-  attackPattern: {fileID: 0}
+  attackPattern: {fileID: 11400000, guid: d64e7cff48677c441bbb8564bdb200fe, type: 2}
   rotatesToFacing: 1
-  minRange: 0
-  maxRange: 0
-  canTargetSelf: 0
+  minRange: 1
+  maxRange: 1
+  canTargetSelf: 1
   staminaCost: 2
   requiresEnoughStamina: 0
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
@@ -35,9 +35,9 @@ MonoBehaviour:
 
     Stamina: 2
 
-    Pattern: single
+    Pattern: BiteATP
 
-    Range: Melee
+    Range: 1-1
 
     Rotates:
     True'

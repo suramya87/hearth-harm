@@ -8770,7 +8770,7 @@ MonoBehaviour:
   startButton: {fileID: 1071504409}
   singlePlayerStartButton: {fileID: 279185073}
   charSelectLeaveButton: {fileID: 0}
-  singlePlayerSceneName: Singleplayertest
+  singlePlayerSceneName: SamUpdatesUNO
   multiplayerSceneName: MultiplayerTest
 --- !u!114 &1367613126
 MonoBehaviour:

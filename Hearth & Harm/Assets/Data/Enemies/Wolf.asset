@@ -15,11 +15,11 @@ MonoBehaviour:
   enemyName: WOLF
   maxHealth: 25
   moveRange: 3
-  attackData: {fileID: 0}
+  attackData: {fileID: 11400000, guid: 9cd4b717d7db03f42af30e93f0eb8d5f, type: 2}
   kiteEnabled: 1
   kiteRange: 2
   alwaysChases: 1
   turnsBeforeFirstAction: 0
-  _summary: 'HP:25  Move:3  Range:1
+  _summary: 'HP:25  Move:3  Range:0
 
-    Attack:None  Kite:True(2)'
+    Attack:Bite  Kite:True(2)'

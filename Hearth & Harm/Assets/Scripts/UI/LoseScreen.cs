@@ -17,15 +17,16 @@ public class LoseScreen : MonoBehaviour
     [SerializeField] private string          mainMenuScene     = "MainMenu";
     [SerializeField] private bool            retryResetsProgress = true;
 
+    // In LoseScreen.cs
     private void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject); // kill the newcomer, keep the original
-            return;
-        }
+        // if (Instance != null && Instance != this)
+        // {
+        //     Destroy(gameObject); 
+        //     return;
+        // }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
+        // DontDestroyOnLoad(gameObject);
     }
 
     private void Start()
@@ -73,9 +74,11 @@ public class LoseScreen : MonoBehaviour
 
     public void OnRetry()    
     { 
-        Time.timeScale = 1f; HidePanel(); 
-        GameStateManager.Instance?.RestartGame(retryResetsProgress); 
+        Time.timeScale = 1f; 
+        // This reloads the scene fresh, creating a NEW UI with NEW working links
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
+
     public void OnMainMenu()
     {
         Time.timeScale = 1f;
