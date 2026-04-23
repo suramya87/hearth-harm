@@ -48,7 +48,11 @@ public class GameManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this) 
+        { 
+            Destroy(gameObject); 
+            return; // Early return — don't touch _mode
+        }
         Instance = this;
         DontDestroyOnLoad(gameObject);
         _mode = defaultMode;

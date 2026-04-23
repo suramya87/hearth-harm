@@ -7,17 +7,19 @@ using UnityEngine;
 /// Spawns one networked player prefab per connected client after the level is ready.
 ///
 /// SETUP:
-///   1. Add this component to the same GameObject as LevelSyncBridge / LevelGenerator
+///   1. Add this component to the same GameObject as LevelSyncBridge / LevelGenerator.
 ///   2. Assign your networked player prefabs in the Inspector (must have NetworkObject +
-///      NetworkedPlayerBridge + Unit)
-///   3. Make sure each player prefab is registered in NetworkManager's NetworkPrefabs list
+///      NetworkedPlayerBridge + Unit).
+///   3. Make sure each prefab is registered in NetworkManager's NetworkPrefabs list.
 ///
 /// FLOW:
 ///   LevelSyncBridge.OnNetworkLevelReady fires on all peers
 ///   → Host calls SpawnAllPlayers()
 ///   → For each client: Instantiate prefab, NetworkObject.SpawnAsPlayerObject(clientId)
 ///   → NetworkedPlayerBridge.InitialPlacement() sets starting room + grid position
-///   → NetworkVariables replicate to all peers automatically
+///   → SetStartRoomClientRpc broadcasts the start room's grid coords (deterministic
+///     across peers because every peer ran GenerateLevel with the same seed)
+///   → NetworkVariables replicate position to all peers automatically
 /// </summary>
 public class NetworkedPlayerSpawner : NetworkBehaviour
 {
@@ -26,43 +28,39 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
              "Must be registered in NetworkManager NetworkPrefabs list.")]
     [SerializeField] private List<GameObject> networkedPlayerPrefabs;
 
-    [Tooltip("Offset each player slightly so they don't stack on spawn.")]
-    [SerializeField] private bool offsetSpawnPositions = true;
-
     private LevelGenerator levelGenerator;
 
-    private void Awake()
-    {
-        levelGenerator = GetComponent<LevelGenerator>();
-        if (levelGenerator == null)
-            levelGenerator = FindAnyObjectByType<LevelGenerator>();
-    }
+    // ── Network lifecycle ──────────────────────────────────────────────────
 
-    private void OnEnable()
+    public override void OnNetworkSpawn()
     {
+        if (!IsServer) return;
         LevelSyncBridge.OnNetworkLevelReady += OnNetworkLevelReady;
     }
 
-    private void OnDisable()
+    public override void OnNetworkDespawn()
     {
         LevelSyncBridge.OnNetworkLevelReady -= OnNetworkLevelReady;
     }
 
     private void OnNetworkLevelReady()
     {
-        // Only the host spawns players
         if (!IsServer) return;
         StartCoroutine(SpawnAllPlayers());
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Spawn all players (host only)
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Spawn all players (server only) ───────────────────────────────────
 
     private IEnumerator SpawnAllPlayers()
     {
-        // Wait one frame to ensure all room grids are fully initialized
         yield return null;
+
+        // Retry finding LevelGenerator
+        for (int i = 0; levelGenerator == null && i < 10; i++)
+        {
+            levelGenerator = FindAnyObjectByType<LevelGenerator>();
+            yield return null;
+        }
 
         if (levelGenerator == null)
         {
@@ -70,10 +68,16 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             yield break;
         }
 
-        var startRoom = levelGenerator.GetAllRooms()
-            ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start
-                     && r.roomGrid != null
-                     && r.roomGrid.IsInitialized());
+        // Retry finding the start room
+        LevelGenerator.PlacedRoom startRoom = null;
+        for (int i = 0; startRoom == null && i < 10; i++)
+        {
+            startRoom = levelGenerator.GetAllRooms()
+                ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start
+                         && r.roomGrid != null
+                         && r.roomGrid.IsInitialized());
+            if (startRoom == null) yield return null;
+        }
 
         if (startRoom == null)
         {
@@ -82,17 +86,18 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
         }
 
         var clients = NetworkManager.Singleton.ConnectedClientsList;
-        Debug.Log($"[NetworkedPlayerSpawner] Spawning {clients.Count} players.");
+        Debug.Log($"[NetworkedPlayerSpawner] Spawning {clients.Count} player(s).");
 
         int slotIndex = 0;
         foreach (var client in clients)
         {
-            // Get this client's character selection from LobbySync
+            // Resolve character index from whichever sync system is present
             int charIndex = 0;
             if (LobbySync.Instance != null)
                 charIndex = LobbySync.Instance.GetCharacterIndex(client.ClientId);
+            else if (CharacterSelectionSync.Instance != null)
+                charIndex = CharacterSelectionSync.Instance.GetCharacterIndex(client.ClientId);
 
-            // Clamp to valid prefab range
             charIndex = Mathf.Clamp(charIndex, 0, networkedPlayerPrefabs.Count - 1);
 
             GameObject prefab = networkedPlayerPrefabs[charIndex];
@@ -103,7 +108,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                 continue;
             }
 
-            // Find a spawn position — try spawn points first, fall back to centre
             GridPosition? spawnPos = FindSpawnPosition(startRoom, slotIndex);
             if (spawnPos == null)
             {
@@ -112,7 +116,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                 continue;
             }
 
-            // Instantiate and network-spawn as the player object for this client
             Vector3 worldPos = startRoom.roomGrid.GetWorldPosition(spawnPos.Value);
             var go = Instantiate(prefab, worldPos, Quaternion.identity);
             go.name = $"Player_{client.ClientId}";
@@ -120,21 +123,20 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             var netObj = go.GetComponent<NetworkObject>();
             if (netObj == null)
             {
-                Debug.LogError($"[NetworkedPlayerSpawner] Player prefab missing NetworkObject!");
+                Debug.LogError("[NetworkedPlayerSpawner] Player prefab is missing a NetworkObject!");
                 Destroy(go);
                 slotIndex++;
                 continue;
             }
 
-            // SpawnAsPlayerObject assigns ownership to the client automatically
             netObj.SpawnAsPlayerObject(client.ClientId);
 
-            // Set initial grid position via NetworkedPlayerBridge (server-authoritative)
+            // Set initial placement on the bridge (writes NetworkVariables → replicates to clients)
             var bridge = go.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null)
                 bridge.InitialPlacement(startRoom.roomGrid, spawnPos.Value);
 
-            // Place the Unit locally on the server too
+            // Place locally on the server too
             var unit = go.GetComponent<Unit>();
             if (unit != null)
             {
@@ -147,19 +149,23 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                       $"(char {charIndex}) at {spawnPos.Value}");
 
             slotIndex++;
-            yield return null; // slight stagger between spawns
+            yield return null; // spread spawns across frames
         }
 
-        // Tell all clients to set their RoomManager to the start room
-        SetStartRoomClientRpc(startRoom.roomInstance.name);
+        // Tell all clients which room is the start room, identified by grid coords
+        // (deterministic across peers — avoids the roomInstance.name mismatch bug)
+        SetStartRoomClientRpc(startRoom.gridPosition.x, startRoom.gridPosition.y);
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Tell all clients which room to set as current
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Tell clients which room to activate ───────────────────────────────
 
+    /// <summary>
+    /// Uses grid position instead of roomInstance.name because NGO-instantiated
+    /// GameObjects may get different names on different peers. Grid position is
+    /// identical on every peer since all ran GenerateLevel with the same seed.
+    /// </summary>
     [ClientRpc]
-    private void SetStartRoomClientRpc(string startRoomName)
+    private void SetStartRoomClientRpc(int gridX, int gridY)
     {
         if (levelGenerator == null)
             levelGenerator = FindAnyObjectByType<LevelGenerator>();
@@ -169,23 +175,21 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
 
         foreach (var placed in rooms)
         {
-            if (placed.roomInstance != null &&
-                placed.roomInstance.name == startRoomName)
-            {
-                RoomManager.Instance?.SetCurrentRoom(placed);
-                Debug.Log($"[NetworkedPlayerSpawner] Client set start room → {startRoomName}");
-                return;
-            }
+            if (placed.gridPosition.x != gridX || placed.gridPosition.y != gridY) continue;
+
+            RoomManager.Instance?.SetCurrentRoom(placed);
+            Debug.Log($"[NetworkedPlayerSpawner] Client set start room → ({gridX},{gridY})");
+            return;
         }
+
+        Debug.LogWarning($"[NetworkedPlayerSpawner] Client could not find start room at ({gridX},{gridY})");
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Spawn position helpers
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Spawn position helpers ─────────────────────────────────────────────
 
     private GridPosition? FindSpawnPosition(LevelGenerator.PlacedRoom room, int slotIndex)
     {
-        // Try directional spawn points first
+        // Try directional spawn points first so players don't stack
         var reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
         if (reader != null)
         {
@@ -198,7 +202,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                 LevelGenerator.Direction.East
             };
 
-            // Each player gets a different directional spawn point if available
             int dirIndex = slotIndex % dirs.Length;
             for (int i = 0; i < dirs.Length; i++)
             {
@@ -208,7 +211,7 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             }
         }
 
-        // Fall back to walkable tile near centre
+        // Fall back to a walkable tile near the room centre
         return FindWalkableTileNearCentre(room.roomGrid, slotIndex);
     }
 
@@ -232,6 +235,7 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             var c = new GridPosition(x, y);
             if (roomGrid.IsWalkable(c)) return c;
         }
+
         return null;
     }
 }

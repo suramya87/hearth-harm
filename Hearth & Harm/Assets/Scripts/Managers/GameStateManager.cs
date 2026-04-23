@@ -48,15 +48,40 @@ public class GameStateManager : MonoBehaviour
 
     private void TrySubscribe()
     {
-        var unit = FindAnyObjectByType<Unit>();
+        // In multiplayer, only track the LOCAL player's health
+        // FindAnyObjectByType would find remote players too
+        Unit unit = null;
+    
+        if (GameManager.IsMultiplayer)
+        {
+            // Find the NetworkObject owned by this client
+            foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+            {
+                var bridge = u.GetComponent<Unity.Netcode.NetworkBehaviour>();
+                if (bridge != null && bridge.IsOwner)
+                {
+                    unit = u;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            unit = FindAnyObjectByType<Unit>();
+        }
+    
         if (unit == null) return;
+        if (!unit.gameObject.activeInHierarchy) return;
+    
         var hc = unit.GetComponent<HealthComponent>();
         if (hc == null || hc == playerHealth) return;
+    
         Unsubscribe();
-        playerHealth       = hc;
+        playerHealth = hc;
         playerHealth.OnDeath += HandleDeath;
         subscribed = true;
     }
+
 
     private void Unsubscribe()
     {
@@ -78,14 +103,33 @@ public class GameStateManager : MonoBehaviour
         Time.timeScale = 1f;
         OnGameRestarted?.Invoke();
     }
-
     public void RestartGame(bool resetProgress = true)
     {
         Time.timeScale = 1f;
-        if (resetProgress) WaveManager.Instance?.ResetToLevel1();
+        CurrentState = State.Playing;
+        subscribed = false;
+        Unsubscribe();
         OnGameRestarted?.Invoke();
-        var gen = FindAnyObjectByType<LevelGenerator>();
-        if (gen != null) gen.GenerateLevel();
-        else SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    
+        if (GameManager.IsMultiplayer)
+        {
+            // In multiplayer, host triggers level resync via LevelSyncBridge
+            var bridge = UnityEngine.Object.FindAnyObjectByType<LevelSyncBridge>();
+            if (bridge != null && bridge.IsServer)
+            {
+                if (resetProgress) WaveManager.Instance?.ResetToLevel1();
+                // Reload scene so NGO re-syncs cleanly
+                Unity.Netcode.NetworkManager.Singleton.SceneManager.LoadScene(
+                    UnityEngine.SceneManagement.SceneManager.GetActiveScene().name,
+                    UnityEngine.SceneManagement.LoadSceneMode.Single);
+            }
+        }
+        else
+        {
+            if (resetProgress) WaveManager.Instance?.ResetToLevel1();
+            UnityEngine.SceneManagement.SceneManager.LoadScene(
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+        }
     }
+
 }
