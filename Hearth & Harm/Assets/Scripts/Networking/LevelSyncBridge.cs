@@ -18,10 +18,10 @@ public class LevelSyncBridge : NetworkBehaviour
 
     // ── State ──────────────────────────────────────────────────────────────
 
-    private LevelGenerator  levelGenerator;
-    private int             syncSeed;
-    private int             clientsReady;
-    private int             expectedClients;
+    private LevelGenerator levelGenerator;
+    private int            syncSeed;
+    private int            clientsReady;
+    private int            expectedClients;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -35,11 +35,8 @@ public class LevelSyncBridge : NetworkBehaviour
         if (!GameManager.IsMultiplayer) return;
 
         if (IsServer)
-        {
-            // Give clients a moment to spawn before we generate
             StartCoroutine(HostGenerateAfterDelay());
-        }
-        // Clients wait for the SyncLevelClientRpc broadcast
+        // Clients wait for SyncLevelClientRpc
     }
 
     // ── Host side ──────────────────────────────────────────────────────────
@@ -48,28 +45,24 @@ public class LevelSyncBridge : NetworkBehaviour
     {
         yield return new WaitForSeconds(0.5f);
 
-        // Pick a seed and bake it into Unity's random state
         syncSeed = UnityEngine.Random.Range(1, int.MaxValue);
         UnityEngine.Random.InitState(syncSeed);
 
         Debug.Log($"[LevelSyncBridge] Host generating with seed {syncSeed}");
         levelGenerator.GenerateLevel();
 
-        // How many non-host clients do we expect?
+        // How many non-host clients are we waiting for?
         expectedClients = NetworkManager.Singleton.ConnectedClientsList.Count - 1;
         clientsReady    = 0;
 
         if (expectedClients == 0)
         {
-            // Solo host — just fire ready
             FireLevelReady();
             yield break;
         }
 
-        // Tell all clients to generate with this seed
         SyncLevelClientRpc(syncSeed);
 
-        // Wait for all clients to confirm
         float elapsed = 0f;
         while (clientsReady < expectedClients && elapsed < clientReadyTimeout)
         {
@@ -78,7 +71,8 @@ public class LevelSyncBridge : NetworkBehaviour
         }
 
         if (clientsReady < expectedClients)
-            Debug.LogWarning($"[LevelSyncBridge] Timed out waiting for clients ({clientsReady}/{expectedClients} ready). Proceeding anyway.");
+            Debug.LogWarning($"[LevelSyncBridge] Timed out waiting for clients " +
+                             $"({clientsReady}/{expectedClients} ready). Proceeding anyway.");
 
         FireLevelReady();
     }
@@ -93,12 +87,13 @@ public class LevelSyncBridge : NetworkBehaviour
     private void FireLevelReady()
     {
         Debug.Log("[LevelSyncBridge] All peers ready — firing OnNetworkLevelReady");
-        // Fire server-side first so NetworkedPlayerSpawner can start spawning
-        OnNetworkLevelReady?.Invoke();
-        // Then notify all clients
-        NotifyAllPeersLevelReadyClientRpc();
-    }
 
+        // Fire on server first so NetworkedPlayerSpawner can begin
+        OnNetworkLevelReady?.Invoke();
+
+        // Then fire on all clients (NOT the server again — hence the guard in the ClientRpc)
+        NotifyClientsLevelReadyClientRpc();
+    }
 
     // ── Client side ────────────────────────────────────────────────────────
 
@@ -111,20 +106,24 @@ public class LevelSyncBridge : NetworkBehaviour
         UnityEngine.Random.InitState(seed);
         levelGenerator.GenerateLevel();
 
-        // Tell server we're done
         ClientReadyServerRpc();
     }
 
     [ClientRpc]
-    private void NotifyAllPeersLevelReadyClientRpc()
+    private void NotifyClientsLevelReadyClientRpc()
     {
-        OnNetworkLevelReady?.Invoke();
+        // ── KEY FIX ──────────────────────────────────────────────────────────
+        // The server already fired OnNetworkLevelReady in FireLevelReady().
+        // Without this guard the host fires it a second time here, which causes
+        // NetworkedPlayerSpawner to run SpawnAllPlayers() twice → two players
+        // spawned per client.
+        if (IsServer) return;
 
-        Debug.Log("[LevelSyncBridge] Level ready on this peer.");
+        OnNetworkLevelReady?.Invoke();
+        Debug.Log("[LevelSyncBridge] Level ready on this client.");
     }
 
     // ── Single-player passthrough ──────────────────────────────────────────
-
 
     public void TriggerSinglePlayerGenerate()
     {

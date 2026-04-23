@@ -9,13 +9,15 @@ using UnityEngine;
 ///   1. Owner's Unit.PlaceInRoom() fires (from MoveAction, or anywhere)
 ///   2. Unit.PlaceInRoom() calls bridge.SyncGridPosition() — owner + multiplayer only
 ///   3. SyncGridPosition sends RequestMoveServerRpc
-///   4. Server updates gridX/gridY NetworkVariables
+///   4. Server updates gridX/gridY/currentRoomName NetworkVariables
 ///   5. Non-owner peers: OnGridPositionChanged → ApplyRoomSync → Unit.PlaceInRoom
-///      (unit.IsSyncingFromNetwork = true, so step 2 cannot loop)
+///      (unit.IsSyncingFromNetwork = true so step 2 cannot loop)
 ///
 /// ROOM TRANSITIONS:
 ///   RoomDoor calls bridge.TransitionToRoom() in multiplayer.
-///   This applies locally, sends a ServerRpc, and broadcasts RoomManager update.
+///   Applies locally, sends ServerRpc, broadcasts to all clients.
+///   Also calls NotifyRoomChanged() so UnitActionSystem/TilemapHighlighter
+///   immediately update their room reference without waiting a full frame.
 ///
 /// PREFAB REQUIREMENTS:
 ///   NetworkObject + NetworkTransform + Unit + NetworkedPlayerBridge
@@ -36,9 +38,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private Unit unit;
-
-    // Guards TransitionToRoom from firing a duplicate RequestMoveServerRpc
-    // (because unit.PlaceInRoom auto-calls SyncGridPosition).
     private bool isTransitioning;
 
     private void Awake() => unit = GetComponent<Unit>();
@@ -64,9 +63,18 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridY.OnValueChanged           -= OnGridPositionChanged;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Called by Unit.PlaceInRoom (auto, owner only)
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Public API ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the replicated room name. Used by UnitActionSystem to resolve
+    /// which PlacedRoom to set on RoomManager for the local peer.
+    /// </summary>
+    public string GetCurrentRoomName() => currentRoomName.Value.ToString();
+
+    /// <summary>Server-authoritative grid position — use this for enemy AI targeting.</summary>
+    public GridPosition GetNetworkGridPosition() => new(gridX.Value, gridY.Value);
+
+    // ── Called by Unit.PlaceInRoom (owner only) ────────────────────────────
 
     public void SyncGridPosition(RoomGrid room, GridPosition pos)
     {
@@ -74,28 +82,25 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         RequestMoveServerRpc(room.gameObject.name, pos.x, pos.y);
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Called by NetworkedPlayerSpawner after spawn
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Called by NetworkedPlayerSpawner after spawn ───────────────────────
 
     public void InitialPlacement(RoomGrid room, GridPosition pos)
     {
         if (!GameManager.IsMultiplayer || !IsServer) return;
         currentRoomName.Value = room.gameObject.name;
-        gridX.Value = pos.x;
-        gridY.Value = pos.y;
+        gridX.Value           = pos.x;
+        gridY.Value           = pos.y;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Called by RoomDoor in multiplayer
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Called by RoomDoor in multiplayer ─────────────────────────────────
 
     public void TransitionToRoom(RoomGrid newRoom, GridPosition spawnPos)
     {
         if (!GameManager.IsMultiplayer)
         {
             unit.PlaceInRoom(newRoom, spawnPos);
-            RoomManager.Instance?.SetCurrentRoom(FindPlacedRoomForGrid(newRoom));
+            var sp = FindPlacedRoomForGrid(newRoom);
+            RoomManager.Instance?.SetCurrentRoom(sp);
             return;
         }
 
@@ -105,59 +110,59 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         unit.PlaceInRoom(newRoom, spawnPos);
         isTransitioning = false;
 
-        RoomManager.Instance?.SetCurrentRoom(FindPlacedRoomForGrid(newRoom));
+        // Update RoomManager immediately so HandleInput and TilemapHighlighter
+        // both have the correct room on the very next frame
+        var placed = FindPlacedRoomForGrid(newRoom);
+        RoomManager.Instance?.SetCurrentRoom(placed);
         CameraController2D.Instance?.SnapToTarget();
 
+        // Sync to server + broadcast to other clients
         RequestRoomTransitionServerRpc(newRoom.gameObject.name, spawnPos.x, spawnPos.y);
     }
 
-    /// <summary>Server-authoritative grid position — use this for enemy AI targeting.</summary>
-    public GridPosition GetNetworkGridPosition() => new(gridX.Value, gridY.Value);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Server RPCs
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Server RPCs ────────────────────────────────────────────────────────
 
     [ServerRpc]
     private void RequestMoveServerRpc(string roomName, int x, int y)
     {
         currentRoomName.Value = roomName;
-        gridX.Value = x;
-        gridY.Value = y;
+        gridX.Value           = x;
+        gridY.Value           = y;
     }
 
     [ServerRpc]
     private void RequestRoomTransitionServerRpc(string roomName, int spawnX, int spawnY)
     {
         currentRoomName.Value = roomName;
-        gridX.Value = spawnX;
-        gridY.Value = spawnY;
+        gridX.Value           = spawnX;
+        gridY.Value           = spawnY;
         BroadcastRoomTransitionClientRpc(roomName, spawnX, spawnY);
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Client RPCs
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Client RPCs ────────────────────────────────────────────────────────
 
     [ClientRpc]
     private void BroadcastRoomTransitionClientRpc(string roomName, int spawnX, int spawnY)
     {
-        if (IsOwner) return; // Owner already applied locally
+        if (IsOwner) return; // Owner already applied locally in TransitionToRoom
 
         ApplyRoomSync(roomName, spawnX, spawnY);
 
-        // If this is the local player's object (edge case guard), snap camera
+        // If this NetworkObject belongs to the local player (edge case: IsOwner
+        // check above handles the normal case, this handles IsLocalPlayer scenarios)
         if (IsLocalPlayer)
         {
             var room = FindRoomGridByName(roomName);
-            if (room != null) RoomManager.Instance?.SetCurrentRoom(FindPlacedRoomForGrid(room));
+            if (room != null)
+            {
+                var placed = FindPlacedRoomForGrid(room);
+                RoomManager.Instance?.SetCurrentRoom(placed);
+            }
             CameraController2D.Instance?.SnapToTarget();
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // NetworkVariable callbacks
-    // ─────────────────────────────────────────────────────────────────────
+    // ── NetworkVariable callbacks ──────────────────────────────────────────
 
     private void OnRoomNameChanged(FixedString64Bytes oldVal, FixedString64Bytes newVal)
     {
@@ -178,15 +183,12 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         var room = FindRoomGridByName(roomName);
         if (room == null) return;
 
-        // IsSyncingFromNetwork prevents Unit.PlaceInRoom from calling SyncGridPosition
         unit.IsSyncingFromNetwork = true;
         unit.PlaceInRoom(room, new GridPosition(x, y));
         unit.IsSyncingFromNetwork = false;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────────────────
 
     private RoomGrid FindRoomGridByName(string roomName)
     {

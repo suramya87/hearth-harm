@@ -13,13 +13,11 @@ using UnityEngine;
 ///   3. Make sure each prefab is registered in NetworkManager's NetworkPrefabs list.
 ///
 /// FLOW:
-///   LevelSyncBridge.OnNetworkLevelReady fires on all peers
+///   LevelSyncBridge.OnNetworkLevelReady fires on server only (after the LevelSyncBridge fix)
 ///   → Host calls SpawnAllPlayers()
 ///   → For each client: Instantiate prefab, NetworkObject.SpawnAsPlayerObject(clientId)
-///   → NetworkedPlayerBridge.InitialPlacement() sets starting room + grid position
-///   → SetStartRoomClientRpc broadcasts the start room's grid coords (deterministic
-///     across peers because every peer ran GenerateLevel with the same seed)
-///   → NetworkVariables replicate position to all peers automatically
+///   → NetworkedPlayerBridge.InitialPlacement() writes NetworkVariables → replicates to clients
+///   → SetStartRoomClientRpc tells every peer which room is the start room via grid coords
 /// </summary>
 public class NetworkedPlayerSpawner : NetworkBehaviour
 {
@@ -91,7 +89,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
         int slotIndex = 0;
         foreach (var client in clients)
         {
-            // Resolve character index from whichever sync system is present
             int charIndex = 0;
             if (LobbySync.Instance != null)
                 charIndex = LobbySync.Instance.GetCharacterIndex(client.ClientId);
@@ -131,12 +128,10 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
 
             netObj.SpawnAsPlayerObject(client.ClientId);
 
-            // Set initial placement on the bridge (writes NetworkVariables → replicates to clients)
             var bridge = go.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null)
                 bridge.InitialPlacement(startRoom.roomGrid, spawnPos.Value);
 
-            // Place locally on the server too
             var unit = go.GetComponent<Unit>();
             if (unit != null)
             {
@@ -149,24 +144,23 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                       $"(char {charIndex}) at {spawnPos.Value}");
 
             slotIndex++;
-            yield return null; // spread spawns across frames
+            yield return null;
         }
 
-        // Tell all clients which room is the start room, identified by grid coords
-        // (deterministic across peers — avoids the roomInstance.name mismatch bug)
+        // Tell every peer which room is the start room.
+        // Grid position is used (not roomInstance.name) because NGO-instantiated
+        // GameObjects can get different names on different peers.
         SetStartRoomClientRpc(startRoom.gridPosition.x, startRoom.gridPosition.y);
     }
 
-    // ── Tell clients which room to activate ───────────────────────────────
+    // ── Tell all peers which room to activate ─────────────────────────────
 
-    /// <summary>
-    /// Uses grid position instead of roomInstance.name because NGO-instantiated
-    /// GameObjects may get different names on different peers. Grid position is
-    /// identical on every peer since all ran GenerateLevel with the same seed.
-    /// </summary>
     [ClientRpc]
     private void SetStartRoomClientRpc(int gridX, int gridY)
     {
+        // Host already set its room during SpawnAllPlayers — only clients need to act
+        if (IsServer) return;
+
         if (levelGenerator == null)
             levelGenerator = FindAnyObjectByType<LevelGenerator>();
 
@@ -182,18 +176,17 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             return;
         }
 
-        Debug.LogWarning($"[NetworkedPlayerSpawner] Client could not find start room at ({gridX},{gridY})");
+        Debug.LogWarning($"[NetworkedPlayerSpawner] Could not find start room at ({gridX},{gridY})");
     }
 
     // ── Spawn position helpers ─────────────────────────────────────────────
 
     private GridPosition? FindSpawnPosition(LevelGenerator.PlacedRoom room, int slotIndex)
     {
-        // Try directional spawn points first so players don't stack
         var reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
         if (reader != null)
         {
-            var all = reader.GetAll();
+            var all  = reader.GetAll();
             var dirs = new[]
             {
                 LevelGenerator.Direction.South,
@@ -211,7 +204,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             }
         }
 
-        // Fall back to a walkable tile near the room centre
         return FindWalkableTileNearCentre(room.roomGrid, slotIndex);
     }
 
