@@ -448,8 +448,12 @@ public class LevelGenerator : MonoBehaviour
 
     private void SpawnPlayer(PlacedRoom start)
     {
-        // Multiplayer: NetworkedPlayerSpawner handles all spawning after level sync
+        // Skip in multiplayer — NetworkedPlayerSpawner handles this
         if (GameManager.IsMultiplayer) return;
+        
+        // Extra safety check in case GameManager mode isn't set yet
+        if (Unity.Netcode.NetworkManager.Singleton != null && 
+            Unity.Netcode.NetworkManager.Singleton.IsListening) return;
     
         RoomManager.Instance?.SetCurrentRoom(start);
     

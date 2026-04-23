@@ -32,6 +32,15 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void Awake() => Instance = this;
 
+
+    private void Start()
+    {
+        // Catch the case where RoomManager was already set before we subscribed
+        if (paintedTilemap == null)
+            RefreshTilemap();
+    }
+
+
     private void OnEnable()
     {
         LevelGenerator.OnLevelReady += OnLevelReady;
@@ -40,25 +49,54 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void OnDisable()
     {
-        LevelGenerator.OnLevelReady  -= OnLevelReady;
+        LevelGenerator.OnLevelReady -= OnLevelReady;
         RoomManager.OnAnyRoomChanged -= OnRoomChanged;
         ResetAll();
     }
 
-    private void OnLevelReady()    => RefreshTilemap();
+    private void OnLevelReady() => RefreshTilemap();
     private void OnRoomChanged(LevelGenerator.PlacedRoom _) => RefreshTilemap();
+    // private void OnRoomChanged(LevelGenerator.PlacedRoom _) => RefreshTilemap();
 
     private void RefreshTilemap()
     {
         ResetAll();
-        paintedTilemap = RoomManager.Instance?.GetCurrentRoom()?.roomGrid
-                         ?.GetFloorTilemap();
+        var grid = RoomManager.Instance?.GetCurrentRoom()?.roomGrid;
+        paintedTilemap = grid?.GetFloorTilemap();
+        
+        // In multiplayer, also try finding the local player's room directly
+        if (paintedTilemap == null && GameManager.IsMultiplayer)
+            TryFindLocalPlayerRoom();
+    }
+
+    private void TryFindLocalPlayerRoom()
+    {
+        foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
+        {
+            if (!bridge.IsOwner) continue;
+            // The bridge stores gridX/gridY — find which room contains that position
+            var pos = bridge.GetNetworkGridPosition();
+            var gen = FindAnyObjectByType<LevelGenerator>();
+            if (gen == null) return;
+            foreach (var placed in gen.GetAllRooms())
+            {
+                if (placed.roomGrid == null || !placed.roomGrid.IsInitialized()) continue;
+                if (placed.roomGrid.IsValidGridPosition(pos))
+                {
+                    RoomManager.Instance?.SetCurrentRoom(placed);
+                    return;
+                }
+            }
+        }
     }
 
     private void Update()
     {
         var room = RoomManager.Instance?.GetCurrentRoomGrid();
         var tilemap = room?.GetFloorTilemap();
+
+        // Debug.Log($"[Highlighter] tilemap={tilemap != null} painted={paintedTilemap != null} " +
+            //   $"tile={solidWhiteTile != null} action={UnitActionSystem.Instance?.GetSelectedAction()?.GetType().Name ?? "null"}");
 
         if (tilemap != paintedTilemap)
         {
@@ -164,4 +202,7 @@ public class TilemapHighlighter : MonoBehaviour
     }
 
     public void HideAll() => ResetAll();
+
+    
+
 }

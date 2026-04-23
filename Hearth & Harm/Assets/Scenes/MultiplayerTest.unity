@@ -6287,8 +6287,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1059453624}
   - component: {fileID: 1059453623}
-  - component: {fileID: 1059453622}
-  - component: {fileID: 1059453621}
   - component: {fileID: 1059453625}
   - component: {fileID: 1059453626}
   m_Layer: 0
@@ -6298,37 +6296,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1059453621
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1059453620}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2b8d856b4ff30f6408ecb33484e4b9ac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TilemapHighlighter
-  solidWhiteTile: {fileID: 11400000, guid: 63550933798cae548a04ac4b9d9cd3d3, type: 2}
-  moveColor: {r: 0.2, g: 0.6, b: 1, a: 1}
-  rangeColor: {r: 1, g: 0.85, b: 0, a: 1}
-  aoeColor: {r: 1, g: 0.15, b: 0.15, a: 1}
-  hoverColor: {r: 1, g: 1, b: 1, a: 0.4}
---- !u!114 &1059453622
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1059453620}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8d05f5a69107bc447898eb16380a4253, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MouseWorld2D
-  cam: {fileID: 0}
-  worldZ: 0
 --- !u!114 &1059453623
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -13198,6 +13165,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2124875151}
+  - component: {fileID: 2124875153}
+  - component: {fileID: 2124875152}
+  - component: {fileID: 2124875154}
   m_Layer: 0
   m_Name: UI
   m_TagString: Untagged
@@ -13221,6 +13191,50 @@ Transform:
   - {fileID: 1748013199}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2124875152
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b8d856b4ff30f6408ecb33484e4b9ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TilemapHighlighter
+  solidWhiteTile: {fileID: 11400000, guid: 63550933798cae548a04ac4b9d9cd3d3, type: 2}
+  moveColor: {r: 0.2, g: 0.6, b: 1, a: 1}
+  rangeColor: {r: 1, g: 0.85, b: 0, a: 1}
+  aoeColor: {r: 1, g: 0.15, b: 0.15, a: 1}
+  hoverColor: {r: 1, g: 1, b: 1, a: 0.4}
+--- !u!114 &2124875153
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d05f5a69107bc447898eb16380a4253, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MouseWorld2D
+  cam: {fileID: 0}
+  worldZ: 0
+--- !u!114 &2124875154
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee9fb6f00b02e443bb5c95995b2fe99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GridCostVisualizer
+  costTextPrefab: {fileID: 2949930719687676758, guid: 9eddcada2cdaa9243ad22b9622aba2a6, type: 3}
 --- !u!1 &2129361614
 GameObject:
   m_ObjectHideFlags: 0

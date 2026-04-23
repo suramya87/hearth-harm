@@ -1,17 +1,16 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
 /// <summary>
 /// Central input handler for unit selection and action execution.
-/// Modified to route actions through network authority in multiplayer.
+/// Supports both single-player and multiplayer (NGO).
 ///
-/// CHANGES FROM ORIGINAL:
-///   - Damage calls go through NetworkedHealthBridge.TakeDamage() (static helper)
-///     instead of enemy.Health.TakeDamage() directly
-///   - Move calls go through NetworkedPlayerBridge.PlaceInRoom() when in MP
-///   - In SP: behaves identically to the original
-///
+/// SP:  Selects the unit immediately after LevelGenerator.OnLevelReady fires.
+/// MP:  Polls for the locally-owned NetworkObject for up to ~4 seconds after
+///      level ready, then falls back to per-frame polling in Update so a
+///      late-spawned player object is never missed.
 /// </summary>
 public class UnitActionSystem : MonoBehaviour
 {
@@ -24,10 +23,12 @@ public class UnitActionSystem : MonoBehaviour
     public event EventHandler       OnSelectedActionChange;
     public event EventHandler<bool> OnBusyChanged;
 
-    private Unit       selectedUnit;
+    private Unit      selectedUnit;
     private BaseAction selectedAction;
-    private bool       isBusy;
-    private EnemyUnit  hoveredEnemy;
+    private bool      isBusy;
+    private EnemyUnit hoveredEnemy;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -38,39 +39,50 @@ public class UnitActionSystem : MonoBehaviour
     private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
     private void OnDisable() => LevelGenerator.OnLevelReady -= OnLevelReady;
 
+    // ── Level ready ────────────────────────────────────────────────────────
+
     private void OnLevelReady()
     {
-        // In MP: only auto-select the unit we own
-        var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
-        foreach (var u in units)
-        {
-            if (!GameManager.IsMultiplayer)
-            {
-                SetSelectedUnit(u);
-                break;
-            }
-
-            // In MP: select the unit owned by this client
-            var netBridge = u.GetComponent<NetworkedPlayerBridge>();
-            if (netBridge != null)
-            {
-                // We check ownership via the NetworkObject
-                var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
-                if (netObj != null && netObj.IsOwner)
-                {
-                    SetSelectedUnit(u);
-                    break;
-                }
-            }
-        }
+        selectedUnit   = null;
+        selectedAction = null;
+        StartCoroutine(FindAndSelectUnit());
     }
+
+    /// <summary>
+    /// Polls for a selectable unit after the level generates.
+    /// SP:  finds the unit in 1-2 frames (spawned synchronously by LevelGenerator).
+    /// MP:  waits up to ~4 seconds for the host to spawn and replicate our object.
+    /// </summary>
+    private IEnumerator FindAndSelectUnit()
+    {
+        int maxAttempts = GameManager.IsMultiplayer ? 240 : 10;
+
+        for (int attempt = 0; attempt < maxAttempts && selectedUnit == null; attempt++)
+        {
+            yield return null;
+            TrySelectOwnedUnit();
+        }
+
+        if (selectedUnit == null)
+            Debug.LogWarning("[UnitActionSystem] Could not find a unit to select after waiting.");
+        else
+            Debug.Log($"[UnitActionSystem] Selected unit: {selectedUnit.name}");
+    }
+
+    // ── Update ─────────────────────────────────────────────────────────────
 
     private void Update()
     {
-        if (isBusy)               return;
-        if (selectedUnit == null) return;
+        // Keep trying until we have a unit (handles late MP spawns after coroutine gives up)
+        if (selectedUnit == null)
+        {
+            TrySelectOwnedUnit();
+            return;
+        }
 
-        // In MP: only process input on player turn and when it's allowed
+        if (isBusy) return;
+
+        // Respect turn system
         if (GameManager.IsMultiplayer)
         {
             if (NetworkedTurnSystem.Instance != null && !NetworkedTurnSystem.Instance.IsPlayerPhase)
@@ -87,6 +99,80 @@ public class UnitActionSystem : MonoBehaviour
         HandleInput();
     }
 
+    // ── Unit selection ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Finds and selects the correct unit for this peer.
+    /// SP:  any Unit in the scene.
+    /// MP:  only the NetworkObject we own.
+    /// </summary>
+    private void TrySelectOwnedUnit()
+    {
+        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            if (GameManager.IsMultiplayer)
+            {
+                var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj == null || !netObj.IsOwner) continue;
+            }
+
+            SetSelectedUnit(u);
+
+            // Once we have our unit, make sure the room is set for the highlighter
+            if (GameManager.IsMultiplayer)
+            {
+                var bridge = u.GetComponent<NetworkedPlayerBridge>();
+                if (bridge != null) TrySetRoomFromPlayerBridge(bridge);
+            }
+
+            Debug.Log($"[UnitActionSystem] Selected unit: {u.name}");
+            return;
+        }
+    }
+
+    private void SetSelectedUnit(Unit unit)
+    {
+        selectedUnit = unit;
+        SetSelectedAction(unit.GetMoveAction());
+        OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetSelectedAction(BaseAction action)
+    {
+        selectedAction = action;
+        OnSelectedActionChange?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ── Room resolution ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Uses the bridge's replicated grid position to find which PlacedRoom
+    /// the local player is in, then tells RoomManager about it.
+    /// This fixes the client-side case where SetStartRoomClientRpc used
+    /// roomInstance.name (which can differ across peers).
+    /// </summary>
+    private void TrySetRoomFromPlayerBridge(NetworkedPlayerBridge bridge)
+    {
+        if (RoomManager.Instance?.GetCurrentRoom() != null) return; // already set
+
+        var gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen == null) return;
+
+        GridPosition pos = bridge.GetNetworkGridPosition();
+
+        foreach (var placed in gen.GetAllRooms())
+        {
+            if (placed.roomGrid == null || !placed.roomGrid.IsInitialized()) continue;
+            if (!placed.roomGrid.IsValidGridPosition(pos)) continue;
+
+            RoomManager.Instance?.SetCurrentRoom(placed);
+            Debug.Log($"[UnitActionSystem] Room set from player bridge position {pos}");
+            return;
+        }
+    }
+
+    // ── Input handling ─────────────────────────────────────────────────────
+
     private void HandleInput()
     {
         if (!Input.GetMouseButtonDown(0)) return;
@@ -97,6 +183,7 @@ public class UnitActionSystem : MonoBehaviour
         Vector3      mouseWorld = MouseWorld2D.GetPosition();
         GridPosition mouseGP    = room.GetGridPosition(mouseWorld);
 
+        // Enemy click
         EnemyUnit clickedEnemy = room.GetEnemyAtGridPosition(mouseGP);
         if (clickedEnemy != null && selectedAction is CombatAction ca)
         {
@@ -112,6 +199,7 @@ public class UnitActionSystem : MonoBehaviour
             return;
         }
 
+        // Move / attack on grid
         switch (selectedAction)
         {
             case MoveAction move when move.IsValidTarget(mouseGP):
@@ -126,31 +214,23 @@ public class UnitActionSystem : MonoBehaviour
         }
     }
 
-    // ── Action execution with network routing ──────────────────────────────
+    // ── Action execution ───────────────────────────────────────────────────
 
     private void PerformMove(MoveAction move, GridPosition targetGP)
     {
-        // MoveAction handles the local movement and visual
-        // NetworkedPlayerBridge will sync the final position to other clients
+        // MoveAction handles local movement; NetworkedPlayerBridge syncs position to peers
         move.Move(targetGP, ClearBusy);
     }
 
     private void PerformAttack(CombatAction combat, GridPosition targetGP, EnemyUnit directTarget)
     {
         if (GameManager.IsMultiplayer)
-        {
-            // In MP: perform attack locally for responsiveness,
-            // but route damage through NetworkedHealthBridge
             combat.PerformAttackNetworked(targetGP, ClearBusy);
-        }
         else
-        {
-            // SP: unchanged behaviour
             combat.PerformAttack(targetGP, ClearBusy);
-        }
     }
 
-    // ── Enemy selection ────────────────────────────────────────────────────
+    // ── Enemy hover / selection ────────────────────────────────────────────
 
     private void SelectEnemy(EnemyUnit enemy)
     {
@@ -162,24 +242,13 @@ public class UnitActionSystem : MonoBehaviour
         EnemyHealthUI.Instance?.SetTarget(hc);
     }
 
-    // ── Unit selection ─────────────────────────────────────────────────────
-
-    private void SetSelectedUnit(Unit unit)
-    {
-        selectedUnit = unit;
-        SetSelectedAction(unit.GetMoveAction());
-        OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
-    }
-
-    public void SetSelectedAction(BaseAction action)
-    {
-        selectedAction = action;
-        OnSelectedActionChange?.Invoke(this, EventArgs.Empty);
-    }
+    // ── Busy state ─────────────────────────────────────────────────────────
 
     private void SetBusy()   { isBusy = true;  OnBusyChanged?.Invoke(this, true);  }
     private void ClearBusy() { isBusy = false; OnBusyChanged?.Invoke(this, false); }
 
-    public Unit       GetSelectedUnit()   => selectedUnit;
-    public BaseAction GetSelectedAction() => selectedAction;
+    // ── Public getters ─────────────────────────────────────────────────────
+
+    public Unit        GetSelectedUnit()   => selectedUnit;
+    public BaseAction  GetSelectedAction() => selectedAction;
 }

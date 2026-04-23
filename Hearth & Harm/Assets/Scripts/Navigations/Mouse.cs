@@ -1,13 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Converts the screen-space mouse position to a world position using the 2D
-/// orthographic camera.  Replaces the old 3D Physics.Raycast + LayerMask approach.
-///
-/// SETUP
-///   Attach to any persistent manager GameObject (e.g. GameManager).
-///   Call MouseWorld2D.GetPosition() from anywhere.
-/// </summary>
 public class MouseWorld2D : MonoBehaviour
 {
     public static MouseWorld2D Instance { get; private set; }

@@ -11444,9 +11444,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1059453624}
   - component: {fileID: 1059453623}
-  - component: {fileID: 1059453622}
-  - component: {fileID: 1059453621}
-  - component: {fileID: 1059453625}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -11454,37 +11451,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1059453621
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1059453620}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2b8d856b4ff30f6408ecb33484e4b9ac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TilemapHighlighter
-  solidWhiteTile: {fileID: 11400000, guid: 63550933798cae548a04ac4b9d9cd3d3, type: 2}
-  moveColor: {r: 0.2, g: 0.6, b: 1, a: 1}
-  rangeColor: {r: 1, g: 0.85, b: 0, a: 1}
-  aoeColor: {r: 1, g: 0.15, b: 0.15, a: 1}
-  hoverColor: {r: 1, g: 1, b: 1, a: 0.4}
---- !u!114 &1059453622
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1059453620}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8d05f5a69107bc447898eb16380a4253, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MouseWorld2D
-  cam: {fileID: 0}
-  worldZ: 0
 --- !u!114 &1059453623
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11513,19 +11479,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1059453625
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1059453620}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4ee9fb6f00b02e443bb5c95995b2fe99, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::GridCostVisualizer
-  costTextPrefab: {fileID: 2949930719687676758, guid: 9eddcada2cdaa9243ad22b9622aba2a6, type: 3}
 --- !u!1 &1068484027
 GameObject:
   m_ObjectHideFlags: 0
@@ -12670,11 +12623,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedPlayerSpawner
   ShowTopMostFoldoutHeaderGroup: 1
-  playerPrefabs:
-  - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
-  - {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
-  fallbackPrefab: {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
-  spawnSpread: 1
+  networkedPlayerPrefabs: []
+  offsetSpawnPositions: 1
 --- !u!114 &1158815607
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17904,8 +17854,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1624180979}
   - component: {fileID: 1624180978}
-  - component: {fileID: 1624180981}
-  - component: {fileID: 1624180980}
   m_Layer: 0
   m_Name: GameStateManager
   m_TagString: Untagged
@@ -17940,45 +17888,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1624180980
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1624180977}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 21d37b8540aa6cd48b8e130972afb0a6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::LoseScreen
-  panelRoot: {fileID: 2094816304}
-  titleLabel: {fileID: 0}
-  stagesClearedLabel: {fileID: 0}
-  levelReachedLabel: {fileID: 0}
-  retryButton: {fileID: 1444796918}
-  mainMenuButton: {fileID: 1659019625}
-  mainMenuScene: MainMenu
-  retryResetsProgress: 1
---- !u!114 &1624180981
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1624180977}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 51272f107d962604fa3c0277262b55ef, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EndRoomUI
-  mainMenuSceneName: MainMenu
-  panelRoot: {fileID: 1375333557}
-  nextLevelButton: {fileID: 1609968012}
-  mainMenuButton: {fileID: 1536624750}
-  levelLabel: {fileID: 0}
-  stagesClearedLabel: {fileID: 0}
-  nextLevelLabel: {fileID: 0}
 --- !u!1 &1648913377
 GameObject:
   m_ObjectHideFlags: 0
@@ -23129,6 +23038,11 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2124875151}
+  - component: {fileID: 2124875154}
+  - component: {fileID: 2124875153}
+  - component: {fileID: 2124875152}
+  - component: {fileID: 2124875156}
+  - component: {fileID: 2124875155}
   m_Layer: 0
   m_Name: UI
   m_TagString: Untagged
@@ -23152,6 +23066,89 @@ Transform:
   - {fileID: 1748013199}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2124875152
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d05f5a69107bc447898eb16380a4253, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MouseWorld2D
+  cam: {fileID: 0}
+  worldZ: 0
+--- !u!114 &2124875153
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee9fb6f00b02e443bb5c95995b2fe99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GridCostVisualizer
+  costTextPrefab: {fileID: 2949930719687676758, guid: 9eddcada2cdaa9243ad22b9622aba2a6, type: 3}
+--- !u!114 &2124875154
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b8d856b4ff30f6408ecb33484e4b9ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TilemapHighlighter
+  solidWhiteTile: {fileID: 11400000, guid: 63550933798cae548a04ac4b9d9cd3d3, type: 2}
+  moveColor: {r: 0.2, g: 0.6, b: 1, a: 0.53333336}
+  rangeColor: {r: 1, g: 0.85, b: 0, a: 0.54509807}
+  aoeColor: {r: 1, g: 0.15, b: 0.15, a: 0.53333336}
+  hoverColor: {r: 1, g: 1, b: 1, a: 0.4}
+--- !u!114 &2124875155
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21d37b8540aa6cd48b8e130972afb0a6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LoseScreen
+  panelRoot: {fileID: 2094816304}
+  titleLabel: {fileID: 0}
+  stagesClearedLabel: {fileID: 0}
+  levelReachedLabel: {fileID: 0}
+  retryButton: {fileID: 1444796918}
+  mainMenuButton: {fileID: 1659019625}
+  mainMenuScene: MainMenu
+  retryResetsProgress: 1
+--- !u!114 &2124875156
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124875150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 51272f107d962604fa3c0277262b55ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EndRoomUI
+  mainMenuSceneName: MainMenu
+  panelRoot: {fileID: 1375333557}
+  nextLevelButton: {fileID: 1609968012}
+  mainMenuButton: {fileID: 1536624750}
+  levelLabel: {fileID: 0}
+  stagesClearedLabel: {fileID: 0}
+  nextLevelLabel: {fileID: 0}
 --- !u!1 &2129361614
 GameObject:
   m_ObjectHideFlags: 0

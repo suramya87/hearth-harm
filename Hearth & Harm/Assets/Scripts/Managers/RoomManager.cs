@@ -34,7 +34,10 @@ public class RoomManager : MonoBehaviour
         OnRoomChanged?.Invoke(room);
         OnAnyRoomChanged?.Invoke(room);
         UpdateCamera(room);
-        Debug.Log($"[RoomManager] Current room → {room?.roomInstance?.name}");
+        Debug.Log($"[Highlighter] RoomManager={RoomManager.Instance != null} " +
+          $"currentRoom={RoomManager.Instance?.GetCurrentRoom() != null} " +
+          $"roomGrid={RoomManager.Instance?.GetCurrentRoom()?.roomGrid != null} " +
+          $"tilemap={RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap() != null}");
     }
 
     public void ClearCurrentRoom()
