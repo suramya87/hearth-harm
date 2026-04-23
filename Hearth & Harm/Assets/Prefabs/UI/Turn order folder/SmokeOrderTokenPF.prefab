@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 5661313294699906996}
   - component: {fileID: 8600735275530413353}
   - component: {fileID: 6903264961509379010}
+  - component: {fileID: 82419065003713010}
   m_Layer: 5
   m_Name: SmokeOrderTokenPF
   m_TagString: Untagged
@@ -77,6 +78,20 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &82419065003713010
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 397660961265149036}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d39b2abe18187514691e8fa97e7032ed, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurnOrderTokenUI
+  nameText: {fileID: 1366037516761650899}
+  iconImage: {fileID: 3926551603737097777}
 --- !u!1 &3037335764440063418
 GameObject:
   m_ObjectHideFlags: 0

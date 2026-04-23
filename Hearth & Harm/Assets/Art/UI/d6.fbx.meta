@@ -1,9 +1,14 @@
 fileFormatVersion: 2
-guid: 5453e2c01a0a0c843b45ac9cee71e301
+guid: 1d335625647e5d84aacdb61a0afd9701
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: dice_MAT
+    second: {fileID: 2100000, guid: 1ecd85bfe8a8e514980bf9785bf7eddb, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0

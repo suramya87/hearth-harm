@@ -41,8 +41,13 @@ public class EnemyManager : MonoBehaviour
     {
         var room = e.CurrentRoomGrid;
         if (!active.Remove(e)) return;
+
+        if (EnemyTurnQueue.Instance != null)
+            EnemyTurnQueue.Instance.RemoveEnemy(e);
+
         if (showDebugLogs) Debug.Log($"[EnemyManager] -{e.Stats?.enemyName} remain:{active.Count}");
         OnEnemyListChanged?.Invoke();
+
         if (room != null && GetEnemiesInRoom(room).Count == 0)
         {
             Debug.Log($"[EnemyManager] Room cleared: {room.gameObject.name}");
@@ -55,6 +60,10 @@ public class EnemyManager : MonoBehaviour
         if (running) { StopAllCoroutines(); running = false; }
         foreach (var e in active) if (e != null) Destroy(e.gameObject);
         active.Clear();
+
+        if (EnemyTurnQueue.Instance != null)
+            EnemyTurnQueue.Instance.ClearQueue();
+
         OnEnemyListChanged?.Invoke();
         Debug.Log("[EnemyManager] All enemies cleared.");
     }
@@ -72,32 +81,47 @@ public class EnemyManager : MonoBehaviour
     }
 
     // ── Turn execution ─────────────────────────────────────────────────────
+    private void BuildQueueForCurrentRoom()
+    {
+        RoomGrid room = RoomManager.Instance?.GetCurrentRoomGrid();
+        if (room == null || EnemyTurnQueue.Instance == null) return;
 
+        EnemyTurnQueue.Instance.BuildQueue(room, GetEnemiesInRoom(room));
+    }
     public void RunEnemyTurns()
     {
         if (running) return;
+
+        BuildQueueForCurrentRoom();
         StartCoroutine(RunTurns());
     }
 
     private IEnumerator RunTurns()
     {
         running = true;
-        if (showDebugLogs) Debug.Log($"[EnemyManager] Running {active.Count} enemy turns.");
 
-        var snapshot = new List<EnemyUnit>(active);
-        foreach (var enemy in snapshot)
+        List<EnemyUnit> queueSnapshot = EnemyTurnQueue.Instance != null
+            ? EnemyTurnQueue.Instance.GetQueuedEnemies()
+            : new List<EnemyUnit>();
+
+        if (showDebugLogs) Debug.Log($"[EnemyManager] Running {queueSnapshot.Count} enemy turns.");
+
+        foreach (var enemy in queueSnapshot)
         {
             if (enemy == null || enemy.IsDead) continue;
 
-            var ai      = enemy.GetComponent<EnemyAI>();
-            var ranged  = enemy.GetComponent<RangedEnemyAI>();
+            var ai = enemy.GetComponent<EnemyAI>();
+            var ranged = enemy.GetComponent<RangedEnemyAI>();
             if (ai == null && ranged == null) continue;
 
             bool done = false;
             if (ranged != null) ranged.TakeTurn(() => done = true);
-            else                ai.TakeTurn(()    => done = true);
+            else ai.TakeTurn(() => done = true);
 
             yield return new WaitUntil(() => done);
+
+            if (enemy != null && !enemy.IsDead && EnemyTurnQueue.Instance != null)
+                EnemyTurnQueue.Instance.RotateEnemyToBack(enemy);
         }
 
         running = false;
