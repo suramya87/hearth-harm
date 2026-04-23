@@ -39,11 +39,17 @@ public class RoomDoor : MonoBehaviour
 
     private void OnMouseDown()
     {
-        if (!ready) return;
+        if (!ready || connectedRoom == null)
+        {
+            gen = FindAnyObjectByType<LevelGenerator>();
+            connectedRoom = gen?.GetConnectedRoom(ownerRoom, doorDir);
+            ready = connectedRoom != null;
+            if (!ready) return;
+        }
 
-        // Find the correct unit for this peer
         var player = FindLocalUnit();
         if (player == null) return;
+        if (!PlayerIsInThisRoom(player)) return;
 
         // Only act if the player is actually in this room
         if (!PlayerIsInThisRoom(player)) return;
@@ -102,7 +108,11 @@ public class RoomDoor : MonoBehaviour
     private bool PlayerIsInThisRoom(Unit player)
     {
         var currentRoom = player.GetCurrentRoomGrid();
-        return currentRoom != null && currentRoom == ownerRoom.roomGrid;
+        if (currentRoom == null || ownerRoom?.roomGrid == null) return false;
+        
+        // Compare by name since client/host may have different object references
+        // for the same logical room
+        return currentRoom.gameObject.name == ownerRoom.roomGrid.gameObject.name;
     }
 
     private LevelGenerator.Direction DetermineDirection(LevelGenerator.PlacedRoom owner)

@@ -17,6 +17,7 @@ MonoBehaviour:
   - offset: {x: -1, y: 0}
   - offset: {x: 0, y: 1}
   - offset: {x: 0, y: -1}
+  - offset: {x: 0, y: 0}
   minRange: 1
   maxRange: 51
-  _info: 'Tiles: 4  Range: 1-51 (RANGED)'
+  _info: 'Tiles: 5  Range: 1-51 (RANGED)'
