@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -15,9 +14,6 @@ public class CombatAction : BaseAction
     [Header("Optional dice box UI")]
     [SerializeField] private DiceBoxUI diceBox;
 
-    [Header("Damage Numbers")]
-    [SerializeField] private GameObject damageNumberPrefab;
-
     private Vector2Int         currentFacing = new(0, 1);
     private List<GridPosition> lastPreview   = new();
 
@@ -29,8 +25,7 @@ public class CombatAction : BaseAction
 
     private void Start()
     {
-        if (diceBox == null)
-            diceBox = FindFirstObjectByType<DiceBoxUI>();
+        if (diceBox == null) diceBox = FindAnyObjectByType<DiceBoxUI>();
     }
 
     // ── Preview ────────────────────────────────────────────────────────────
@@ -72,22 +67,12 @@ public class CombatAction : BaseAction
 
     private void ExecuteAttackFlow(GridPosition targetGP, Action onComplete)
     {
-        StartCoroutine(ExecuteAttackFlowRoutine(targetGP, onComplete));
-    }
-
-    private IEnumerator ExecuteAttackFlowRoutine(GridPosition targetGP, Action onComplete)
-    {
-        if (actionData == null)
-        {
-            onComplete?.Invoke();
-            yield break;
-        }
+        if (actionData == null) { onComplete?.Invoke(); return; }
 
         onActionComplete = onComplete;
         isActive = true;
 
         var unitGP = unit.GetGridPosition();
-
         if (actionData.rotatesToFacing)
             currentFacing = ApplyCorrection(FacingToward(unitGP, targetGP));
 
@@ -102,50 +87,28 @@ public class CombatAction : BaseAction
 
         SpendStamina();
 
-        // 🎲 STEP 1: Roll dice (logic only)
-        List<int> rolls = RollDamageDice();
-
-        int finalDamage = 0;
-        bool diceFinished = false;
-
-        // 🎲 STEP 2: Play presentation
-        if (diceBox != null)
-        {
-            yield return diceBox.PlayRollPresentation(rolls, actionData.flatBonus, (result) =>
-            {
-                finalDamage = Mathf.RoundToInt(result * actionData.damageMultiplier);
-                diceFinished = true;
-            });
-        }
-        else
-        {
-            finalDamage = CalculateDamage(rolls);
-            diceFinished = true;
-        }
-
-        // Wait safety (in case)
-        while (!diceFinished)
-            yield return null;
-
-        // 💥 STEP 3: Apply damage AFTER dice animation
+        // Multiplayer: server is authoritative for damage — route through bridge.
+        // Single-player: apply directly.
         if (GameManager.IsMultiplayer)
-            ApplyDamageWithValueNetworked(hitPositions, finalDamage);
+            ApplyDamageNetworked(hitPositions);
         else
-            ApplyDamageWithValue(hitPositions, finalDamage);
+            ApplyDamage(hitPositions);
 
         playerAnimator?.RefreshStaminaState();
 
         isActive = false;
         SelectMoveAction();
-
         onActionComplete?.Invoke();
     }
 
     // ── Damage Application ─────────────────────────────────────────────────
-    private void ApplyDamageWithValue(List<GridPosition> positions, int dmg)
+
+    private void ApplyDamage(List<GridPosition> positions)
     {
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
+
+        int dmg = RollDamage();
 
         foreach (var pos in positions)
         {
@@ -154,25 +117,23 @@ public class CombatAction : BaseAction
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
-
                 enemy.Health.TakeDamage(dmg);
-                DamageNumber.Spawn(damageNumberPrefab, enemy.transform.position, dmg);
             }
 
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
-
                 target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
-                DamageNumber.Spawn(damageNumberPrefab, target.transform.position, dmg);
             }
         }
     }
 
-    private void ApplyDamageWithValueNetworked(List<GridPosition> positions, int dmg)
+    private void ApplyDamageNetworked(List<GridPosition> positions)
     {
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
+
+        int dmg = RollDamage();
 
         foreach (var pos in positions)
         {
@@ -191,7 +152,6 @@ public class CombatAction : BaseAction
             }
         }
     }
-    
 
     // ── Valid targets ──────────────────────────────────────────────────────
 
@@ -275,23 +235,17 @@ public class CombatAction : BaseAction
     private static readonly Vector2Int[] _cardinals = { new(0,1), new(0,-1), new(1,0), new(-1,0) };
     private static IEnumerable<Vector2Int> Cardinals() => _cardinals;
 
-    private List<int> RollDamageDice()
+    private int RollDamage()
     {
-        if (!actionData.useDiceDamage)
-            return new List<int> { actionData.baseDamage };
+        if (!actionData.useDiceDamage) return actionData.baseDamage;
+        if (actionData.diceCount <= 0) return actionData.flatBonus;
 
-        if (actionData.diceCount <= 0)
-            return new List<int>();
-
-        return DiceRoller.RollMultiple(actionData.dieType, actionData.diceCount);
-    }
-
-    private int CalculateDamage(List<int> rolls)
-    {
+        var rolls = DiceRoller.RollMultiple(actionData.dieType, actionData.diceCount);
         int total = actionData.flatBonus;
+        foreach (int r in rolls) total += r;
 
-        foreach (int r in rolls)
-            total += r;
+        diceBox?.Clear();
+        diceBox?.ShowRoll(rolls, actionData.flatBonus);
 
         return Mathf.Max(1, Mathf.RoundToInt(total * actionData.damageMultiplier));
     }
