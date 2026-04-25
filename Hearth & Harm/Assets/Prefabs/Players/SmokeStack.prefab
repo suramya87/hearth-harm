@@ -370,7 +370,7 @@ MonoBehaviour:
   actionData: {fileID: 11400000, guid: 97b874ead8732e84ebe619eb2498f8ea, type: 2}
   facingRotationSteps: 1
   diceBox: {fileID: 0}
-  damageNumberPrefab: {fileID: 0}
+  damageNumberPrefab: {fileID: 395528008300433492, guid: d4a5670d4a79972499664c1786a8364f, type: 3}
 --- !u!114 &6970145410071607390
 MonoBehaviour:
   m_ObjectHideFlags: 0
