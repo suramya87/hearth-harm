@@ -192,10 +192,18 @@ public class CombatAction : BaseAction
     public bool IsValidTarget(GridPosition gp) =>
         GetValidActionGridPositionList().Contains(gp);
 
-    public bool CanAfford() =>
-        playerStats == null ||
-        !actionData.requiresEnoughStamina ||
-        playerStats.currentStamina >= actionData.staminaCost;
+    public bool CanAfford()
+    {
+        if (actionData == null) return false;
+
+        if (!actionData.requiresEnoughStamina)
+            return true;
+
+        if (playerStats == null)
+            return false;
+
+        return playerStats.currentStamina >= actionData.staminaCost;
+    }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 

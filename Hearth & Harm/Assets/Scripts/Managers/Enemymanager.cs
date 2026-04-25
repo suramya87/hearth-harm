@@ -16,9 +16,16 @@ public class EnemyManager : MonoBehaviour
     private readonly List<EnemyUnit> active = new();
     private bool running;
 
-    public event Action          OnEnemyTurnsComplete;
-    public event Action          OnEnemyListChanged;
+    public event Action OnEnemyTurnsComplete;
+    public event Action OnEnemyListChanged;
     public event Action<RoomGrid> OnRoomCleared;
+
+    [Header("Enemy Turn Pacing")]
+    [SerializeField] private float delayBeforeEnemyTurn = 0.35f;
+    [SerializeField] private float delayAfterEnemyTurn = 0.45f;
+
+    public event Action<EnemyUnit> OnEnemyTurnStarted;
+    public event Action<EnemyUnit> OnEnemyTurnFinished;
 
     private void Awake()
     {
@@ -114,11 +121,27 @@ public class EnemyManager : MonoBehaviour
             var ranged = enemy.GetComponent<RangedEnemyAI>();
             if (ai == null && ranged == null) continue;
 
+            if (showDebugLogs)
+                Debug.Log($"[EnemyManager] Enemy turn started: {enemy.Stats?.enemyName ?? enemy.name}");
+
+            OnEnemyTurnStarted?.Invoke(enemy);
+
+            if (delayBeforeEnemyTurn > 0f)
+                yield return new WaitForSeconds(delayBeforeEnemyTurn);
+
             bool done = false;
             if (ranged != null) ranged.TakeTurn(() => done = true);
             else ai.TakeTurn(() => done = true);
 
             yield return new WaitUntil(() => done);
+
+            if (delayAfterEnemyTurn > 0f)
+                yield return new WaitForSeconds(delayAfterEnemyTurn);
+
+            OnEnemyTurnFinished?.Invoke(enemy);
+
+            if (showDebugLogs)
+                Debug.Log($"[EnemyManager] Enemy turn finished: {enemy.Stats?.enemyName ?? enemy.name}");
 
             if (enemy != null && !enemy.IsDead && EnemyTurnQueue.Instance != null)
                 EnemyTurnQueue.Instance.RotateEnemyToBack(enemy);
