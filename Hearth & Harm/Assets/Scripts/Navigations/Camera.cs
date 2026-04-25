@@ -290,10 +290,11 @@ public class CameraController2D : MonoBehaviour
 
     private void HandlePlayerTurnBegin()
     {
+        cameraInputLocked = false;
+
         if (!recenterOnPlayerTurn)
         {
             followTarget = null;
-            cameraInputLocked = false;
             unlockWhenCentered = false;
             return;
         }
@@ -303,13 +304,11 @@ public class CameraController2D : MonoBehaviour
         if (player == null)
         {
             followTarget = null;
-            cameraInputLocked = false;
             unlockWhenCentered = false;
             return;
         }
 
         followTarget = player;
-        cameraInputLocked = true;
         unlockWhenCentered = true;
         snapping = false;
     }
