@@ -15,6 +15,19 @@ public class TurnOrderTokenUI : MonoBehaviour
     private EnemyUnit boundEnemy;
     private Unit boundPlayer;
 
+    [SerializeField] private Image background;
+    private Color normalColor;
+    public void SetHighlighted(bool value)
+    {
+        if (background == null) return;
+
+        background.color = value ? Color.white : normalColor;
+    }
+    private void Awake()
+    {
+        if (background != null)
+            normalColor = background.color;
+    }
     public void BindEnemy(EnemyUnit enemy)
     {
         boundEnemy = enemy;
