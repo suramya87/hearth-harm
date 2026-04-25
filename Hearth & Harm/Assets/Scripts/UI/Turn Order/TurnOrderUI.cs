@@ -40,48 +40,9 @@ public class TurnOrderUI : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool showDebugLogs;
 
-    [Header("Enemy Token Animation")]
-    [SerializeField] private float enemyTokenHeight = 34f;
-    [SerializeField] private float enemyTokenSpacing = 6f;
-    [SerializeField] private float enemyTokenMoveSpeed = 12f;
-
-    [SerializeField] private float enemyTokenXOffset = 0f;
-    [SerializeField] private float enemyTokenTopY = 150f;
-
-    private readonly Dictionary<EnemyUnit, GameObject> enemyTokenMap = new();
-    private readonly Dictionary<GameObject, Vector2> enemyTokenTargets = new();
     private readonly List<GameObject> playerTokenObjects = new();
     private readonly List<GameObject> enemyTokenObjects = new();
 
-    private void Update()
-    {
-        AnimateEnemyTokens();
-    }
-
-    private void OnValidate()
-    {
-        if (!Application.isPlaying) return;
-
-        RecalculateEnemyTokenTargets();
-    }
-
-    private void AnimateEnemyTokens()
-    {
-        foreach (var pair in enemyTokenTargets)
-        {
-            GameObject tokenObj = pair.Key;
-            if (tokenObj == null) continue;
-
-            RectTransform rect = tokenObj.GetComponent<RectTransform>();
-            if (rect == null) continue;
-
-            rect.anchoredPosition = Vector2.Lerp(
-                rect.anchoredPosition,
-                pair.Value,
-                enemyTokenMoveSpeed * Time.deltaTime
-            );
-        }
-    }
 
     private void HandleLevelReady()
     {
@@ -131,11 +92,6 @@ public class TurnOrderUI : MonoBehaviour
         {
             Debug.LogWarning("[TurnOrderUI] EnemyManager.Instance was null in Start.");
         }
-        if (EnemyManager.Instance != null)
-        {
-            EnemyManager.Instance.OnEnemyTurnStarted += HandleEnemyTurnStarted;
-            EnemyManager.Instance.OnEnemyTurnFinished += HandleEnemyTurnFinished;
-        }
 
         RefreshAll();
     }
@@ -157,11 +113,6 @@ public class TurnOrderUI : MonoBehaviour
         if (EnemyManager.Instance != null)
         {
             EnemyManager.Instance.OnEnemyListChanged -= RefreshEnemyTokens;
-        }
-        if (EnemyManager.Instance != null)
-        {
-            EnemyManager.Instance.OnEnemyTurnStarted -= HandleEnemyTurnStarted;
-            EnemyManager.Instance.OnEnemyTurnFinished -= HandleEnemyTurnFinished;
         }
 
         LevelGenerator.OnLevelReady -= HandleLevelReady;
@@ -190,59 +141,33 @@ public class TurnOrderUI : MonoBehaviour
 
     private void RefreshEnemyTokens()
     {
+        Debug.Log("[TurnOrderUI] RefreshEnemyTokens called.");
+
+        ClearEnemyTokens();
+
         if (enemyTurnsRoot == null || enemyTokenPrefabs == null || enemyTokenPrefabs.Count == 0)
+        {
+            Debug.LogWarning("[TurnOrderUI] Enemy roots or prefabs missing.");
             return;
+        }
 
         if (EnemyTurnQueue.Instance == null)
+        {
+            Debug.LogWarning("[TurnOrderUI] EnemyTurnQueue.Instance is null.");
             return;
+        }
 
         List<EnemyUnit> queuedEnemies = EnemyTurnQueue.Instance.GetQueuedEnemies();
+        Debug.Log($"[TurnOrderUI] queuedEnemies count: {queuedEnemies.Count}");
 
-        // Remove tokens for enemies no longer in queue
-        List<EnemyUnit> toRemove = new();
-
-        foreach (var pair in enemyTokenMap)
-        {
-            if (!queuedEnemies.Contains(pair.Key) || pair.Key == null || pair.Key.IsDead)
-            {
-                if (pair.Value != null)
-                    Destroy(pair.Value);
-
-                toRemove.Add(pair.Key);
-            }
-        }
-
-        foreach (EnemyUnit enemy in toRemove)
-        {
-            if (!enemyTokenMap.TryGetValue(enemy, out GameObject tokenObj)) continue;
-
-            enemyTokenObjects.Remove(tokenObj);
-            enemyTokenTargets.Remove(tokenObj);
-
-            if (tokenObj != null)
-                Destroy(tokenObj);
-
-            enemyTokenMap.Remove(enemy);
-        }
-
-        // Create missing tokens
         foreach (EnemyUnit enemy in queuedEnemies)
         {
             if (enemy == null || enemy.IsDead) continue;
-            if (enemyTokenMap.ContainsKey(enemy)) continue;
 
             GameObject prefab = GetEnemyTokenPrefab(enemy);
             if (prefab == null) continue;
 
             GameObject tokenObj = Instantiate(prefab, enemyTurnsRoot);
-
-            RectTransform spawnedRect = tokenObj.GetComponent<RectTransform>();
-            if (spawnedRect != null)
-            {
-                spawnedRect.anchoredPosition = new Vector2(0, enemyTokenTopY);
-            }
-
-            enemyTokenMap[enemy] = tokenObj;
             enemyTokenObjects.Add(tokenObj);
 
             TurnOrderTokenUI tokenUI = tokenObj.GetComponent<TurnOrderTokenUI>();
@@ -250,25 +175,10 @@ public class TurnOrderUI : MonoBehaviour
             {
                 tokenUI.BindEnemy(enemy);
             }
+
+            if (showDebugLogs)
+                Debug.Log($"[TurnOrderUI] Added enemy token for {enemy.name}");
         }
-
-        // Assign target positions based on queue order
-        for (int i = 0; i < queuedEnemies.Count; i++)
-        {
-            EnemyUnit enemy = queuedEnemies[i];
-            if (enemy == null || enemy.IsDead) continue;
-            if (!enemyTokenMap.TryGetValue(enemy, out GameObject tokenObj)) continue;
-
-            RectTransform rect = tokenObj.GetComponent<RectTransform>();
-            if (rect == null) continue;
-
-            Vector2 target = new Vector2(
-                enemyTokenXOffset,
-                enemyTokenTopY - i * (enemyTokenHeight + enemyTokenSpacing)
-            );
-            enemyTokenTargets[tokenObj] = target;
-        }
-        RecalculateEnemyTokenTargets();
     }
 
     private void RefreshPlayerTokens()
@@ -304,6 +214,16 @@ public class TurnOrderUI : MonoBehaviour
         }
     }
 
+    private void ClearEnemyTokens()
+    {
+        for (int i = 0; i < enemyTokenObjects.Count; i++)
+        {
+            if (enemyTokenObjects[i] != null)
+                Destroy(enemyTokenObjects[i]);
+        }
+
+        enemyTokenObjects.Clear();
+    }
 
     private void ClearPlayerTokens()
     {
@@ -317,39 +237,7 @@ public class TurnOrderUI : MonoBehaviour
     }
 
     // ── Phase Events ──────────────────────────────────────────────────────
-    private void HandleEnemyTurnStarted(EnemyUnit enemy)
-    {
-        if (showDebugLogs)
-            Debug.Log($"[TurnOrderUI] Highlighting {enemy.name}");
 
-        foreach (var obj in enemyTokenObjects)
-        {
-            if (obj == null) continue;
-
-            var token = obj.GetComponent<TurnOrderTokenUI>();
-            if (token == null) continue;
-
-            if (token.GetBoundEnemy() == enemy)
-                token.SetHighlighted(true);
-        }
-    }
-
-    private void HandleEnemyTurnFinished(EnemyUnit enemy)
-    {
-        if (showDebugLogs)
-            Debug.Log($"[TurnOrderUI] Un-highlighting {enemy.name}");
-
-        foreach (var obj in enemyTokenObjects)
-        {
-            if (obj == null) continue;
-
-            var token = obj.GetComponent<TurnOrderTokenUI>();
-            if (token == null) continue;
-
-            if (token.GetBoundEnemy() == enemy)
-                token.SetHighlighted(false);
-        }
-    }
     private void HandlePlayerTurnBegin()
     {
         if (showDebugLogs)
@@ -364,6 +252,7 @@ public class TurnOrderUI : MonoBehaviour
             Debug.Log("[TurnOrderUI] Enemy phase began.");
 
         RefreshPhaseOverlays();
+        RefreshEnemyTokens();
     }
 
     private void HandleEnemyPhaseEnd()
@@ -372,6 +261,7 @@ public class TurnOrderUI : MonoBehaviour
             Debug.Log("[TurnOrderUI] Enemy phase ended.");
 
         RefreshPhaseOverlays();
+        RefreshEnemyTokens();
     }
 
     private GameObject GetEnemyTokenPrefab(EnemyUnit enemy)
@@ -414,26 +304,5 @@ public class TurnOrderUI : MonoBehaviour
         }
 
         return null;
-    }
-
-    private void RecalculateEnemyTokenTargets()
-    {
-        if (EnemyTurnQueue.Instance == null) return;
-
-        List<EnemyUnit> queuedEnemies = EnemyTurnQueue.Instance.GetQueuedEnemies();
-
-        for (int i = 0; i < queuedEnemies.Count; i++)
-        {
-            EnemyUnit enemy = queuedEnemies[i];
-            if (enemy == null || enemy.IsDead) continue;
-            if (!enemyTokenMap.TryGetValue(enemy, out GameObject tokenObj)) continue;
-
-            Vector2 target = new Vector2(
-                enemyTokenXOffset,
-                enemyTokenTopY - i * (enemyTokenHeight + enemyTokenSpacing)
-            );
-
-            enemyTokenTargets[tokenObj] = target;
-        }
     }
 }

@@ -111,9 +111,6 @@ public class TilemapHighlighter : MonoBehaviour
         if (GridCostVisualizer.Instance != null)
             GridCostVisualizer.Instance.ClearAll();
 
-        if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn)
-            return;
-
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
 

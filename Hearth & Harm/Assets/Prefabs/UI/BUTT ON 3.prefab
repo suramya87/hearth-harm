@@ -575,5 +575,5 @@ MonoBehaviour:
   actionIcon: {fileID: 0}
   staminaCostRoot: {fileID: 5500324636673053658}
   staminaCostText: {fileID: 8923576968902563551}
-  unaffordableAlpha: 0.125
+  unaffordableAlpha: 0.4
   canvasGroup: {fileID: 0}
