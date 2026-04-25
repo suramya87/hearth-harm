@@ -168,7 +168,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
   stats: {fileID: 11400000, guid: 94ecf9ccfc27a954f8a87512552cfe77, type: 2}
   showDebugLogs: 0
-  selectedVisual: {fileID: 0}
+  selectedVisual: {fileID: 8851842555451419647}
 --- !u!114 &3876110778640179471
 MonoBehaviour:
   m_ObjectHideFlags: 0

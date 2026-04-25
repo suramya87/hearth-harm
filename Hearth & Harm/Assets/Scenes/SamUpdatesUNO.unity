@@ -1778,8 +1778,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyManager
   showDebugLogs: 1
-  delayBeforeEnemyTurn: 0.35
-  delayAfterEnemyTurn: 0.45
+  delayBeforeEnemyTurn: 1
+  delayAfterEnemyTurn: 1
 --- !u!4 &251906810
 Transform:
   m_ObjectHideFlags: 0
@@ -9776,6 +9776,11 @@ MonoBehaviour:
   orthoMin: 3
   orthoMax: 8
   snapSmoothness: 10
+  followEnemyTurns: 1
+  lockCameraDuringEnemyTurns: 1
+  recenterOnPlayerTurn: 1
+  followSmoothness: 8
+  unlockDistance: 0.05
   shakeFrequency: 25
 --- !u!1 &1434821556
 GameObject:
