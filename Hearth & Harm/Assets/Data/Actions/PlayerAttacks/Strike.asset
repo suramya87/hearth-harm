@@ -26,14 +26,14 @@ MonoBehaviour:
   minRange: 0
   maxRange: 0
   canTargetSelf: 0
-  staminaCost: 4
+  staminaCost: 5
   requiresEnoughStamina: 1
   aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
   rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
   showSpritePerTile: 0
   _summary: 'Damage: 6d6+0
 
-    Stamina: 4
+    Stamina: 5
 
     Pattern: StrikeATP
 
