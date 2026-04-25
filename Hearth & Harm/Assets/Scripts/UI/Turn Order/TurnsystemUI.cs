@@ -22,6 +22,8 @@ public class TurnSystemUI : MonoBehaviour
     [SerializeField] private float flashInterval            = 0.3f;
     [SerializeField] private float disabledFeedbackDuration = 0.15f;
 
+    [SerializeField] private GameObject playerTurnOnlyUI;
+
     private PlayerStats localStats;
     private Coroutine   flashRoutine;
 
@@ -43,6 +45,7 @@ public class TurnSystemUI : MonoBehaviour
         SetOverlay(endTurnFlashOverlay,   false);
         SetOverlay(disabledClickFeedback, false);
         UpdateTurnText();
+        SetPlayerTurnUI(TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn);
     }
 
     private void OnLevelReady()
@@ -125,12 +128,16 @@ public class TurnSystemUI : MonoBehaviour
 
     private void OnPlayerTurnBegin()
     {
+        SetPlayerTurnUI(true);
+
         if (endTurnButton) endTurnButton.interactable = true;
         UpdateTurnText();
     }
 
     private void OnEnemyPhaseBegin()
     {
+        SetPlayerTurnUI(false);
+
         StopFlash();
         if (endTurnButton) endTurnButton.interactable = false;
     }
@@ -170,5 +177,11 @@ public class TurnSystemUI : MonoBehaviour
     private static void SetOverlay(GameObject obj, bool active)
     {
         if (obj != null) obj.SetActive(active);
+    }
+
+    private void SetPlayerTurnUI(bool active)
+    {
+        if (playerTurnOnlyUI != null)
+            playerTurnOnlyUI.SetActive(active);
     }
 }

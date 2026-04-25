@@ -370,6 +370,7 @@ MonoBehaviour:
   actionData: {fileID: 11400000, guid: c5f3dcb2005c4a140b13f1bc478eec6b, type: 2}
   facingRotationSteps: 1
   diceBox: {fileID: 0}
+  damageNumberPrefab: {fileID: 395528008300433492, guid: d4a5670d4a79972499664c1786a8364f, type: 3}
 --- !u!114 &6970145410071607390
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -385,6 +386,7 @@ MonoBehaviour:
   actionData: {fileID: 11400000, guid: ee882e684e75fc24192c1d45aa655a86, type: 2}
   facingRotationSteps: 1
   diceBox: {fileID: 0}
+  damageNumberPrefab: {fileID: 395528008300433492, guid: d4a5670d4a79972499664c1786a8364f, type: 3}
 --- !u!212 &3343925516540839920
 SpriteRenderer:
   serializedVersion: 2
@@ -501,7 +503,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2903561183
+  GlobalObjectIdHash: 3633522400
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1

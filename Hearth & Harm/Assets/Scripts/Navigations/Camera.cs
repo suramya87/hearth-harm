@@ -36,6 +36,17 @@ public class CameraController2D : MonoBehaviour
     [Header("Snap")]
     [SerializeField] private float snapSmoothness = 6f;
 
+    [Header("Turn Follow")]
+    [SerializeField] private bool followEnemyTurns = true;
+    [SerializeField] private bool lockCameraDuringEnemyTurns = true;
+    [SerializeField] private bool recenterOnPlayerTurn = true;
+    [SerializeField] private float followSmoothness = 8f;
+    [SerializeField] private float unlockDistance = 0.05f;
+
+    private Transform followTarget;
+    private bool cameraInputLocked;
+    private bool unlockWhenCentered;
+
     [Header("Screen Shake")]
     [SerializeField] private float shakeFrequency = 25f;
 
@@ -50,6 +61,31 @@ public class CameraController2D : MonoBehaviour
 
     private float   shakeTime, shakeDur, shakeAmp;
 
+    private void Start()
+    {
+        if (EnemyManager.Instance != null)
+        {
+            EnemyManager.Instance.OnEnemyTurnStarted += HandleEnemyTurnStarted;
+        }
+
+        if (TurnSystem.Instance != null)
+        {
+            TurnSystem.Instance.OnPlayerTurnBegin += HandlePlayerTurnBegin;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (EnemyManager.Instance != null)
+        {
+            EnemyManager.Instance.OnEnemyTurnStarted -= HandleEnemyTurnStarted;
+        }
+
+        if (TurnSystem.Instance != null)
+        {
+            TurnSystem.Instance.OnPlayerTurnBegin -= HandlePlayerTurnBegin;
+        }
+    }
     private void Awake()
     {
         if (Instance != null) { Destroy(gameObject); return; }
@@ -61,12 +97,31 @@ public class CameraController2D : MonoBehaviour
 
     private void Update()
     {
-        if (HasManualInput()) snapping = false;
+        if (followTarget != null)
+        {
+            DoFollowTarget();
 
-        if (snapping) DoSnap();
-        else          DoPan();
+            if (unlockWhenCentered && IsCenteredOnFollowTarget())
+            {
+                followTarget = null;
+                cameraInputLocked = false;
+                unlockWhenCentered = false;
+            }
+        }
+        else
+        {
+            if (!cameraInputLocked && HasManualInput())
+                snapping = false;
 
-        DoZoom();
+            if (snapping)
+                DoSnap();
+            else if (!cameraInputLocked)
+                DoPan();
+        }
+
+        if (!cameraInputLocked)
+            DoZoom();
+
         ClampToRoom();
         transform.position = basePos;
     }
@@ -197,5 +252,51 @@ public class CameraController2D : MonoBehaviour
     {
         var pt = PlayerTarget.Instance;
         return pt != null ? pt.transform : null;
+    }
+
+    private void DoFollowTarget()
+    {
+        if (followTarget == null) return;
+
+        Vector3 target = followTarget.position;
+        target.z = basePos.z;
+
+        basePos = Vector3.Lerp(
+            basePos,
+            target,
+            followSmoothness * Time.deltaTime
+        );
+    }
+
+    private bool IsCenteredOnFollowTarget()
+    {
+        if (followTarget == null) return true;
+
+        Vector2 current = basePos;
+        Vector2 target = followTarget.position;
+
+        return Vector2.Distance(current, target) <= unlockDistance;
+    }
+
+    private void HandleEnemyTurnStarted(EnemyUnit enemy)
+    {
+        if (!followEnemyTurns || enemy == null) return;
+
+        followTarget = enemy.transform;
+        cameraInputLocked = lockCameraDuringEnemyTurns;
+        unlockWhenCentered = false;
+        snapping = false;
+    }
+
+    private void HandlePlayerTurnBegin()
+    {
+        cameraInputLocked = false;
+        followTarget = null;
+        unlockWhenCentered = false;
+
+        if (recenterOnPlayerTurn)
+        {
+            snapping = true;
+        }
     }
 }
