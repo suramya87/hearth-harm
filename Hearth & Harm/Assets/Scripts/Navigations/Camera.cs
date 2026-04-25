@@ -291,25 +291,12 @@ public class CameraController2D : MonoBehaviour
     private void HandlePlayerTurnBegin()
     {
         cameraInputLocked = false;
+        followTarget = null;
+        unlockWhenCentered = false;
 
-        if (!recenterOnPlayerTurn)
+        if (recenterOnPlayerTurn)
         {
-            followTarget = null;
-            unlockWhenCentered = false;
-            return;
+            snapping = true;
         }
-
-        Transform player = FindLocalPlayer();
-
-        if (player == null)
-        {
-            followTarget = null;
-            unlockWhenCentered = false;
-            return;
-        }
-
-        followTarget = player;
-        unlockWhenCentered = true;
-        snapping = false;
     }
 }

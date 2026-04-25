@@ -93,20 +93,32 @@ public class ActionButtonUI : MonoBehaviour
 
     private void RefreshAffordability()
     {
-        if (canvasGroup == null) return;
+        if (canvasGroup == null || button == null) return;
+
         bool ok = CanAfford();
-        canvasGroup.alpha   = ok ? 1f : unaffordableAlpha;
+
+        canvasGroup.alpha = ok ? 1f : unaffordableAlpha;
         button.interactable = ok;
     }
 
     private bool CanAfford()
     {
+        if (action == null) return false;
+
+        PlayerStats stats = action.GetComponent<PlayerStats>();
+        if (stats == null) return false;
+
         if (action is MoveAction)
         {
-            var stats = action.GetComponent<PlayerStats>();
-            return stats == null || stats.currentStamina > 0;
+            return stats.currentStamina >= 1;
         }
-        if (action is CombatAction ca) return ca.CanAfford();
+
+        if (action is CombatAction ca && ca.ActionData != null)
+        {
+            int cost = ca.ActionData.staminaCost;
+            return stats.currentStamina >= cost;
+        }
+
         return true;
     }
 }
