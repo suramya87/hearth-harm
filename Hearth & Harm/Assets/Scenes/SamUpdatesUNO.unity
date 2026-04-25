@@ -4402,9 +4402,7 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: -8352.446}
   m_LocalScale: {x: 16.335041, y: 16.335037, z: 16.335037}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1259931440}
-  - {fileID: 1114481776}
+  m_Children: []
   m_Father: {fileID: 1163725320}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
@@ -8994,6 +8992,7 @@ RectTransform:
   - {fileID: 1910377340}
   - {fileID: 143667717}
   - {fileID: 2094333078}
+  - {fileID: 537157078}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -9647,6 +9646,81 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &1309866762
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1309866763}
+  - component: {fileID: 1309866765}
+  - component: {fileID: 1309866764}
+  m_Layer: 5
+  m_Name: Panel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1309866763
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1309866762}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -16.6}
+  m_LocalScale: {x: 1, y: 1, z: 5}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1792522404}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 215}
+  m_SizeDelta: {x: 260, y: 170}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1309866764
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1309866762}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 1
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1309866765
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1309866762}
+  m_CullTransparentMesh: 1
 --- !u!1 &1328827113
 GameObject:
   m_ObjectHideFlags: 0
@@ -13378,6 +13452,7 @@ RectTransform:
   - {fileID: 1430326288}
   - {fileID: 353162891}
   - {fileID: 1777914387}
+  - {fileID: 1309866763}
   m_Father: {fileID: 1163725320}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0}
@@ -13399,10 +13474,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 0}
   totalText: {fileID: 499148570}
+  mainRollArea: {fileID: 1309866763}
   diceSpawnPoint: {fileID: 353162891}
   diceCenter: {fileID: 1777914387}
   d6Prefab: {fileID: -3640584172647325039, guid: 68f4db73382110947be750dd461c271a, type: 3}
   diceVisualContainer: {fileID: 194432176}
+  chaoticRollTime: 1
+  settleTime: 0
+  resultHoldTime: 0
+  spacingX: 50
+  spacingY: 50
+  maxPerRow: 6
+  chaoticSpawnRadius: 120
+  chaosScale: 40
+  finalScale: 20
 --- !u!114 &1792522406
 MonoBehaviour:
   m_ObjectHideFlags: 0
