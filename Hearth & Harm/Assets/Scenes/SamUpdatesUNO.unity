@@ -9609,7 +9609,7 @@ MonoBehaviour:
   disabledClickFeedback: {fileID: 0}
   flashInterval: 0.3
   disabledFeedbackDuration: 0.15
-  playerTurnOnlyUI: {fileID: 0}
+  playerTurnOnlyUI: {fileID: 1163725316}
 --- !u!1 &1295089986
 GameObject:
   m_ObjectHideFlags: 0
@@ -15626,11 +15626,11 @@ MonoBehaviour:
   - enemyNameContains: WOLF
     tokenPrefab: {fileID: 853479801715776760, guid: 71577455f0200524b8bede4479cff217, type: 3}
   showDebugLogs: 0
-  enemyTokenHeight: 34
-  enemyTokenSpacing: 6
-  enemyTokenMoveSpeed: 12
-  enemyTokenXOffset: 0
-  enemyTokenTopY: 150
+  enemyTokenHeight: 70
+  enemyTokenSpacing: 10
+  enemyTokenMoveSpeed: 9
+  enemyTokenXOffset: -19
+  enemyTokenTopY: 175
 --- !u!1 &2124875150
 GameObject:
   m_ObjectHideFlags: 0
