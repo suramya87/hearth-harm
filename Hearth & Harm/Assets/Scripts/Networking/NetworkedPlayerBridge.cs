@@ -2,26 +2,6 @@ using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
-/// <summary>
-/// Bridges Unit grid position and room state to all peers via NGO.
-///
-/// HOW MOVEMENT FLOWS (MoveAction needs ZERO changes):
-///   1. Owner's Unit.PlaceInRoom() fires (from MoveAction, or anywhere)
-///   2. Unit.PlaceInRoom() calls bridge.SyncGridPosition() — owner + multiplayer only
-///   3. SyncGridPosition sends RequestMoveServerRpc
-///   4. Server updates gridX/gridY/currentRoomName NetworkVariables
-///   5. Non-owner peers: OnGridPositionChanged → ApplyRoomSync → Unit.PlaceInRoom
-///      (unit.IsSyncingFromNetwork = true so step 2 cannot loop)
-///
-/// ROOM TRANSITIONS:
-///   RoomDoor calls bridge.TransitionToRoom() in multiplayer.
-///   Applies locally, sends ServerRpc, broadcasts to all clients.
-///   Also calls NotifyRoomChanged() so UnitActionSystem/TilemapHighlighter
-///   immediately update their room reference without waiting a full frame.
-///
-/// PREFAB REQUIREMENTS:
-///   NetworkObject + NetworkTransform + Unit + NetworkedPlayerBridge
-/// </summary>
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(Unit))]
 public class NetworkedPlayerBridge : NetworkBehaviour
@@ -50,9 +30,8 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridX.OnValueChanged           += OnGridPositionChanged;
         gridY.OnValueChanged           += OnGridPositionChanged;
 
-        // Late-join: apply existing state immediately
         string existing = currentRoomName.Value.ToString();
-        if (!IsOwner && !string.IsNullOrEmpty(existing))
+        if (!string.IsNullOrEmpty(existing))
             ApplyRoomSync(existing, gridX.Value, gridY.Value);
     }
 
@@ -65,16 +44,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns the replicated room name. Used by UnitActionSystem to resolve
-    /// which PlacedRoom to set on RoomManager for the local peer.
-    /// </summary>
     public string GetCurrentRoomName() => currentRoomName.Value.ToString();
-
-    /// <summary>Server-authoritative grid position — use this for enemy AI targeting.</summary>
     public GridPosition GetNetworkGridPosition() => new(gridX.Value, gridY.Value);
 
-    // ── Called by Unit.PlaceInRoom (owner only) ────────────────────────────
+    // ── Called by Unit.PlaceInRoom (owner only, not while syncing) ─────────
 
     public void SyncGridPosition(RoomGrid room, GridPosition pos)
     {
@@ -82,14 +55,41 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         RequestMoveServerRpc(room.gameObject.name, pos.x, pos.y);
     }
 
-    // ── Called by NetworkedPlayerSpawner after spawn ───────────────────────
+    // ── Called by NetworkedPlayerSpawner after spawn (server only) ─────────
 
     public void InitialPlacement(RoomGrid room, GridPosition pos)
     {
         if (!GameManager.IsMultiplayer || !IsServer) return;
+
         currentRoomName.Value = room.gameObject.name;
         gridX.Value           = pos.x;
         gridY.Value           = pos.y;
+
+        InitialPlacementClientRpc(room.gameObject.name, pos.x, pos.y);
+    }
+
+    [ClientRpc]
+    private void InitialPlacementClientRpc(string roomName, int x, int y)
+    {
+        // Server already called PlaceInRoom locally in NetworkedPlayerSpawner.
+        // Only clients need to act here.
+        if (IsServer) return;
+
+        ApplyRoomSync(roomName, x, y);
+
+        // If this is the local player's object, also update RoomManager so the
+        // camera, highlighter, and input system all have the correct room.
+        if (IsOwner)
+        {
+            var room = FindRoomGridByName(roomName);
+            if (room != null)
+            {
+                var placed = FindPlacedRoomForGrid(room);
+                if (placed != null)
+                    RoomManager.Instance?.SetCurrentRoom(placed);
+            }
+            Debug.Log($"[NetworkedPlayerBridge] Owner initialized in room {roomName} at ({x},{y})");
+        }
     }
 
     // ── Called by RoomDoor in multiplayer ─────────────────────────────────
@@ -110,13 +110,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         unit.PlaceInRoom(newRoom, spawnPos);
         isTransitioning = false;
 
-        // Update RoomManager immediately so HandleInput and TilemapHighlighter
-        // both have the correct room on the very next frame
         var placed = FindPlacedRoomForGrid(newRoom);
         RoomManager.Instance?.SetCurrentRoom(placed);
         CameraController2D.Instance?.SnapToTarget();
 
-        // Sync to server + broadcast to other clients
         RequestRoomTransitionServerRpc(newRoom.gameObject.name, spawnPos.x, spawnPos.y);
     }
 
@@ -148,8 +145,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         ApplyRoomSync(roomName, spawnX, spawnY);
 
-        // If this NetworkObject belongs to the local player (edge case: IsOwner
-        // check above handles the normal case, this handles IsLocalPlayer scenarios)
         if (IsLocalPlayer)
         {
             var room = FindRoomGridByName(roomName);
@@ -166,26 +161,72 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
     private void OnRoomNameChanged(FixedString64Bytes oldVal, FixedString64Bytes newVal)
     {
-        if (IsOwner) return;
         ApplyRoomSync(newVal.ToString(), gridX.Value, gridY.Value);
     }
 
     private void OnGridPositionChanged(int oldVal, int newVal)
     {
-        if (IsOwner) return;
+        // ── FIX: removed  if (IsOwner) return; ────────────────────────────
+        // Same reason as OnRoomNameChanged above.
         string room = currentRoomName.Value.ToString();
         if (!string.IsNullOrEmpty(room))
             ApplyRoomSync(room, gridX.Value, gridY.Value);
     }
 
+    // ── Core sync ──────────────────────────────────────────────────────────
+
     private void ApplyRoomSync(string roomName, int x, int y)
     {
         var room = FindRoomGridByName(roomName);
-        if (room == null) return;
+        if (room == null)
+        {
+            Debug.LogWarning($"[NetworkedPlayerBridge] ApplyRoomSync: room '{roomName}' not found.");
+            return;
+        }
 
         unit.IsSyncingFromNetwork = true;
         unit.PlaceInRoom(room, new GridPosition(x, y));
         unit.IsSyncingFromNetwork = false;
+    }
+
+    // ── Called by CombatAction (owner only) ───────────────────────────────
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestApplyDamageServerRpc(int[] posX, int[] posY, int damage)
+    {
+        ApplyDamageOnPeer(posX, posY, damage);
+        ApplyDamageClientRpc(posX, posY, damage);
+    }
+
+    [ClientRpc]
+    private void ApplyDamageClientRpc(int[] posX, int[] posY, int damage)
+    {
+        if (IsServer) return;
+        ApplyDamageOnPeer(posX, posY, damage);
+    }
+
+
+    private void ApplyDamageOnPeer(int[] posX, int[] posY, int damage)
+    {
+        var room = unit.GetCurrentRoomGrid();
+        if (room == null) return;
+
+        for (int i = 0; i < posX.Length; i++)
+        {
+            var pos = new GridPosition(posX[i], posY[i]);
+            if (!room.IsValidGridPosition(pos)) continue;
+
+            foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
+            {
+                if (enemy == null || enemy.IsDead) continue;
+                NetworkedHealthBridge.TakeDamage(enemy.gameObject, damage);
+            }
+
+            foreach (var target in room.GetUnitsAtGridPosition(pos))
+            {
+                NetworkedHealthBridge.TakeDamage(target.gameObject, damage);
+            }
+        }
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

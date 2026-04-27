@@ -2702,6 +2702,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyManager
   showDebugLogs: 0
+  delayBeforeEnemyTurn: 0.35
+  delayAfterEnemyTurn: 0.45
 --- !u!4 &251906810
 Transform:
   m_ObjectHideFlags: 0
@@ -10867,10 +10869,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 0}
   totalText: {fileID: 26730081}
+  mainRollArea: {fileID: 0}
   diceSpawnPoint: {fileID: 780848317}
   diceCenter: {fileID: 1839187750}
   d6Prefab: {fileID: -3640584172647325039, guid: 68f4db73382110947be750dd461c271a, type: 3}
   diceVisualContainer: {fileID: 1302336534}
+  chaoticRollTime: 0.75
+  settleTime: 0.5
+  resultHoldTime: 0.35
+  spacingX: 50
+  spacingY: 50
+  maxPerRow: 6
+  chaoticSpawnRadius: 120
+  chaosScale: 1.5
+  finalScale: 0.6
 --- !u!114 &949148375
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12624,7 +12636,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedPlayerSpawner
   ShowTopMostFoldoutHeaderGroup: 1
   networkedPlayerPrefabs: []
-  offsetSpawnPositions: 1
 --- !u!114 &1158815607
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -13943,6 +13954,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyManager
   showDebugLogs: 0
+  delayBeforeEnemyTurn: 0.35
+  delayAfterEnemyTurn: 0.45
 --- !u!4 &1247981238
 Transform:
   m_ObjectHideFlags: 0
@@ -14090,6 +14103,7 @@ MonoBehaviour:
   disabledClickFeedback: {fileID: 0}
   flashInterval: 0.3
   disabledFeedbackDuration: 0.15
+  playerTurnOnlyUI: {fileID: 0}
 --- !u!1 &1295089986
 GameObject:
   m_ObjectHideFlags: 0
@@ -15824,6 +15838,11 @@ MonoBehaviour:
   orthoMin: 3
   orthoMax: 10
   snapSmoothness: 6
+  followEnemyTurns: 1
+  lockCameraDuringEnemyTurns: 1
+  recenterOnPlayerTurn: 1
+  followSmoothness: 8
+  unlockDistance: 0.05
   shakeFrequency: 25
 --- !u!1 &1434821556
 GameObject:
@@ -19505,10 +19524,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 1086071261}
   totalText: {fileID: 499148570}
+  mainRollArea: {fileID: 0}
   diceSpawnPoint: {fileID: 353162891}
   diceCenter: {fileID: 1777914387}
   d6Prefab: {fileID: -3640584172647325039, guid: 68f4db73382110947be750dd461c271a, type: 3}
   diceVisualContainer: {fileID: 194432176}
+  chaoticRollTime: 0.75
+  settleTime: 0.5
+  resultHoldTime: 0.35
+  spacingX: 50
+  spacingY: 50
+  maxPerRow: 6
+  chaoticSpawnRadius: 120
+  chaosScale: 1.5
+  finalScale: 0.6
 --- !u!114 &1792522406
 MonoBehaviour:
   m_ObjectHideFlags: 0

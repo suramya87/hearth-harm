@@ -9,9 +9,7 @@ using System;
 public struct GridPosition : IEquatable<GridPosition>
 {
     public int x;
-    public int y;          // tilemap row
-
-    // Back-compat alias — old code used .z for the "depth" axis which is now y
+    public int y;          
     public int z { get => y; set => y = value; }
 
     public GridPosition(int x, int y) { this.x = x; this.y = y; }

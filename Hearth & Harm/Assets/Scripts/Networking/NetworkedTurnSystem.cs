@@ -3,31 +3,30 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
-
 public class NetworkedTurnSystem : NetworkBehaviour
 {
     public static NetworkedTurnSystem Instance { get; private set; }
 
     // ── Network state ──────────────────────────────────────────────────────
 
-    private NetworkVariable<int>  turnNumber    = new(1,
+    private NetworkVariable<int> turnNumber = new(1,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private NetworkVariable<bool> isPlayerPhase = new(true,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-
-    public event Action           OnPlayerTurnBegin;
-    public event Action           OnEnemyPhaseBegin;
-    public event Action           OnEnemyPhaseEnd;
-    public event EventHandler     OnTurnChanged;
-
-    // ── State ──────────────────────────────────────────────────────────────
+    public event Action       OnPlayerTurnBegin;
+    public event Action       OnEnemyPhaseBegin;
+    public event Action       OnEnemyPhaseEnd;
+    public event EventHandler OnTurnChanged;
 
     public bool IsPlayerPhase => isPlayerPhase.Value;
     public int  TurnNumber    => turnNumber.Value;
 
     private readonly HashSet<ulong> playersEndedTurn = new();
+
+    // Lightweight debounce — reset only when server confirms new player phase.
+    private bool localEndTurnPending;
 
     private void Awake()
     {
@@ -42,7 +41,6 @@ public class NetworkedTurnSystem : NetworkBehaviour
         isPlayerPhase.OnValueChanged += OnPhaseChanged;
         turnNumber.OnValueChanged    += OnTurnNumberChanged;
 
-        // Subscribe to enemy manager so server knows when enemy phase ends
         if (IsServer && EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyTurnsComplete += ServerHandleEnemyTurnsComplete;
     }
@@ -56,6 +54,7 @@ public class NetworkedTurnSystem : NetworkBehaviour
             EnemyManager.Instance.OnEnemyTurnsComplete -= ServerHandleEnemyTurnsComplete;
     }
 
+    // ── Public API ─────────────────────────────────────────────────────────
 
     public void RequestEndTurn()
     {
@@ -65,7 +64,15 @@ public class NetworkedTurnSystem : NetworkBehaviour
             return;
         }
 
-        if (!isPlayerPhase.Value) return;
+        // ── FIX: removed client-side  if (!isPlayerPhase.Value) return ────
+        // The NetworkVariable arrives with a delay. The client's value can be
+        // stale — server may already have changed phase while client still reads
+        // true (or vice versa). The server's ServerRpc already guards the phase.
+        // We only debounce locally so the button can't be spammed mid-flight.
+        if (localEndTurnPending) return;
+        if (NetworkManager.Singleton == null) return;
+
+        localEndTurnPending = true;
         RequestEndTurnServerRpc(NetworkManager.Singleton.LocalClientId);
     }
 
@@ -74,7 +81,12 @@ public class NetworkedTurnSystem : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     private void RequestEndTurnServerRpc(ulong clientId)
     {
-        if (!isPlayerPhase.Value) return;
+        // Server is the single source of truth on phase.
+        if (!isPlayerPhase.Value)
+        {
+            Debug.Log($"[NetworkedTurnSystem] Ignored end-turn from {clientId} — not player phase.");
+            return;
+        }
 
         playersEndedTurn.Add(clientId);
         Debug.Log($"[NetworkedTurnSystem] Player {clientId} ended turn " +
@@ -101,7 +113,6 @@ public class NetworkedTurnSystem : NetworkBehaviour
 
         NotifyEnemyPhaseBeginClientRpc();
 
-        // Run enemy AI (server only — clients just watch the results)
         if (EnemyManager.Instance != null && EnemyManager.Instance.GetEnemyCount() > 0)
             EnemyManager.Instance.RunEnemyTurns();
         else
@@ -127,18 +138,21 @@ public class NetworkedTurnSystem : NetworkBehaviour
     [ClientRpc]
     private void NotifyPlayerPhaseBeginClientRpc()
     {
+        // Reset debounce only on the server's authoritative signal.
+        localEndTurnPending = false;
+
         OnPlayerTurnBegin?.Invoke();
         OnEnemyPhaseEnd?.Invoke();
         OnTurnChanged?.Invoke(this, EventArgs.Empty);
         Debug.Log($"[NetworkedTurnSystem] Player turn {turnNumber.Value} begin.");
     }
 
-    // ── Phase change callbacks ─────────────────────────────────────────────
+    // ── NetworkVariable callbacks ──────────────────────────────────────────
 
-    private void OnPhaseChanged(bool oldVal, bool newVal) { /* NetworkVariables handled via RPCs above */ }
+    private void OnPhaseChanged(bool oldVal, bool newVal) { }
     private void OnTurnNumberChanged(int oldVal, int newVal) { }
 
-
+    // ── Force helpers ──────────────────────────────────────────────────────
 
     public void RequestForcePlayerTurn()
     {

@@ -6,7 +6,13 @@ using UnityEngine.UI;
 /// <summary>
 /// Shows directional travel buttons for the local player's current room.
 /// Buttons are hidden when enemies are present (combat lock).
-/// No LevelGrid dependency — reads from RoomManager and LevelGenerator.
+///
+/// MULTIPLAYER FIX:
+///   Travel() now routes through NetworkedPlayerBridge.TransitionToRoom()
+///   instead of calling unit.PlaceInRoom() directly. This ensures the room
+///   change is broadcast to all peers.
+///   FindLocalPlayerUnit() finds the locally-owned Unit in MP instead of
+///   using FindAnyObjectByType which could return another player's unit.
 /// </summary>
 public class RoomNavigationUI : MonoBehaviour
 {
@@ -123,16 +129,52 @@ public class RoomNavigationUI : MonoBehaviour
         var target = gen?.GetConnectedRoom(room, dir);
         if (target == null) return;
 
+        // ── MULTIPLAYER FIX ───────────────────────────────────────────────
+        // In multiplayer, route through NetworkedPlayerBridge so the room
+        // transition is synced to all peers. In single-player, fall through
+        // to the original direct path.
+        if (GameManager.IsMultiplayer)
+        {
+            var bridge = FindLocalPlayerBridge();
+            if (bridge == null)
+            {
+                Debug.LogWarning("[RoomNav] Could not find local player bridge for room transition.");
+                return;
+            }
+
+            var entryDir = gen.GetOppositeDirection(dir);
+            var spawnPos = GetSpawnPosition(target, entryDir);
+            bridge.TransitionToRoom(target.roomGrid, spawnPos);
+            UpdateButtons();
+            return;
+        }
+        // ─────────────────────────────────────────────────────────────────
+
+        // Single-player path (unchanged)
         var player = FindAnyObjectByType<Unit>();
         if (player == null) return;
 
-        var entryDir  = gen.GetOppositeDirection(dir);
-        var spawnPos  = GetSpawnPosition(target, entryDir);
+        var spEntry  = gen.GetOppositeDirection(dir);
+        var spPos    = GetSpawnPosition(target, spEntry);
 
         RoomManager.Instance.SetCurrentRoom(target);
-        player.PlaceInRoom(target.roomGrid, spawnPos);
+        player.PlaceInRoom(target.roomGrid, spPos);
         CameraController2D.Instance?.SnapToTarget();
         UpdateButtons();
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Finds the NetworkedPlayerBridge that belongs to this local machine.
+    /// Avoids FindAnyObjectByType which could return another player's unit
+    /// when multiple players are connected.
+    /// </summary>
+    private NetworkedPlayerBridge FindLocalPlayerBridge()
+    {
+        foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
+            if (bridge.IsOwner) return bridge;
+        return null;
     }
 
     private GridPosition GetSpawnPosition(LevelGenerator.PlacedRoom room,
