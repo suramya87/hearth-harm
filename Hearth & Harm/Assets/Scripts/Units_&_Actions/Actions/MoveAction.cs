@@ -30,6 +30,7 @@ public class MoveAction : BaseAction
         var usedPath = path.GetRange(0, steps);
         var finalPos = usedPath[^1];
 
+        // Update grid occupancy immediately (before the visual move)
         room.RemoveUnitAtGridPosition(unit.GetGridPosition(), unit);
         room.AddUnitAtGridPosition(finalPos, unit);
 
@@ -69,57 +70,16 @@ public class MoveAction : BaseAction
         playerAnimator?.RefreshStaminaState();
         isActive = false;
 
-        // ── ClearBusy fires first so input is never permanently locked ─────
         onComplete?.Invoke();
-
-        // ── Multiplayer vs single-player end-of-move sync ──────────────────
-        //
-        // PROBLEM (now fixed):
-        //   Previously we called unit.PlaceInRoom with IsSyncingFromNetwork=true.
-        //   IsSyncingFromNetwork=true prevents Unit.PlaceInRoom from calling
-        //   bridge.SyncGridPosition(), which is the RPC that tells the server
-        //   where the client ended up. Without that RPC the server never updates
-        //   its position, NetworkTransform keeps broadcasting the old position,
-        //   and the client's transform gets snapped back every frame — the unit
-        //   moves visually during the coroutine but is instantly reset when it
-        //   stops, making it look like it "floated" without going anywhere.
-        //
-        // FIX — Multiplayer path:
-        //   Call bridge.SyncGridPosition() directly. This sends RequestMoveServerRpc
-        //   which writes the NetworkVariables on the server. Those echo back via
-        //   OnGridPositionChanged → ApplyRoomSync → PlaceInRoom on all peers
-        //   (including this client). ApplyRoomSync internally sets
-        //   IsSyncingFromNetwork=true before PlaceInRoom so that PlaceInRoom
-        //   doesn't fire another SyncGridPosition. No loop, no fighting.
-        //
-        //   The player prefab also needs ClientNetworkTransform (not NetworkTransform)
-        //   so that the owner's transform position is authoritative and replicates
-        //   outward — see the inspector note below.
-        //
-        // FIX — Single-player path:
-        //   Unchanged. PlaceInRoom is called directly as before.
-        //
-        // INSPECTOR REQUIREMENT:
-        //   On every player prefab, replace the NetworkTransform component with
-        //   ClientNetworkTransform (Unity.Netcode.Components.ClientNetworkTransform).
-        //   With a standard NetworkTransform the server owns the position and will
-        //   continuously overwrite the client's locally-driven transform, causing
-        //   the floating/snapping symptom regardless of any code fix.
 
         if (GameManager.IsMultiplayer)
         {
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null && bridge.IsOwner)
-            {
-                // Tell the server where we ended up. The server writes NetworkVariables
-                // → OnGridPositionChanged fires on all peers → ApplyRoomSync →
-                // PlaceInRoom (with IsSyncingFromNetwork=true inside ApplyRoomSync).
                 bridge.SyncGridPosition(unit.GetCurrentRoomGrid(), finalGP);
-            }
         }
         else
         {
-            // Single-player: update grid state directly, no networking needed.
             unit.PlaceInRoom(unit.GetCurrentRoomGrid(), finalGP);
         }
     }
@@ -138,11 +98,8 @@ public class MoveAction : BaseAction
         unitAnimator?.SetFacing(dir);
     }
 
-    public bool IsValidTarget(GridPosition gp) =>
-        GetValidTargets().Contains(gp);
-
+    public bool IsValidTarget(GridPosition gp) => GetValidTargets().Contains(gp);
     public bool isValidActionGridPosition(GridPosition gp) => IsValidTarget(gp);
-
     public List<GridPosition> GetValidActionGridPositionList() => GetValidTargets();
 
     private List<GridPosition> GetValidTargets()

@@ -1,11 +1,6 @@
 using System;
 
-/// <summary>
-/// Snapshot of a player's lobby state. Shared between NetworkGameManager,
-/// MainMenuController, and PlayerSlotUI.
-///
-/// Kept in its own file so it is visible across Assembly Definition boundaries.
-/// </summary>
+
 [Serializable]
 public struct SessionPlayerInfo
 {

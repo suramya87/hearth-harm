@@ -1600,6 +1600,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyManager
   showDebugLogs: 0
+  delayBeforeEnemyTurn: 0.35
+  delayAfterEnemyTurn: 0.45
 --- !u!4 &251906810
 Transform:
   m_ObjectHideFlags: 0
@@ -7334,7 +7336,6 @@ MonoBehaviour:
   networkedPlayerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
   - {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}
-  offsetSpawnPositions: 1
 --- !u!114 &1158815607
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8011,6 +8012,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyManager
   showDebugLogs: 0
+  delayBeforeEnemyTurn: 0.35
+  delayAfterEnemyTurn: 0.45
 --- !u!4 &1247981238
 Transform:
   m_ObjectHideFlags: 0
@@ -8158,6 +8161,7 @@ MonoBehaviour:
   disabledClickFeedback: {fileID: 0}
   flashInterval: 0.3
   disabledFeedbackDuration: 0.15
+  playerTurnOnlyUI: {fileID: 0}
 --- !u!1 &1295089986
 GameObject:
   m_ObjectHideFlags: 0
@@ -9045,6 +9049,11 @@ MonoBehaviour:
   orthoMin: 3
   orthoMax: 10
   snapSmoothness: 6
+  followEnemyTurns: 1
+  lockCameraDuringEnemyTurns: 1
+  recenterOnPlayerTurn: 1
+  followSmoothness: 8
+  unlockDistance: 0.05
   shakeFrequency: 25
 --- !u!1 &1434821556
 GameObject:
@@ -9917,6 +9926,7 @@ GameObject:
   - component: {fileID: 1617025421}
   - component: {fileID: 1617025420}
   - component: {fileID: 1617025419}
+  - component: {fileID: 1617025423}
   m_Layer: 5
   m_Name: EndTurn
   m_TagString: Untagged
@@ -10008,6 +10018,25 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
+--- !u!114 &1617025423
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1617025418}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0eafaf28d6473264480ca610b2d33636, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MultiplayerTurnUI
+  turnPanel: {fileID: 1617025418}
+  phaseLabel: {fileID: 0}
+  turnNumberLabel: {fileID: 0}
+  endTurnButton: {fileID: 570982160}
+  endTurnButtonLabel: {fileID: 0}
+  playerListContainer: {fileID: 0}
+  playerRowPrefab: {fileID: 0}
 --- !u!1 &1619133279
 GameObject:
   m_ObjectHideFlags: 0
@@ -11262,10 +11291,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 1086071261}
   totalText: {fileID: 499148570}
+  mainRollArea: {fileID: 0}
   diceSpawnPoint: {fileID: 353162891}
   diceCenter: {fileID: 1777914387}
   d6Prefab: {fileID: -3640584172647325039, guid: 68f4db73382110947be750dd461c271a, type: 3}
   diceVisualContainer: {fileID: 194432176}
+  chaoticRollTime: 0.75
+  settleTime: 0.5
+  resultHoldTime: 0.35
+  spacingX: 50
+  spacingY: 50
+  maxPerRow: 6
+  chaoticSpawnRadius: 120
+  chaosScale: 1.5
+  finalScale: 0.6
 --- !u!114 &1792522406
 MonoBehaviour:
   m_ObjectHideFlags: 0

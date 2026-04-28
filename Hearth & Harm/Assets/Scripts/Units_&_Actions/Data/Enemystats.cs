@@ -1,9 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Data asset for one enemy type.
-/// Create via: Assets > Create > Combat > Enemy Stats
-/// </summary>
 [CreateAssetMenu(fileName = "NewEnemyStats", menuName = "Combat/Enemy Stats")]
 public class EnemyStats : ScriptableObject
 {

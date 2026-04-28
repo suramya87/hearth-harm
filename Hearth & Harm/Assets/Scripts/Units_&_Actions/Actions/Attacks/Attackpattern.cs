@@ -2,11 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Defines the shape of an attack in LOCAL space.
-/// Local axes: X+ = right, Y+ = forward (up on screen in 2D top-down).
-/// Create via: Assets > Create > Combat > Attack Pattern
-/// </summary>
 [CreateAssetMenu(fileName = "NewAttackPattern", menuName = "Combat/Attack Pattern")]
 public class AttackPattern : ScriptableObject
 {

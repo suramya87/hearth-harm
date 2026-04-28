@@ -2,10 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Basic token binder for turn order UI.
-/// Draft 1 keeps this simple: bind enemy/player references and optional visuals.
-/// </summary>
+
 public class TurnOrderTokenUI : MonoBehaviour
 {
     [Header("Optional UI")]

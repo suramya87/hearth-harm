@@ -1,9 +1,6 @@
 using UnityEngine;
 
-/// <summary>
-/// Shows the health of the last-clicked enemy.
-/// Also auto-displays the active enemy during enemy turns.
-/// </summary>
+
 public class EnemyHealthUI : MonoBehaviour
 {
     public static EnemyHealthUI Instance { get; private set; }

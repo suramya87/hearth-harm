@@ -3,17 +3,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Shows directional travel buttons for the local player's current room.
-/// Buttons are hidden when enemies are present (combat lock).
-///
-/// MULTIPLAYER FIX:
-///   Travel() now routes through NetworkedPlayerBridge.TransitionToRoom()
-///   instead of calling unit.PlaceInRoom() directly. This ensures the room
-///   change is broadcast to all peers.
-///   FindLocalPlayerUnit() finds the locally-owned Unit in MP instead of
-///   using FindAnyObjectByType which could return another player's unit.
-/// </summary>
 public class RoomNavigationUI : MonoBehaviour
 {
     [Header("Buttons")]
@@ -129,10 +118,6 @@ public class RoomNavigationUI : MonoBehaviour
         var target = gen?.GetConnectedRoom(room, dir);
         if (target == null) return;
 
-        // ── MULTIPLAYER FIX ───────────────────────────────────────────────
-        // In multiplayer, route through NetworkedPlayerBridge so the room
-        // transition is synced to all peers. In single-player, fall through
-        // to the original direct path.
         if (GameManager.IsMultiplayer)
         {
             var bridge = FindLocalPlayerBridge();
@@ -165,11 +150,6 @@ public class RoomNavigationUI : MonoBehaviour
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Finds the NetworkedPlayerBridge that belongs to this local machine.
-    /// Avoids FindAnyObjectByType which could return another player's unit
-    /// when multiple players are connected.
-    /// </summary>
     private NetworkedPlayerBridge FindLocalPlayerBridge()
     {
         foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))

@@ -1,10 +1,6 @@
 using System;
 
-/// <summary>
-/// Integer 2D grid coordinate. x = column, y = row (tilemap Y axis).
-/// In Unity 2D tilemaps the third dimension is gone so we use x/y,
-/// but keep the .z alias so existing call sites don't need mass-renaming.
-/// </summary>
+
 [Serializable]
 public struct GridPosition : IEquatable<GridPosition>
 {

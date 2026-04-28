@@ -3,10 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-/// <summary>
-/// Shows the local player's health. Auto-binds to the Unit after level ready.
-/// Works in SP and MP (just needs a HealthComponent on the player).
-/// </summary>
+
 public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Fire States")]

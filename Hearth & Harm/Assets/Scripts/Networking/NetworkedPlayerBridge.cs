@@ -1,3 +1,4 @@
+using System.Collections;
 using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
@@ -20,6 +21,9 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     private Unit unit;
     private bool isTransitioning;
 
+    private bool      syncPending;
+    private Coroutine syncCoroutine;
+
     private void Awake() => unit = GetComponent<Unit>();
 
     public override void OnNetworkSpawn()
@@ -40,14 +44,17 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         currentRoomName.OnValueChanged -= OnRoomNameChanged;
         gridX.OnValueChanged           -= OnGridPositionChanged;
         gridY.OnValueChanged           -= OnGridPositionChanged;
+
+        if (syncCoroutine != null) { StopCoroutine(syncCoroutine); syncCoroutine = null; }
+        syncPending = false;
     }
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    public string GetCurrentRoomName() => currentRoomName.Value.ToString();
+    public string      GetCurrentRoomName()    => currentRoomName.Value.ToString();
     public GridPosition GetNetworkGridPosition() => new(gridX.Value, gridY.Value);
 
-    // ── Called by Unit.PlaceInRoom (owner only, not while syncing) ─────────
+    // ── Called by MoveAction at end of coroutine (owner only) ─────────────
 
     public void SyncGridPosition(RoomGrid room, GridPosition pos)
     {
@@ -71,14 +78,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     [ClientRpc]
     private void InitialPlacementClientRpc(string roomName, int x, int y)
     {
-        // Server already called PlaceInRoom locally in NetworkedPlayerSpawner.
-        // Only clients need to act here.
-        if (IsServer) return;
+        if (IsServer) return; // Server called PlaceInRoom locally in NetworkedPlayerSpawner
 
         ApplyRoomSync(roomName, x, y);
 
-        // If this is the local player's object, also update RoomManager so the
-        // camera, highlighter, and input system all have the correct room.
         if (IsOwner)
         {
             var room = FindRoomGridByName(roomName);
@@ -92,7 +95,7 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         }
     }
 
-    // ── Called by RoomDoor in multiplayer ─────────────────────────────────
+    // ── Called by RoomDoor / RoomNavigationUI in multiplayer ──────────────
 
     public void TransitionToRoom(RoomGrid newRoom, GridPosition spawnPos)
     {
@@ -161,16 +164,32 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
     private void OnRoomNameChanged(FixedString64Bytes oldVal, FixedString64Bytes newVal)
     {
-        ApplyRoomSync(newVal.ToString(), gridX.Value, gridY.Value);
+        string name = newVal.ToString();
+        if (!string.IsNullOrEmpty(name))
+            QueueApplyRoomSync();
     }
 
     private void OnGridPositionChanged(int oldVal, int newVal)
     {
-        // ── FIX: removed  if (IsOwner) return; ────────────────────────────
-        // Same reason as OnRoomNameChanged above.
-        string room = currentRoomName.Value.ToString();
-        if (!string.IsNullOrEmpty(room))
-            ApplyRoomSync(room, gridX.Value, gridY.Value);
+        QueueApplyRoomSync();
+    }
+
+    private void QueueApplyRoomSync()
+    {
+        if (syncPending) return; // already queued this frame
+        syncPending    = true;
+        syncCoroutine  = StartCoroutine(ApplyRoomSyncNextFrame());
+    }
+
+    private IEnumerator ApplyRoomSyncNextFrame()
+    {
+        yield return new WaitForEndOfFrame();
+        syncPending   = false;
+        syncCoroutine = null;
+
+        string roomName = currentRoomName.Value.ToString();
+        if (!string.IsNullOrEmpty(roomName))
+            ApplyRoomSync(roomName, gridX.Value, gridY.Value);
     }
 
     // ── Core sync ──────────────────────────────────────────────────────────
@@ -205,7 +224,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         ApplyDamageOnPeer(posX, posY, damage);
     }
 
-
     private void ApplyDamageOnPeer(int[] posX, int[] posY, int damage)
     {
         var room = unit.GetCurrentRoomGrid();
@@ -223,9 +241,7 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             }
 
             foreach (var target in room.GetUnitsAtGridPosition(pos))
-            {
                 NetworkedHealthBridge.TakeDamage(target.gameObject, damage);
-            }
         }
     }
 

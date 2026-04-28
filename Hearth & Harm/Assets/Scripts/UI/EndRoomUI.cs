@@ -27,21 +27,8 @@ public class EndRoomUI : MonoBehaviour
         nextLevelButton?.onClick.AddListener(OnNextLevel);
         mainMenuButton?.onClick.AddListener(OnMainMenu);
         shown = false;
-        HidePanel(); // already here, make sure panelRoot starts inactive in the prefab too
+        HidePanel(); 
     }
-
-    // private void OnEnable()
-    // {
-    //     RoomManager.OnAnyRoomChanged += OnRoomChanged;
-    //     LevelGenerator.OnLevelReady  += OnLevelReady;
-    // }
-
-    // private void OnDisable()
-    // {
-    //     RoomManager.OnAnyRoomChanged -= OnRoomChanged;
-    //     LevelGenerator.OnLevelReady  -= OnLevelReady;
-    // }
-
 
 // In LoseScreen
 private void OnEnable()
@@ -70,7 +57,7 @@ private void OnDisable()
     { 
         shown = false; 
         HidePanel(); 
-        Time.timeScale = 1f; // safety reset in case timeScale got stuck
+        Time.timeScale = 1f; 
     }
 
     // ── Panel ──────────────────────────────────────────────────────────────

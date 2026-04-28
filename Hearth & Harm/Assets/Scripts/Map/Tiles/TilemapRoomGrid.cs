@@ -91,14 +91,10 @@ public class TilemapRoomGrid : MonoBehaviour
     public bool IsWall(GridPosition gp) =>
         wallsTilemap != null && wallsTilemap.HasTile(new Vector3Int(gp.x, gp.y, 0));
 
-    /// <summary>
-    /// A cell is walkable when it is a valid floor tile, is not a wall,
-    /// and is not occupied by any unit or enemy.
-    /// </summary>
+
     public bool IsWalkable(GridPosition gp) =>
         IsValidGridPosition(gp) && !IsWall(gp) && !IsOccupied(gp);
 
-    /// <summary>Walkable ignoring occupancy — used for pathfinding destination checks.</summary>
     public bool IsWalkableIgnoreOccupancy(GridPosition gp) =>
         IsValidGridPosition(gp) && !IsWall(gp);
 

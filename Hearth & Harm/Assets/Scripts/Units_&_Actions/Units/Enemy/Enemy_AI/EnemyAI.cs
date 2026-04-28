@@ -3,10 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Melee enemy AI. In multiplayer runs server-only.
-/// Damage is routed through NetworkedHealthBridge so clients see HP changes.
-/// </summary>
 [RequireComponent(typeof(EnemyUnit))]
 public class EnemyAI : MonoBehaviour
 {
@@ -44,7 +40,7 @@ public class EnemyAI : MonoBehaviour
             {
                 if (unit.IsDead) { onComplete?.Invoke(); yield break; }
                 if (IsTileOccupied(path[i], room)) break;
-                unit.MoveToPosition(path[i]);   // auto-broadcasts in MP via EnemyUnit
+                unit.MoveToPosition(path[i]); // auto-broadcasts in MP via EnemyUnit
                 yield return new WaitForSeconds(stepDelay);
             }
             myPos = unit.GridPosition;
@@ -56,6 +52,8 @@ public class EnemyAI : MonoBehaviour
         // Attack phase
         if (!unit.IsDead && dist <= stats.attackRange)
         {
+            // Re-find player in case they moved during our move phase
+            player = FindPlayerInRoom() ?? player;
             PerformAttack(player);
             yield return new WaitForSeconds(stepDelay);
         }
@@ -99,16 +97,24 @@ public class EnemyAI : MonoBehaviour
 
     // ── Damage routing ─────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Routes damage through NetworkedHealthBridge in multiplayer so the server
-    /// stays authoritative and clients receive the HP sync RPC.
-    /// </summary>
     private static void DealDamage(GameObject target, int dmg)
     {
         if (GameManager.IsMultiplayer)
             NetworkedHealthBridge.TakeDamage(target, dmg);
         else
             target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
+    }
+
+    // ── Player targeting ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the nearest living player in this enemy's room.
+    /// In MP uses NetworkedEnemyBridge to scan all players.
+    /// In SP uses PlayerTarget for single-player compatibility.
+    /// </summary>
+    private Unit FindPlayerInRoom()
+    {
+        return NetworkedEnemyBridge.FindNearestPlayerInRoom(unit.CurrentRoomGrid, unit.GridPosition);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -118,23 +124,30 @@ public class EnemyAI : MonoBehaviour
         var enemies = EnemyManager.Instance?.GetEnemiesInRoom(room);
         if (enemies != null)
             foreach (var e in enemies)
-            { if (e == unit || e == null || e.IsDead) continue; if (e.GridPosition == pos) return true; }
+                if (e != unit && e != null && !e.IsDead && e.GridPosition == pos) return true;
 
-        var pt = PlayerTarget.Instance;
-        if (pt != null)
+        // Check all players in the room
+        if (GameManager.IsMultiplayer)
         {
-            var pu = pt.GetUnit();
-            var ph = pu?.GetComponent<HealthComponent>();
-            if (ph != null && !ph.IsDead && pu.GetGridPosition() == pos) return true;
+            foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
+            {
+                var u  = bridge.GetComponent<Unit>();
+                var hp = u?.GetComponent<HealthComponent>();
+                if (hp != null && !hp.IsDead && u.GetGridPosition() == pos) return true;
+            }
         }
-        return false;
-    }
+        else
+        {
+            var pt = PlayerTarget.Instance;
+            if (pt != null)
+            {
+                var pu = pt.GetUnit();
+                var ph = pu?.GetComponent<HealthComponent>();
+                if (ph != null && !ph.IsDead && pu.GetGridPosition() == pos) return true;
+            }
+        }
 
-    private Unit FindPlayerInRoom()
-    {
-        var pt = PlayerTarget.Instance;
-        if (pt == null) return null;
-        return pt.IsInRoom(unit.CurrentRoomGrid) ? pt.GetUnit() : null;
+        return false;
     }
 
     private static Vector2Int Facing(GridPosition from, GridPosition to)

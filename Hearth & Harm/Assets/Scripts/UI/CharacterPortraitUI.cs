@@ -2,10 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Updates a portrait Image based on whichever character the player selected
-/// in the main menu (CharacterSelection.Index).
-/// </summary>
+
 public class CharacterPortraitUI : MonoBehaviour
 {
     [Header("References")]

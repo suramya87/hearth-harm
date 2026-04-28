@@ -1,11 +1,7 @@
 using System;
 using UnityEngine;
 
-/// <summary>
-/// Represents one enemy on the grid.
-/// In multiplayer, MoveToPosition automatically broadcasts to clients via NetworkedEnemyBridge.
-/// Enemy AI only runs on the server, so the server is always the source of truth.
-/// </summary>
+
 [RequireComponent(typeof(HealthComponent))]
 public class EnemyUnit : MonoBehaviour, IHasHealth
 {

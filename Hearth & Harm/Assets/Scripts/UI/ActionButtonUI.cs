@@ -2,10 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Drives one action button in the action bar.
-/// Shows icon, damage info, stamina cost, and affordability tint.
-/// </summary>
+
 public class ActionButtonUI : MonoBehaviour
 {
     [Header("Core")]

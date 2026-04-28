@@ -2,10 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Spawns enemies from SpawnTable assets (or legacy list).
-/// Validates world positions against room bounds before spawning.
-/// </summary>
 public class EnemySpawner : MonoBehaviour
 {
     [Header("Table-Based Spawning (recommended)")]

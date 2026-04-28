@@ -4,11 +4,6 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
-/// <summary>
-/// Shows dice roll results in the HUD.
-/// Can either display instantly with ShowRoll(), or play a timed presentation
-/// before reporting the final total.
-/// </summary>
 public class DiceBoxUI : MonoBehaviour
 {
     [Header("UI")]

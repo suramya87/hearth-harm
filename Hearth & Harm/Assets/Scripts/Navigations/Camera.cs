@@ -61,11 +61,6 @@ public class CameraController2D : MonoBehaviour
 
     private void Start()
     {
-        // ── Subscribe to both turn systems ────────────────────────────────
-        // TurnSystem is used in single-player.
-        // NetworkedTurnSystem is used in multiplayer.
-        // Both fire the same logical events so we hook both — whichever is
-        // active will fire; the other will be null and safely skipped.
 
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyTurnStarted += HandleEnemyTurnStarted;
@@ -267,12 +262,9 @@ public class CameraController2D : MonoBehaviour
         snapping           = false;
     }
 
-    // Called when the enemy PHASE begins (MP) — no specific enemy yet, just unlock inputs
     private void HandleEnemyPhaseBegin()
     {
-        // EnemyManager.OnEnemyTurnStarted will fire for each individual enemy,
-        // which already handles the per-enemy follow. This just ensures input
-        // is locked at phase start even before the first enemy begins moving.
+
         cameraInputLocked  = lockCameraDuringEnemyTurns;
         unlockWhenCentered = false;
         snapping           = false;

@@ -1,13 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Draft 1 turn order UI.
-/// Responsibilities:
-/// - Toggle player/enemy phase overlays
-/// - Rebuild enemy turn-order tokens from EnemyTurnQueue
-/// - Provide structure for later player token syncing and animation
-/// </summary>
+
 public class TurnOrderUI : MonoBehaviour
 {
 

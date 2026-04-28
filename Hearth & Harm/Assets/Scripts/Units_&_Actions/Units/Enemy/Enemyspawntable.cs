@@ -2,11 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// ScriptableObject that defines which enemies spawn in a given room type
-/// at a given level range.
-/// Create via: Assets > Create > Combat > Enemy Spawn Table
-/// </summary>
+
 [CreateAssetMenu(fileName = "NewSpawnTable", menuName = "Combat/Enemy Spawn Table")]
 public class EnemySpawnTable : ScriptableObject
 {

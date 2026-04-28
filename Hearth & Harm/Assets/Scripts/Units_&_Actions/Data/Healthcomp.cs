@@ -2,11 +2,6 @@ using System;
 using System.Collections;
 using UnityEngine;
 
-/// <summary>
-/// Health component for any unit that can take damage.
-/// Auto-reads max HP from IHasHealth on the same GameObject.
-/// Works identically in SP and MP (network layer added separately when needed).
-/// </summary>
 public class HealthComponent : MonoBehaviour
 {
     [Header("Damage Numbers")]

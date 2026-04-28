@@ -96,9 +96,6 @@ public class CombatAction : BaseAction
 
         AttackSpritePopup.ShowOnTiles(actionData, hitPositions);
 
-        // ── STAMINA SYNC ──────────────────────────────────────────────────
-        // SpendStamina must be synced so all peers show the correct value.
-        // In MP the owner spends locally and broadcasts; in SP spend locally.
         SpendStamina();
         if (GameManager.IsMultiplayer)
         {
@@ -106,14 +103,6 @@ public class CombatAction : BaseAction
             if (bridge != null && bridge.IsOwner && playerStats != null)
                 SyncStaminaServerRpc(playerStats.currentStamina);
         }
-        // ─────────────────────────────────────────────────────────────────
-
-        // ── DICE / DAMAGE SYNC ────────────────────────────────────────────
-        // In multiplayer ONLY the owner (attacker) rolls dice and then
-        // broadcasts the final computed damage value. This guarantees every
-        // peer applies the same number regardless of RNG state differences.
-        // In single-player the original local-roll path is preserved.
-        // ─────────────────────────────────────────────────────────────────
 
         int  finalDamage  = 0;
         bool diceFinished = false;
@@ -156,7 +145,6 @@ public class CombatAction : BaseAction
                 if (networkBridge != null)
                     networkBridge.RequestApplyDamageServerRpc(posArrayX, posArrayY, finalDamage);
             }
-            // Non-owners do nothing here — damage is applied via the ServerRpc → ClientRpc chain
         }
         else
         {

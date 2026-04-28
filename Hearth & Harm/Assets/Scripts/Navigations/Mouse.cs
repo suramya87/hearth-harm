@@ -16,7 +16,6 @@ public class MouseWorld2D : MonoBehaviour
         if (cam == null) cam = Camera.main;
     }
 
-    /// <summary>Returns the world position of the mouse cursor.</summary>
     public static Vector3 GetPosition()
     {
         if (Instance == null || Instance.cam == null) return Vector3.zero;
@@ -25,7 +24,6 @@ public class MouseWorld2D : MonoBehaviour
         return Instance.cam.ScreenToWorldPoint(screenPos);
     }
 
-    /// <summary>Returns the grid position in a specific room under the mouse.</summary>
     public static GridPosition GetGridPosition(RoomGrid room)
     {
         if (room == null) return default;
