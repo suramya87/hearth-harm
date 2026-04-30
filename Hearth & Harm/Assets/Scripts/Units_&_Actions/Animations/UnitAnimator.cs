@@ -5,7 +5,7 @@ public class UnitAnimator : MonoBehaviour
 {
     [Header("Animator Parameters")]
     [SerializeField] private string paramIsMoving    = "isMoving";
-    [SerializeField] private string paramIsIdle      = "isIdle";
+    // [SerializeField] private string paramIsIdle      = "isIdle";
     [SerializeField] private string paramFacingNorth = "facingNorth";
     [SerializeField] private string paramFacingSouth = "facingSouth";
     [SerializeField] private string paramFacingEast  = "facingEast";
@@ -17,7 +17,7 @@ public class UnitAnimator : MonoBehaviour
     protected Animator      anim;
     private   HealthComponent health;
 
-    protected int hashIsMoving, hashIsIdle,
+    protected int hashIsMoving,
                   hashFacingNorth, hashFacingSouth, hashFacingEast, hashFacingWest,
                   hashAttack, hashHurt, hashIsDead;
 
@@ -27,7 +27,7 @@ public class UnitAnimator : MonoBehaviour
         health = GetComponent<HealthComponent>();
 
         hashIsMoving    = Animator.StringToHash(paramIsMoving);
-        hashIsIdle      = Animator.StringToHash(paramIsIdle);
+        // hashIsIdle      = Animator.StringToHash(paramIsIdle);
         hashFacingNorth = Animator.StringToHash(paramFacingNorth);
         hashFacingSouth = Animator.StringToHash(paramFacingSouth);
         hashFacingEast  = Animator.StringToHash(paramFacingEast);
@@ -56,7 +56,6 @@ public class UnitAnimator : MonoBehaviour
     public void SetMoving(bool moving)
     {
         anim.SetBool(hashIsMoving, moving);
-        anim.SetBool(hashIsIdle, !moving);
     }
 
     public void SetFacing(Vector2Int dir)
@@ -67,6 +66,8 @@ public class UnitAnimator : MonoBehaviour
         bool south = northSouthDominant && dir.y < 0;
         bool east  = !northSouthDominant && dir.x > 0;
         bool west  = !northSouthDominant && dir.x < 0;
+
+        Debug.Log($"SetFacing called - N:{north} S:{south} E:{east} W:{west} | dir:{dir}");
 
         anim.SetBool(hashFacingNorth, north);
         anim.SetBool(hashFacingSouth, south);
