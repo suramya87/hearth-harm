@@ -8705,9 +8705,8 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  hallwayHorizontalPrefab: {fileID: 2217066784230207157, guid: 44016d9ddc31b5d43b663dcd368bf660, type: 3}
-  hallwayVerticalPrefab: {fileID: 2255239054199406656, guid: 82952192468681d489dd4ffa4b5a89dd, type: 3}
-  hallwaySinglePrefab: {fileID: 0}
+  hallwayTileSet: {fileID: 11400000, guid: 21108b0b5853d2d438107043f6c2f208, type: 2}
+  hallwayCellSize: 1
   minRooms: 8
   maxRooms: 10
   specialRoomChance: 0.3

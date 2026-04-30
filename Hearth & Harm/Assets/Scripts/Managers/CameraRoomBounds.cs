@@ -13,10 +13,7 @@ using UnityEngine;
 ///     Set boundsOverride to a non-zero size to use that instead.
 ///     Still no collider needed.
 ///
-///   Collider (legacy)
-///     Attach a BoxCollider2D and set useCollider = true if you prefer
-///     the old collider-driven approach.
-/// </summary>
+/// <summary>
 public class CameraRoomBounds : MonoBehaviour
 {
     [Header("Mode")]
