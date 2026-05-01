@@ -2851,7 +2851,7 @@ MonoBehaviour:
   diceParent: {fileID: 1771081042}
   upwardForce: 1
   sideForce: 3
-  torqueForce: 12
+  torqueForce: 20
   minimumRollTime: 0.75
   settledConfirmTime: 0.35
   maxRollTime: 6
@@ -7699,7 +7699,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1013512740}
   m_LocalRotation: {x: -0, y: 0.7071068, z: -0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0, z: -16.100056}
+  m_LocalPosition: {x: 0, y: 0, z: -25.40003}
   m_LocalScale: {x: 54.490917, y: 1, z: 0.056845456}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -7707,7 +7707,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 90, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0.466, y: 0.000015274629}
+  m_AnchoredPosition: {x: 0.466, y: 0.000015242948}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!65 &1013512742
@@ -9555,7 +9555,7 @@ Transform:
   m_GameObject: {fileID: 1215914007}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -2.35}
+  m_LocalPosition: {x: 0, y: 0, z: -5.45}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -10424,7 +10424,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1358896718}
   m_LocalRotation: {x: -0, y: 0.7071068, z: -0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0, z: -16.1}
+  m_LocalPosition: {x: 0, y: 0, z: -25.4}
   m_LocalScale: {x: 54.490917, y: 1, z: 0.056845456}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -14123,7 +14123,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1778614247}
   m_LocalRotation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
-  m_LocalPosition: {x: 0, y: 0, z: -16.100056}
+  m_LocalPosition: {x: 0, y: 0, z: -25.40003}
   m_LocalScale: {x: 54.490917, y: 1, z: 0.056845456}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -14554,7 +14554,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1853793494}
   m_LocalRotation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
-  m_LocalPosition: {x: 0, y: 0, z: -16.100056}
+  m_LocalPosition: {x: 0, y: 0, z: -25.40003}
   m_LocalScale: {x: 54.490917, y: 1, z: 0.056845456}
   m_ConstrainProportionsScale: 0
   m_Children: []
