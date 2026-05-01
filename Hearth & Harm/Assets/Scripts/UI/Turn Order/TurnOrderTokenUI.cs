@@ -1,12 +1,10 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
-/// <summary>
 /// Basic token binder for turn order UI.
-/// Draft 1 keeps this simple: bind enemy/player references and optional visuals.
-/// </summary>
-public class TurnOrderTokenUI : MonoBehaviour
+public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler
 {
     [Header("Optional UI")]
     [SerializeField] private TMP_Text nameText;
@@ -56,4 +54,18 @@ public class TurnOrderTokenUI : MonoBehaviour
 
     public EnemyUnit GetBoundEnemy() => boundEnemy;
     public Unit GetBoundPlayer() => boundPlayer;
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (boundEnemy == null) return;
+
+        if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn)
+            return;
+
+        HealthComponent health = boundEnemy.GetComponent<HealthComponent>();
+        if (health != null)
+            EnemyHealthUI.Instance?.SetTarget(health);
+
+        CameraController2D.Instance?.SoftFocusOn(boundEnemy.transform);
+    }
 }

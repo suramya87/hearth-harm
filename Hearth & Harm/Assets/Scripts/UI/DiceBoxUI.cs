@@ -5,88 +5,70 @@ using TMPro;
 using UnityEngine;
 
 /// <summary>
-/// Shows dice roll results in the HUD.
-/// Can either display instantly with ShowRoll(), or play a timed presentation
-/// before reporting the final total.
+/// Handles dice roll UI presentation and receives final results from the physics dice roller.
 /// </summary>
 public class DiceBoxUI : MonoBehaviour
 {
-    [Header("UI")]
-    public TextMeshProUGUI resultsText;
-    public TextMeshProUGUI totalText;
+    [Header("UI Text")]
+    [SerializeField] private TextMeshProUGUI resultsText;
+    [SerializeField] private TextMeshProUGUI totalText;
 
-    [Header("Main Roll Area")]
-    [SerializeField] private RectTransform mainRollArea;
+    [Header("UI Visibility")]
+    [SerializeField] private GameObject dimOverlay;
+    [SerializeField] private GameObject diceRenderImage;
 
-    [Header("Visuals")]
-    public Transform diceSpawnPoint;
-    public Transform diceCenter;
-    public DiceVisual d6Prefab;
-    public Transform diceVisualContainer;
+    [Header("Physics Dice")]
+    [SerializeField] private DicePhysicsRoller physicsRoller;
 
-    [Header("Presentation Timing")]
-    [SerializeField] private float chaoticRollTime = 0.75f;
-    [SerializeField] private float settleTime = 0.5f;
+    [Header("Timing")]
     [SerializeField] private float resultHoldTime = 0.35f;
+    [SerializeField] private bool hideDiceAfterRoll = false;
 
-    [Header("Layout")]
-    [SerializeField] private float spacingX = 50f;
-    [SerializeField] private float spacingY = 50f;
-    [SerializeField] private int maxPerRow = 6;
-    [SerializeField] private float chaoticSpawnRadius = 120f;
-
-    [Header("Dice Scale")]
-    [SerializeField] private float chaosScale = 1.5f;
-    [SerializeField] private float finalScale = 0.6f;
-
-    private readonly List<DiceVisual> visuals = new();
-    private List<int> rolls = new();
+    private readonly List<int> rolls = new();
     private int bonus;
 
-
-    public void ShowRoll(List<int> results, int flatBonus = 0)
+    private void Awake()
     {
-        Clear();
+        SetDim(false);
+        SetDiceRenderVisible(false);
 
-        rolls = new List<int>(results);
-        bonus = flatBonus;
+        if (physicsRoller != null)
+            physicsRoller.SetStageVisible(false);
 
-        foreach (int v in results)
-        {
-            SpawnDie(v, diceSpawnPoint.localPosition);
-        }
-
-        LayoutDice();
         Refresh();
     }
 
-    public IEnumerator PlayRollPresentation(List<int> results, int flatBonus, Action<int> onComplete)
+    public IEnumerator PlayPhysicsD6Roll(int diceCount, int flatBonus, Action<int> onComplete)
     {
-        Clear();
+        if (physicsRoller == null)
+        {
+            Debug.LogError($"{nameof(DiceBoxUI)} has no Physics Roller assigned.");
+            onComplete?.Invoke(0);
+            yield break;
+        }
 
-        rolls = new List<int>(results);
+        ClearResultsOnly();
+
         bonus = flatBonus;
+
+        SetDim(true);
+        SetDiceRenderVisible(true);
+        physicsRoller.SetStageVisible(true);
 
         if (resultsText != null) resultsText.text = "...";
         if (totalText != null) totalText.text = "...";
 
-        foreach (int value in results)
+        List<int> physicsResults = null;
+
+        yield return physicsRoller.RollD6(diceCount, results =>
         {
-            Vector3 randomSpawn = GetChaoticSpawnPosition();
-            SpawnDie(value, randomSpawn);
-        }
+            physicsResults = results;
+        });
 
-        yield return new WaitForSeconds(chaoticRollTime);
+        rolls.Clear();
 
-        LayoutDice();
-
-        foreach (DiceVisual die in visuals)
-        {
-            if (die != null)
-                die.SetTargetScale(finalScale);
-        }
-
-        yield return new WaitForSeconds(settleTime);
+        if (physicsResults != null)
+            rolls.AddRange(physicsResults);
 
         Refresh();
 
@@ -94,84 +76,42 @@ public class DiceBoxUI : MonoBehaviour
 
         yield return new WaitForSeconds(resultHoldTime);
 
+        SetDim(false);
+        SetDiceRenderVisible(false);
+        physicsRoller.SetStageVisible(false);
+
         onComplete?.Invoke(total);
     }
 
-    private void SpawnDie(int value, Vector3 spawnPosition)
+    public void ShowRoll(List<int> results, int flatBonus = 0)
     {
-        if (d6Prefab == null || diceVisualContainer == null) return;
+        ClearResultsOnly();
 
-        DiceVisual die = Instantiate(d6Prefab, diceVisualContainer);
+        if (results != null)
+            rolls.AddRange(results);
 
-        // During chaos phase, the die stays around its random spawn position.
-        die.Initialize(spawnPosition, spawnPosition, value);
-        die.SetTargetScale(chaosScale);
+        bonus = flatBonus;
 
-        visuals.Add(die);
-    }
-
-    private Vector3 GetChaoticSpawnPosition()
-    {
-        if (mainRollArea == null)
-        {
-            Vector2 fallback = UnityEngine.Random.insideUnitCircle * chaoticSpawnRadius;
-            Vector3 center = diceCenter != null ? diceCenter.localPosition : Vector3.zero;
-            return center + new Vector3(fallback.x, fallback.y, 0f);
-        }
-
-        Rect rect = mainRollArea.rect;
-
-        float x = UnityEngine.Random.Range(rect.xMin, rect.xMax);
-        float y = UnityEngine.Random.Range(rect.yMin, rect.yMax);
-
-        return diceVisualContainer.InverseTransformPoint(
-            mainRollArea.TransformPoint(new Vector3(x, y, 0f))
-        );
-    }
-
-    private void LayoutDice()
-    {
-        if (diceCenter == null) return;
-
-        int total = visuals.Count;
-        if (total == 0) return;
-
-        int rows = Mathf.CeilToInt((float)total / maxPerRow);
-        float topY = diceCenter.localPosition.y + (rows - 1) * spacingY * 0.5f;
-
-        int index = 0;
-
-        for (int row = 0; row < rows; row++)
-        {
-            int inRow = Mathf.Min(maxPerRow, total - index);
-            float startX = diceCenter.localPosition.x - (inRow - 1) * spacingX * 0.5f;
-
-            for (int col = 0; col < inRow; col++)
-            {
-                Vector3 target = new Vector3(
-                    startX + col * spacingX,
-                    topY - row * spacingY,
-                    diceCenter.localPosition.z
-                );
-
-                visuals[index].UpdateTarget(target);
-                index++;
-            }
-        }
+        Refresh();
     }
 
     public void Clear()
     {
+        ClearResultsOnly();
+
+        SetDim(false);
+        SetDiceRenderVisible(false);
+
+        if (physicsRoller != null)
+            physicsRoller.ClearDice();
+
+        Refresh();
+    }
+
+    private void ClearResultsOnly()
+    {
         rolls.Clear();
         bonus = 0;
-
-        foreach (DiceVisual visual in visuals)
-        {
-            if (visual != null)
-                Destroy(visual.gameObject);
-        }
-
-        visuals.Clear();
         Refresh();
     }
 
@@ -188,6 +128,7 @@ public class DiceBoxUI : MonoBehaviour
             resultsText.text = string.Join(", ", rolls);
 
         int diceSum = 0;
+
         foreach (int roll in rolls)
             diceSum += roll;
 
@@ -197,7 +138,7 @@ public class DiceBoxUI : MonoBehaviour
         {
             totalText.text = bonus != 0
                 ? $"{diceSum} + {bonus} = <b>{total}</b>"
-                : $"{total}";
+                : $"<b>{total}</b>";
         }
     }
 
@@ -209,5 +150,17 @@ public class DiceBoxUI : MonoBehaviour
             total += roll;
 
         return total;
+    }
+
+    private void SetDim(bool active)
+    {
+        if (dimOverlay != null)
+            dimOverlay.SetActive(active);
+    }
+
+    private void SetDiceRenderVisible(bool active)
+    {
+        if (diceRenderImage != null)
+            diceRenderImage.SetActive(active);
     }
 }

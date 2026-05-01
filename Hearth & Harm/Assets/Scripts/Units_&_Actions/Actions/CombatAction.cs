@@ -102,23 +102,20 @@ public class CombatAction : BaseAction
 
         SpendStamina();
 
-        // 🎲 STEP 1: Roll dice (logic only)
-        List<int> rolls = RollDamageDice();
-
         int finalDamage = 0;
         bool diceFinished = false;
 
-        // 🎲 STEP 2: Play presentation
-        if (diceBox != null)
+        if (diceBox != null && actionData.useDiceDamage)
         {
-            yield return diceBox.PlayRollPresentation(rolls, actionData.flatBonus, (result) =>
+            yield return diceBox.PlayPhysicsD6Roll(actionData.diceCount, actionData.flatBonus, (result) =>
             {
-                finalDamage = Mathf.RoundToInt(result * actionData.damageMultiplier);
+                finalDamage = Mathf.Max(1, Mathf.RoundToInt(result * actionData.damageMultiplier));
                 diceFinished = true;
             });
         }
         else
         {
+            List<int> rolls = RollDamageDice();
             finalDamage = CalculateDamage(rolls);
             diceFinished = true;
         }

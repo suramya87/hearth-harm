@@ -99,6 +99,23 @@ public class CameraController2D : MonoBehaviour
     {
         if (followTarget != null)
         {
+            if (!cameraInputLocked && HasManualInput())
+            {
+                followTarget = null;
+                unlockWhenCentered = false;
+            }
+            else
+            {
+                DoFollowTarget();
+
+                if (unlockWhenCentered && IsCenteredOnFollowTarget())
+                {
+                    followTarget = null;
+                    cameraInputLocked = false;
+                    unlockWhenCentered = false;
+                }
+            }
+
             DoFollowTarget();
 
             if (unlockWhenCentered && IsCenteredOnFollowTarget())
@@ -298,5 +315,15 @@ public class CameraController2D : MonoBehaviour
         {
             snapping = true;
         }
+    }
+
+    public void SoftFocusOn(Transform target)
+    {
+        if (target == null) return;
+
+        followTarget = target;
+        cameraInputLocked = false;
+        unlockWhenCentered = true;
+        snapping = false;
     }
 }
