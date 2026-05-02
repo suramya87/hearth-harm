@@ -10869,20 +10869,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 0}
   totalText: {fileID: 26730081}
-  mainRollArea: {fileID: 0}
-  diceSpawnPoint: {fileID: 780848317}
-  diceCenter: {fileID: 1839187750}
-  d6Prefab: {fileID: -3640584172647325039, guid: 68f4db73382110947be750dd461c271a, type: 3}
-  diceVisualContainer: {fileID: 1302336534}
-  chaoticRollTime: 0.75
-  settleTime: 0.5
+  dimOverlay: {fileID: 0}
+  diceRenderImage: {fileID: 0}
+  physicsRoller: {fileID: 0}
   resultHoldTime: 0.35
-  spacingX: 50
-  spacingY: 50
-  maxPerRow: 6
-  chaoticSpawnRadius: 120
-  chaosScale: 1.5
-  finalScale: 0.6
+  hideDiceAfterRoll: 0
 --- !u!114 &949148375
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12769,7 +12760,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &1163725317
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19524,20 +19515,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 1086071261}
   totalText: {fileID: 499148570}
-  mainRollArea: {fileID: 0}
-  diceSpawnPoint: {fileID: 353162891}
-  diceCenter: {fileID: 1777914387}
-  d6Prefab: {fileID: -3640584172647325039, guid: 68f4db73382110947be750dd461c271a, type: 3}
-  diceVisualContainer: {fileID: 194432176}
-  chaoticRollTime: 0.75
-  settleTime: 0.5
+  dimOverlay: {fileID: 0}
+  diceRenderImage: {fileID: 0}
+  physicsRoller: {fileID: 0}
   resultHoldTime: 0.35
-  spacingX: 50
-  spacingY: 50
-  maxPerRow: 6
-  chaoticSpawnRadius: 120
-  chaosScale: 1.5
-  finalScale: 0.6
+  hideDiceAfterRoll: 0
 --- !u!114 &1792522406
 MonoBehaviour:
   m_ObjectHideFlags: 0
