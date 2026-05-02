@@ -370,7 +370,7 @@ MonoBehaviour:
   actionData: {fileID: 11400000, guid: c5f3dcb2005c4a140b13f1bc478eec6b, type: 2}
   facingRotationSteps: 1
   diceBox: {fileID: 0}
-  damageNumberPrefab: {fileID: 395528008300433492, guid: d4a5670d4a79972499664c1786a8364f, type: 3}
+  damageNumberPrefab: {fileID: 0}
 --- !u!114 &6970145410071607390
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -386,7 +386,7 @@ MonoBehaviour:
   actionData: {fileID: 11400000, guid: ee882e684e75fc24192c1d45aa655a86, type: 2}
   facingRotationSteps: 1
   diceBox: {fileID: 0}
-  damageNumberPrefab: {fileID: 395528008300433492, guid: d4a5670d4a79972499664c1786a8364f, type: 3}
+  damageNumberPrefab: {fileID: 0}
 --- !u!212 &3343925516540839920
 SpriteRenderer:
   serializedVersion: 2
@@ -456,7 +456,7 @@ Animator:
   m_GameObject: {fileID: 9198468102176965729}
   m_Enabled: 1
   m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 92f19cd557cedac449b0d37cf81fc396, type: 2}
+  m_Controller: {fileID: 9100000, guid: 617f6b7e2aeb1d345a41635fdcbc4903, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
@@ -481,7 +481,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimator
   paramIsMoving: isMoving
-  paramIsIdle: isIdle
   paramFacingNorth: facingNorth
   paramFacingSouth: facingSouth
   paramFacingEast: facingEast

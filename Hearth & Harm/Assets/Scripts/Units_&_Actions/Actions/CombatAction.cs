@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Unity.Netcode;
 using UnityEngine;
 
 public class CombatAction : BaseAction
@@ -56,11 +55,16 @@ public class CombatAction : BaseAction
 
     // ── Execution ──────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Main entry point. Automatically routes damage through NetworkedHealthBridge
+    /// when running in multiplayer — no need to call PerformAttackNetworked separately.
+    /// </summary>
     public void PerformAttack(GridPosition targetGP, Action onComplete)
     {
         ExecuteAttackFlow(targetGP, onComplete);
     }
 
+    /// <summary>Explicit networked variant kept for API compatibility.</summary>
     public void PerformAttackNetworked(GridPosition targetGP, Action onComplete)
     {
         ExecuteAttackFlow(targetGP, onComplete);
@@ -97,108 +101,44 @@ public class CombatAction : BaseAction
         AttackSpritePopup.ShowOnTiles(actionData, hitPositions);
 
         SpendStamina();
-        if (GameManager.IsMultiplayer)
-        {
-            var bridge = unit.GetComponent<NetworkedPlayerBridge>();
-            if (bridge != null && bridge.IsOwner && playerStats != null)
-                SyncStaminaServerRpc(playerStats.currentStamina);
-        }
 
-        int  finalDamage  = 0;
+        int finalDamage = 0;
         bool diceFinished = false;
 
-        if (GameManager.IsMultiplayer)
+        if (diceBox != null && actionData.useDiceDamage)
         {
-            var networkBridge = unit.GetComponent<NetworkedPlayerBridge>();
-            bool isOwner = networkBridge != null && networkBridge.IsOwner;
-
-            if (isOwner)
+            yield return diceBox.PlayPhysicsD6Roll(actionData.diceCount, actionData.flatBonus, (result) =>
             {
-                // Owner rolls and presents dice
-                List<int> rolls = RollDamageDice();
-
-                if (diceBox != null)
-                {
-                    yield return diceBox.PlayRollPresentation(rolls, actionData.flatBonus, (result) =>
-                    {
-                        finalDamage = Mathf.RoundToInt(result * actionData.damageMultiplier);
-                        diceFinished = true;
-                    });
-                }
-                else
-                {
-                    finalDamage = CalculateDamage(rolls);
-                    diceFinished = true;
-                }
-
-                while (!diceFinished) yield return null;
-
-                // Broadcast the authoritative damage value and positions to server
-                var posArrayX = new int[hitPositions.Count];
-                var posArrayY = new int[hitPositions.Count];
-                for (int i = 0; i < hitPositions.Count; i++)
-                {
-                    posArrayX[i] = hitPositions[i].x;
-                    posArrayY[i] = hitPositions[i].y;
-                }
-
-                if (networkBridge != null)
-                    networkBridge.RequestApplyDamageServerRpc(posArrayX, posArrayY, finalDamage);
-            }
+                finalDamage = Mathf.Max(1, Mathf.RoundToInt(result * actionData.damageMultiplier));
+                diceFinished = true;
+            });
         }
         else
         {
-            // ── Single-player path (unchanged) ────────────────────────────
             List<int> rolls = RollDamageDice();
-
-            if (diceBox != null)
-            {
-                yield return diceBox.PlayRollPresentation(rolls, actionData.flatBonus, (result) =>
-                {
-                    finalDamage = Mathf.RoundToInt(result * actionData.damageMultiplier);
-                    diceFinished = true;
-                });
-            }
-            else
-            {
-                finalDamage = CalculateDamage(rolls);
-                diceFinished = true;
-            }
-
-            while (!diceFinished) yield return null;
-
-            ApplyDamageWithValue(hitPositions, finalDamage);
+            finalDamage = CalculateDamage(rolls);
+            diceFinished = true;
         }
 
+        // Wait safety (in case)
+        while (!diceFinished)
+            yield return null;
+
+        // 💥 STEP 3: Apply damage AFTER dice animation
+        if (GameManager.IsMultiplayer)
+            ApplyDamageWithValueNetworked(hitPositions, finalDamage);
+        else
+            ApplyDamageWithValue(hitPositions, finalDamage);
+
         playerAnimator?.RefreshStaminaState();
+
         isActive = false;
         SelectMoveAction();
+
         onActionComplete?.Invoke();
     }
 
-    // ── Stamina ServerRpc (owner → server → all clients) ──────────────────
-
-    [ServerRpc(RequireOwnership = false)]
-    private void SyncStaminaServerRpc(int newStamina)
-    {
-        SyncStaminaClientRpc(newStamina);
-    }
-
-    [ClientRpc]
-    private void SyncStaminaClientRpc(int newStamina)
-    {
-        // Only apply on non-owners — the owner already spent stamina locally
-        var bridge = unit.GetComponent<NetworkedPlayerBridge>();
-        if (bridge != null && bridge.IsOwner) return;
-
-        if (playerStats != null)
-            playerStats.currentStamina = newStamina;
-
-        playerAnimator?.RefreshStaminaState();
-    }
-
     // ── Damage Application ─────────────────────────────────────────────────
-
     private void ApplyDamageWithValue(List<GridPosition> positions, int dmg)
     {
         var room = unit.GetCurrentRoomGrid();
@@ -211,6 +151,7 @@ public class CombatAction : BaseAction
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
+
                 enemy.Health.TakeDamage(dmg);
                 DamageNumber.Spawn(damageNumberPrefab, enemy.transform.position, dmg);
             }
@@ -218,6 +159,7 @@ public class CombatAction : BaseAction
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
+
                 target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
                 DamageNumber.Spawn(damageNumberPrefab, target.transform.position, dmg);
             }
@@ -246,6 +188,7 @@ public class CombatAction : BaseAction
             }
         }
     }
+    
 
     // ── Valid targets ──────────────────────────────────────────────────────
 
@@ -289,8 +232,13 @@ public class CombatAction : BaseAction
     public bool CanAfford()
     {
         if (actionData == null) return false;
-        if (!actionData.requiresEnoughStamina) return true;
-        if (playerStats == null) return false;
+
+        if (!actionData.requiresEnoughStamina)
+            return true;
+
+        if (playerStats == null)
+            return false;
+
         return playerStats.currentStamina >= actionData.staminaCost;
     }
 
@@ -336,15 +284,20 @@ public class CombatAction : BaseAction
     {
         if (!actionData.useDiceDamage)
             return new List<int> { actionData.baseDamage };
+
         if (actionData.diceCount <= 0)
             return new List<int>();
+
         return DiceRoller.RollMultiple(actionData.dieType, actionData.diceCount);
     }
 
     private int CalculateDamage(List<int> rolls)
     {
         int total = actionData.flatBonus;
-        foreach (int r in rolls) total += r;
+
+        foreach (int r in rolls)
+            total += r;
+
         return Mathf.Max(1, Mathf.RoundToInt(total * actionData.damageMultiplier));
     }
 
