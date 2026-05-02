@@ -4,10 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// End Turn button UI. Flashes when out of stamina, locks during enemy phase.
-/// Subscribes to TurnSystem (SP). For MP, extend or swap with MultiplayerTurnSystemUI.
-/// </summary>
+
 public class TurnSystemUI : MonoBehaviour
 {
     [Header("Core")]

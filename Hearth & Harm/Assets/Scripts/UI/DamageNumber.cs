@@ -1,10 +1,7 @@
 using TMPro;
 using UnityEngine;
 
-/// <summary>
-/// Floating damage number that drifts upward and then destroys itself.
-/// Works in 2D — uses world-space TMP.
-/// </summary>
+
 public class DamageNumber : MonoBehaviour
 {
     [Header("References")]
@@ -34,7 +31,6 @@ public class DamageNumber : MonoBehaviour
         if (text != null) text.text = amount.ToString();
     }
 
-    /// <summary>Convenience spawn helper.</summary>
     public static DamageNumber Spawn(GameObject prefab, Vector3 worldPos, int amount)
     {
         if (prefab == null) return null;

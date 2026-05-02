@@ -2,16 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Paints coloured highlights directly onto the room's floor tilemap.
-/// Replaces: GridSystemVisual, GridSystemVisualSingle, TilemapGridVisual,
-///           NetworkedGridVisual, TilemapClickHandler.
-///
-/// SETUP
-///   Attach to any persistent manager (e.g. GameManager) in your scene.
-///   Assign solidWhiteTile (a plain white tile asset).
-///   Nothing else required — it listens to UnitActionSystem and MouseWorld2D.
-/// </summary>
+
 public class TilemapHighlighter : MonoBehaviour
 {
     public static TilemapHighlighter Instance { get; private set; }
@@ -25,46 +16,40 @@ public class TilemapHighlighter : MonoBehaviour
     [SerializeField] private Color aoeColor   = new(1f,  0.15f, 0.15f, 1f);
     [SerializeField] private Color hoverColor = new(1f,  1f,   1f,  0.4f);
 
-    // Tracking what we painted so we can undo it next frame
     private Tilemap                          paintedTilemap;
-    private Dictionary<Vector3Int, TileBase> originalTiles  = new();
-    private HashSet<Vector3Int>              painted         = new();
+    private Dictionary<Vector3Int, TileBase> originalTiles = new();
+    private HashSet<Vector3Int>              painted        = new();
 
     private void Awake() => Instance = this;
 
-
     private void Start()
     {
-        // Catch the case where RoomManager was already set before we subscribed
         if (paintedTilemap == null)
             RefreshTilemap();
     }
 
-
     private void OnEnable()
     {
-        LevelGenerator.OnLevelReady += OnLevelReady;
+        LevelGenerator.OnLevelReady  += OnLevelReady;
         RoomManager.OnAnyRoomChanged += OnRoomChanged;
     }
 
     private void OnDisable()
     {
-        LevelGenerator.OnLevelReady -= OnLevelReady;
+        LevelGenerator.OnLevelReady  -= OnLevelReady;
         RoomManager.OnAnyRoomChanged -= OnRoomChanged;
         ResetAll();
     }
 
-    private void OnLevelReady() => RefreshTilemap();
+    private void OnLevelReady()    => RefreshTilemap();
     private void OnRoomChanged(LevelGenerator.PlacedRoom _) => RefreshTilemap();
-    // private void OnRoomChanged(LevelGenerator.PlacedRoom _) => RefreshTilemap();
 
     private void RefreshTilemap()
     {
         ResetAll();
         var grid = RoomManager.Instance?.GetCurrentRoom()?.roomGrid;
         paintedTilemap = grid?.GetFloorTilemap();
-        
-        // In multiplayer, also try finding the local player's room directly
+
         if (paintedTilemap == null && GameManager.IsMultiplayer)
             TryFindLocalPlayerRoom();
     }
@@ -74,7 +59,6 @@ public class TilemapHighlighter : MonoBehaviour
         foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
         {
             if (!bridge.IsOwner) continue;
-            // The bridge stores gridX/gridY — find which room contains that position
             var pos = bridge.GetNetworkGridPosition();
             var gen = FindAnyObjectByType<LevelGenerator>();
             if (gen == null) return;
@@ -92,11 +76,8 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void Update()
     {
-        var room = RoomManager.Instance?.GetCurrentRoomGrid();
+        var room    = RoomManager.Instance?.GetCurrentRoomGrid();
         var tilemap = room?.GetFloorTilemap();
-
-        // Debug.Log($"[Highlighter] tilemap={tilemap != null} painted={paintedTilemap != null} " +
-            //   $"tile={solidWhiteTile != null} action={UnitActionSystem.Instance?.GetSelectedAction()?.GetType().Name ?? "null"}");
 
         if (tilemap != paintedTilemap)
         {
@@ -107,12 +88,11 @@ public class TilemapHighlighter : MonoBehaviour
         if (paintedTilemap == null) return;
 
         ResetAll();
-
         if (GridCostVisualizer.Instance != null)
             GridCostVisualizer.Instance.ClearAll();
 
-        if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn)
-            return;
+
+        if (!IsPlayerPhaseNow()) return;
 
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
@@ -124,21 +104,18 @@ public class TilemapHighlighter : MonoBehaviour
             if (room != null)
             {
                 var mouseGP = room.GetGridPosition(MouseWorld2D.GetPosition());
-
                 if (move.IsValidTarget(mouseGP))
                 {
                     int cost = move.GetMoveCost(mouseGP);
                     if (cost >= 0 && GridCostVisualizer.Instance != null)
-                    {
                         GridCostVisualizer.Instance.ShowCost(mouseGP, cost);
-                    }
                 }
             }
         }
         else if (action is CombatAction combat)
         {
             Color rc = combat.ActionData != null ? combat.ActionData.rangeHighlightColor : rangeColor;
-            Color ac = combat.ActionData != null ? combat.ActionData.aoeHighlightColor : aoeColor;
+            Color ac = combat.ActionData != null ? combat.ActionData.aoeHighlightColor   : aoeColor;
 
             Paint(combat.GetValidActionGridPositionList(), rc);
 
@@ -156,6 +133,20 @@ public class TilemapHighlighter : MonoBehaviour
             if (room.IsValidGridPosition(gp))
                 PaintCell(new Vector3Int(gp.x, gp.y, 0), hoverColor);
         }
+    }
+
+    // ── Turn-phase helper ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true when it's the player's turn in EITHER the SP or MP system.
+    /// In single-player TurnSystem drives things; in multiplayer NetworkedTurnSystem does.
+    /// </summary>
+    private static bool IsPlayerPhaseNow()
+    {
+        if (GameManager.IsMultiplayer)
+            return NetworkedTurnSystem.Instance == null || NetworkedTurnSystem.Instance.IsPlayerPhase;
+
+        return TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
     }
 
     // ── Paint helpers ──────────────────────────────────────────────────────
@@ -196,8 +187,6 @@ public class TilemapHighlighter : MonoBehaviour
         originalTiles.Clear();
     }
 
-    // ── Public API (called from action bar tests etc.) ─────────────────────
-
     public void ShowPositions(List<GridPosition> positions, Color color)
     {
         if (paintedTilemap == null) return;
@@ -205,7 +194,4 @@ public class TilemapHighlighter : MonoBehaviour
     }
 
     public void HideAll() => ResetAll();
-
-    
-
 }

@@ -1,9 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// ScriptableObject defining one combat action's stats, pattern, and visuals.
-/// Create via: Assets > Create > Combat > Combat Action Data
-/// </summary>
 [CreateAssetMenu(fileName = "NewCombatAction", menuName = "Combat/Combat Action Data")]
 public class CombatActionData : ScriptableObject
 {

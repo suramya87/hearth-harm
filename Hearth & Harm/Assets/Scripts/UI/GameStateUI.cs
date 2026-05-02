@@ -3,7 +3,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>Handles the lose panel. Win UI handled by EndRoomUI.</summary>
 public class GameStateUI : MonoBehaviour
 {
     [Header("Gameplay panels (hidden on lose)")]

@@ -1,17 +1,11 @@
 using System;
 
-/// <summary>
-/// Integer 2D grid coordinate. x = column, y = row (tilemap Y axis).
-/// In Unity 2D tilemaps the third dimension is gone so we use x/y,
-/// but keep the .z alias so existing call sites don't need mass-renaming.
-/// </summary>
+
 [Serializable]
 public struct GridPosition : IEquatable<GridPosition>
 {
     public int x;
-    public int y;          // tilemap row
-
-    // Back-compat alias — old code used .z for the "depth" axis which is now y
+    public int y;          
     public int z { get => y; set => y = value; }
 
     public GridPosition(int x, int y) { this.x = x; this.y = y; }

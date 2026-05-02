@@ -4,9 +4,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-/// <summary>
-/// Shows stamina particles for the local player. Auto-binds after level ready.
-/// </summary>
 public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Particles")]

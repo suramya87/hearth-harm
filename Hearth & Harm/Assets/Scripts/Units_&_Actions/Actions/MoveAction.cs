@@ -30,6 +30,7 @@ public class MoveAction : BaseAction
         var usedPath = path.GetRange(0, steps);
         var finalPos = usedPath[^1];
 
+        // Update grid occupancy immediately (before the visual move)
         room.RemoveUnitAtGridPosition(unit.GetGridPosition(), unit);
         room.AddUnitAtGridPosition(finalPos, unit);
 
@@ -65,13 +66,22 @@ public class MoveAction : BaseAction
             transform.position = target;
         }
 
-        unit.PlaceInRoom(unit.GetCurrentRoomGrid(), finalGP);
-
         unitAnimator?.SetMoving(false);
         playerAnimator?.RefreshStaminaState();
-
         isActive = false;
+
         onComplete?.Invoke();
+
+        if (GameManager.IsMultiplayer)
+        {
+            var bridge = unit.GetComponent<NetworkedPlayerBridge>();
+            if (bridge != null && bridge.IsOwner)
+                bridge.SyncGridPosition(unit.GetCurrentRoomGrid(), finalGP);
+        }
+        else
+        {
+            unit.PlaceInRoom(unit.GetCurrentRoomGrid(), finalGP);
+        }
     }
 
     private void SetFacingToward(GridPosition next)
@@ -88,11 +98,8 @@ public class MoveAction : BaseAction
         unitAnimator?.SetFacing(dir);
     }
 
-    public bool IsValidTarget(GridPosition gp) =>
-        GetValidTargets().Contains(gp);
-
+    public bool IsValidTarget(GridPosition gp) => GetValidTargets().Contains(gp);
     public bool isValidActionGridPosition(GridPosition gp) => IsValidTarget(gp);
-
     public List<GridPosition> GetValidActionGridPositionList() => GetValidTargets();
 
     private List<GridPosition> GetValidTargets()

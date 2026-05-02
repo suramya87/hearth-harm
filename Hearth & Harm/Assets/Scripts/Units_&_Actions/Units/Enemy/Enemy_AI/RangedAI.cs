@@ -1,12 +1,7 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Ranged enemy AI. In multiplayer runs server-only.
-/// Damage is routed through NetworkedHealthBridge so clients see HP changes.
-/// </summary>
 [RequireComponent(typeof(EnemyUnit))]
 public class RangedEnemyAI : MonoBehaviour
 {
@@ -39,7 +34,7 @@ public class RangedEnemyAI : MonoBehaviour
             var flee = FindFleePos(myPos, playerPos, room, stats.moveRange);
             if (flee.HasValue)
             {
-                unit.MoveToPosition(flee.Value);   // auto-broadcasts in MP
+                unit.MoveToPosition(flee.Value);
                 yield return new WaitForSeconds(stepDelay);
                 myPos = unit.GridPosition;
                 dist  = myPos.ManhattanDistance(playerPos);
@@ -56,7 +51,7 @@ public class RangedEnemyAI : MonoBehaviour
                 int nd   = next.ManhattanDistance(playerPos);
                 if (nd <= stats.attackRange && HasLoS(next, playerPos, room)) break;
                 if (IsTileOccupied(next, room)) break;
-                unit.MoveToPosition(next);         // auto-broadcasts in MP
+                unit.MoveToPosition(next);
                 yield return new WaitForSeconds(stepDelay);
             }
             myPos = unit.GridPosition;
@@ -67,6 +62,8 @@ public class RangedEnemyAI : MonoBehaviour
 
         if (!unit.IsDead && dist <= stats.attackRange && HasLoS(myPos, playerPos, room))
         {
+            // Re-find in case player moved
+            player = FindPlayerInRoom() ?? player;
             PerformAttack(player);
             yield return new WaitForSeconds(stepDelay);
         }
@@ -104,14 +101,17 @@ public class RangedEnemyAI : MonoBehaviour
         Debug.Log($"[RangedEnemyAI] {stats.enemyName} shot player for {dmg}.");
     }
 
-    // ── Damage routing ─────────────────────────────────────────────────────
-
     private static void DealDamage(GameObject target, int dmg)
     {
         if (GameManager.IsMultiplayer)
             NetworkedHealthBridge.TakeDamage(target, dmg);
         else
             target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
+    }
+
+    private Unit FindPlayerInRoom()
+    {
+        return NetworkedEnemyBridge.FindNearestPlayerInRoom(unit.CurrentRoomGrid, unit.GridPosition);
     }
 
     // ── LoS (Bresenham) ────────────────────────────────────────────────────
@@ -134,10 +134,10 @@ public class RangedEnemyAI : MonoBehaviour
     }
 
     private GridPosition? FindFleePos(GridPosition my, GridPosition player,
-                                      RoomGrid room, int moveRange)
+                                       RoomGrid room, int moveRange)
     {
-        GridPosition? best = null;
-        int bestD = my.ManhattanDistance(player);
+        GridPosition? best  = null;
+        int           bestD = my.ManhattanDistance(player);
         for (int dx=-moveRange;dx<=moveRange;dx++)
         for (int dy=-moveRange;dy<=moveRange;dy++)
         {
@@ -156,18 +156,29 @@ public class RangedEnemyAI : MonoBehaviour
         var enemies = EnemyManager.Instance?.GetEnemiesInRoom(room);
         if (enemies != null)
             foreach (var e in enemies)
-            { if (e==unit||e==null||e.IsDead) continue; if (e.GridPosition==pos) return true; }
-        var pt = PlayerTarget.Instance;
-        if (pt != null)
-        { var pu=pt.GetUnit(); var ph=pu?.GetComponent<HealthComponent>();
-          if (ph!=null&&!ph.IsDead&&pu.GetGridPosition()==pos) return true; }
-        return false;
-    }
+                if (e != unit && e != null && !e.IsDead && e.GridPosition == pos) return true;
 
-    private Unit FindPlayerInRoom()
-    {
-        var pt = PlayerTarget.Instance;
-        return pt?.IsInRoom(unit.CurrentRoomGrid) == true ? pt.GetUnit() : null;
+        if (GameManager.IsMultiplayer)
+        {
+            foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
+            {
+                var u  = bridge.GetComponent<Unit>();
+                var hp = u?.GetComponent<HealthComponent>();
+                if (hp != null && !hp.IsDead && u.GetGridPosition() == pos) return true;
+            }
+        }
+        else
+        {
+            var pt = PlayerTarget.Instance;
+            if (pt != null)
+            {
+                var pu = pt.GetUnit();
+                var ph = pu?.GetComponent<HealthComponent>();
+                if (ph != null && !ph.IsDead && pu.GetGridPosition() == pos) return true;
+            }
+        }
+
+        return false;
     }
 
     private static Vector2Int Facing(GridPosition from, GridPosition to)

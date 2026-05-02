@@ -8,17 +8,6 @@ using Unity.Services.Core;
 using Unity.Services.Multiplayer;
 using UnityEngine;
 
-/// <summary>
-/// Manages UGS sign-in, session creation/joining, and player state.
-///
-/// STABILITY IMPROVEMENTS
-/// ──────────────────────
-/// • Exponential back-off with jitter on "Too Many Requests" (HTTP 429) from UGS Lobby.
-/// • Every error path resets isConnecting so buttons never stay permanently locked.
-/// • Widget-session watcher stops cleanly once a session is found.
-/// • SpawnLobbySyncAsHost waits properly for NGO to be fully listening before acting.
-/// • LeaveSessionAsync is idempotent and guards against double-shutdown.
-/// </summary>
 public class NetworkGameManager : MonoBehaviour
 {
     public static NetworkGameManager Instance { get; private set; }
@@ -108,8 +97,7 @@ public class NetworkGameManager : MonoBehaviour
             }
             catch
             {
-                // Widget may have signed in between our check and our attempt
-                // Wait briefly for it to complete
+
                 int waited = 0;
                 while (!AuthenticationService.Instance.IsSignedIn && waited < 50)
                 {
@@ -280,9 +268,6 @@ public async Task CreateSessionAsync()
                 bool isRateLimit = e.Message.Contains("429") ||
                                    e.Message.Contains("Too Many Requests");
 
-                // UGS returns "already a member" when the Widget joined the lobby
-                // in the background while we were retrying.  Treat it as success:
-                // the session is already live — just sync from the Widget path.
                 bool alreadyMember = e.Message.Contains("already a member") ||
                                      e.Message.Contains("already in lobby");
                 if (alreadyMember)
@@ -295,9 +280,6 @@ public async Task CreateSessionAsync()
                     }
                     else
                     {
-                        // Widget session not available yet — fire OnSessionJoined so
-                        // MainMenuController enters the lobby panel and keeps waiting
-                        // for LobbySync to arrive via NGO replication.
                         sessionEventFired = true;
                         OnSessionJoined?.Invoke();
                     }
@@ -314,12 +296,6 @@ public async Task CreateSessionAsync()
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // LobbySync spawning — host only
-    //
-    // Waits for NGO to be fully listening (IsListening + IsHost) before
-    // instantiating and network-spawning the LobbySync prefab.
-    // ─────────────────────────────────────────────────────────────────────
 
     private IEnumerator SpawnLobbySyncAsHost()
     {
@@ -340,7 +316,6 @@ public async Task CreateSessionAsync()
             yield return null;
         }
 
-        // Another route (Widget) may have already spawned LobbySync
         if (LobbySync.Instance != null)
         {
             Debug.Log("[NetworkGameManager] LobbySync already exists — skipping spawn.");
@@ -382,7 +357,6 @@ public async Task CreateSessionAsync()
         {
             yield return new WaitForSeconds(0.25f);
 
-            // Stop watching once we have a session through any path
             if (CurrentSession != null || sessionEventFired)
             {
                 widgetWatchCoroutine = null;
@@ -637,10 +611,7 @@ public async Task CreateSessionAsync()
     private void HandleSessionChanged()
         => StartCoroutine(DelayedRefreshPlayerList());
 
-    /// <summary>
-    /// Yields one frame so UGS internal player list is consistent
-    /// before iterating CurrentSession.Players.
-    /// </summary>
+
     private IEnumerator DelayedRefreshPlayerList()
     {
         yield return null;

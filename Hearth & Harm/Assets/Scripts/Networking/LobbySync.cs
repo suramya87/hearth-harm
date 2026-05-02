@@ -4,17 +4,7 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
-/// <summary>
-/// Syncs character selection, ready state, and phase transitions to all clients
-/// using NGO NetworkVariables and RPCs.
-///
-/// CHANGES
-/// ───────
-/// • OnNetworkSpawn now fires OnLobbySyncReady on ALL peers (host + clients).
-///   MainMenuController listens for this to start its SubscribeToLobbySyncWhenReady
-///   coroutine, which handles the case where the Widget joined the session and
-///   NGO replicated the scene before our code could wire up event subscriptions.
-/// </summary>
+
 public class LobbySync : NetworkBehaviour
 {
     public static LobbySync Instance { get; private set; }
@@ -50,10 +40,8 @@ public class LobbySync : NetworkBehaviour
 
         charSelectPhaseActive.OnValueChanged += OnCharSelectPhaseChanged;
 
-        // Register this client so it appears in the player list
         RegisterClientServerRpc(NetworkManager.Singleton.LocalClientId);
 
-        // Late-join catch-up: char select was already started before this spawned
         if (charSelectPhaseActive.Value)
         {
             Debug.Log("[LobbySync] Char select already active on spawn — deferred fire.");

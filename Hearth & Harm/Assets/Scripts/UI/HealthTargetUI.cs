@@ -3,10 +3,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-/// <summary>
-/// Generic health display widget. Bind to any HealthComponent via SetTarget().
-/// Used for enemy inspection panel, boss health bars, etc.
-/// </summary>
 public class HealthTargetUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Fire States")]

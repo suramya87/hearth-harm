@@ -112,11 +112,7 @@ public class LevelSyncBridge : NetworkBehaviour
     [ClientRpc]
     private void NotifyClientsLevelReadyClientRpc()
     {
-        // ── KEY FIX ──────────────────────────────────────────────────────────
-        // The server already fired OnNetworkLevelReady in FireLevelReady().
-        // Without this guard the host fires it a second time here, which causes
-        // NetworkedPlayerSpawner to run SpawnAllPlayers() twice → two players
-        // spawned per client.
+
         if (IsServer) return;
 
         OnNetworkLevelReady?.Invoke();

@@ -3,22 +3,7 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
-/// <summary>
-/// Spawns one networked player prefab per connected client after the level is ready.
-///
-/// SETUP:
-///   1. Add this component to the same GameObject as LevelSyncBridge / LevelGenerator.
-///   2. Assign your networked player prefabs in the Inspector (must have NetworkObject +
-///      NetworkedPlayerBridge + Unit).
-///   3. Make sure each prefab is registered in NetworkManager's NetworkPrefabs list.
-///
-/// FLOW:
-///   LevelSyncBridge.OnNetworkLevelReady fires on server only (after the LevelSyncBridge fix)
-///   → Host calls SpawnAllPlayers()
-///   → For each client: Instantiate prefab, NetworkObject.SpawnAsPlayerObject(clientId)
-///   → NetworkedPlayerBridge.InitialPlacement() writes NetworkVariables → replicates to clients
-///   → SetStartRoomClientRpc tells every peer which room is the start room via grid coords
-/// </summary>
+
 public class NetworkedPlayerSpawner : NetworkBehaviour
 {
     [Header("Player Prefabs")]
@@ -152,12 +137,10 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
         SetStartRoomClientRpc(startRoom.gridPosition.x, startRoom.gridPosition.y);
     }
 
-    // ── Tell all peers which room to activate ─────────────────────────────
 
     [ClientRpc]
     private void SetStartRoomClientRpc(int gridX, int gridY)
     {
-        // Host already set its room during SpawnAllPlayers — only clients need to act
         if (IsServer) return;
 
         if (levelGenerator == null)

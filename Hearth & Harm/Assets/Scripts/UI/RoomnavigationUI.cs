@@ -3,11 +3,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Shows directional travel buttons for the local player's current room.
-/// Buttons are hidden when enemies are present (combat lock).
-/// No LevelGrid dependency — reads from RoomManager and LevelGenerator.
-/// </summary>
 public class RoomNavigationUI : MonoBehaviour
 {
     [Header("Buttons")]
@@ -123,16 +118,43 @@ public class RoomNavigationUI : MonoBehaviour
         var target = gen?.GetConnectedRoom(room, dir);
         if (target == null) return;
 
+        if (GameManager.IsMultiplayer)
+        {
+            var bridge = FindLocalPlayerBridge();
+            if (bridge == null)
+            {
+                Debug.LogWarning("[RoomNav] Could not find local player bridge for room transition.");
+                return;
+            }
+
+            var entryDir = gen.GetOppositeDirection(dir);
+            var spawnPos = GetSpawnPosition(target, entryDir);
+            bridge.TransitionToRoom(target.roomGrid, spawnPos);
+            UpdateButtons();
+            return;
+        }
+        // ─────────────────────────────────────────────────────────────────
+
+        // Single-player path (unchanged)
         var player = FindAnyObjectByType<Unit>();
         if (player == null) return;
 
-        var entryDir  = gen.GetOppositeDirection(dir);
-        var spawnPos  = GetSpawnPosition(target, entryDir);
+        var spEntry  = gen.GetOppositeDirection(dir);
+        var spPos    = GetSpawnPosition(target, spEntry);
 
         RoomManager.Instance.SetCurrentRoom(target);
-        player.PlaceInRoom(target.roomGrid, spawnPos);
+        player.PlaceInRoom(target.roomGrid, spPos);
         CameraController2D.Instance?.SnapToTarget();
         UpdateButtons();
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private NetworkedPlayerBridge FindLocalPlayerBridge()
+    {
+        foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
+            if (bridge.IsOwner) return bridge;
+        return null;
     }
 
     private GridPosition GetSpawnPosition(LevelGenerator.PlacedRoom room,

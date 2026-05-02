@@ -6,19 +6,6 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using Unity.Netcode;
 
-/// <summary>
-/// Controls all main-menu UI panels and bridges UI events to NetworkGameManager / LobbySync.
-///
-/// CHANGES FROM PREVIOUS VERSION
-/// ──────────────────────────────
-/// • Join code is now shown prominently in the Waiting Lobby panel (host sees it there
-///   immediately after creating a session; clients don't need to display it).
-/// • A "Copy Code" button sits beside the code label so the host can share it instantly.
-/// • The Multiplayer panel's error text is now also cleared when the back button is pressed,
-///   so stale "Service busy. Retrying…" messages don't linger.
-/// • isConnecting is always reset inside HandleSessionError (was already done, but
-///   belt-and-suspenders guard added for partial-connection edge cases).
-/// </summary>
 public class MainMenuController : MonoBehaviour
 {
     // ── Panels ────────────────────────────────────────────────────────────
@@ -58,8 +45,8 @@ public class MainMenuController : MonoBehaviour
 
     // ── Waiting lobby panel ───────────────────────────────────────────────
     [Header("Waiting Lobby Panel")]
-    [SerializeField] private TextMeshProUGUI sessionCodeText;   // shows the 6-character join code
-    [SerializeField] private Button          copyCodeButton;    // NEW — copies the code to clipboard
+    [SerializeField] private TextMeshProUGUI sessionCodeText;   
+    [SerializeField] private Button          copyCodeButton;    
     [SerializeField] private TextMeshProUGUI waitingPlayerCount;
     [SerializeField] private Transform       waitingPlayerList;
     [SerializeField] private GameObject      playerSlotPrefab;
@@ -116,7 +103,6 @@ public class MainMenuController : MonoBehaviour
 
         playerNameInput?.onEndEdit.AddListener(OnPlayerNameChanged);
 
-        // Copy the join code to the system clipboard
         copyCodeButton?.onClick.AddListener(OnCopyCodeClicked);
 
         beginCharSelectButton?.onClick.AddListener(OnBeginCharSelectClicked);
@@ -246,9 +232,6 @@ public class MainMenuController : MonoBehaviour
             beginCharSelectButton.interactable = isHost;
         }
 
-        // Wait one frame for NetworkVariable replication to settle.
-        // Then check immediately — the ClientRpc may have already fired and been
-        // missed if this coroutine started late (e.g. client joined after a rate-limit retry).
         yield return null;
 
         if (!inCharSelectPhase && LobbySync.Instance.IsCharSelectPhaseActive)
@@ -258,9 +241,6 @@ public class MainMenuController : MonoBehaviour
         }
         else if (!inCharSelectPhase)
         {
-            // Poll briefly in case the ClientRpc was sent before our event subscription
-            // was wired up. This covers the race where the Widget joined the lobby,
-            // NGO replicated the scene, and the char-select RPC arrived before us.
             float pollElapsed = 0f;
             while (pollElapsed < 3f && !inCharSelectPhase)
             {
@@ -281,8 +261,6 @@ public class MainMenuController : MonoBehaviour
 
     private void Update()
     {
-        // Fallback ONLY for Widget-join clients who missed HandleSessionJoined.
-        // Strict guards prevent this from firing on the host or double-firing.
         if (!lobbySyncCoroutineActive &&
             !alreadySubscribedToLobbySync &&
             !inCharSelectPhase &&
@@ -504,12 +482,8 @@ public class MainMenuController : MonoBehaviour
 
     private void HandleSessionError(string error)
     {
-        // Reset connecting flag unconditionally so buttons never stay locked
         isConnecting = false;
         SetMultiplayerButtonsInteractable(true);
-
-        // Show the error in the multiplayer panel (which is still visible if
-        // connection never completed) or in a general UI area
         SetMultiplayerError(error);
     }
 

@@ -1,11 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// A* pathfinder for 2D tilemap rooms.
-/// Returns the path as a list of GridPositions from the step AFTER start
-/// up to and including the destination.
-/// </summary>
+
 public class Pathfinder
 {
     private class Node
@@ -24,8 +20,6 @@ public class Pathfinder
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /// <summary>Find path from start to end. ignoreOccupancy = true lets units walk
-    /// through other units (used for attack-range calculations).</summary>
     public List<GridPosition> FindPath(GridPosition start, GridPosition end,
                                        bool ignoreOccupancy = false)
     {
@@ -64,16 +58,12 @@ public class Pathfinder
         return new List<GridPosition>();
     }
 
-    /// <summary>
-    /// Find path toward target stopping when within attackRange tiles.
-    /// Returns empty list if already in range.
-    /// </summary>
+
     public List<GridPosition> FindPathToRange(GridPosition start, GridPosition target,
                                               int attackRange)
     {
         if (Heuristic(start, target) <= attackRange) return new();
 
-        // Try each tile around target at exactly attackRange distance
         var candidates = new List<GridPosition>();
         for (int dx = -attackRange; dx <= attackRange; dx++)
         for (int dy = -attackRange; dy <= attackRange; dy++)
@@ -92,7 +82,6 @@ public class Pathfinder
             if (path.Count > 0) return path;
         }
 
-        // Fallback: walk directly ignoring occupancy
         return FindPath(start, target, ignoreOccupancy: true);
     }
 
