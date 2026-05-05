@@ -4,13 +4,20 @@ using UnityEngine.Tilemaps;
 /// <summary>
 /// Orchestrates building one procedural hallway between two PlacedRooms.
 ///
-/// Called by LevelGenerator.PaintHallways() for every connection pair.
-/// Creates the HallwayGrid, runs HallwayTilemapPainter, then attaches
-/// HallwayEntryTrigger colliders at both mouths.
+/// Trigger layout per hallway:
 ///
-/// TRIGGER SIZING
-///   Each trigger is a BoxCollider2D sized to the door mouth width × 1 tile tall,
-///   centred exactly on the door mouth in world space.
+///   [Room A] --WalkTrigger_FromA-- [hallway tiles] --WalkTrigger_FromB-- [Room B]
+///                 |                                           |
+///            Trigger_ToRoomA                          Trigger_ToRoomB
+///
+///   WalkTriggers  — swap the player's currentRoomGrid to the hallway grid
+///                   so MoveAction pathfinds on hallway tiles.
+///   EntryTriggers — at the far mouth, transition the player into the destination
+///                   room, spawn enemies, and lock doors.
+///
+/// Each mouth therefore has TWO overlapping triggers:
+///   • a WalkTrigger  (shallow, fires on entering the hallway)
+///   • an EntryTrigger (fires when arriving at the destination end)
 /// </summary>
 public static class HallwayBuilder
 {
@@ -35,7 +42,6 @@ public static class HallwayBuilder
         // ── 1. Scan spawn point widths ─────────────────────────────────────
         var scannerA = GetOrAddScanner(roomA.roomInstance);
         var scannerB = GetOrAddScanner(roomB.roomInstance);
-
         scannerA.Scan();
         scannerB.Scan();
 
@@ -44,16 +50,16 @@ public static class HallwayBuilder
         int widthA = Mathf.Max(1, scannerA.GetMouthWidth(dirAtoB));
         int widthB = Mathf.Max(1, scannerB.GetMouthWidth(dirBtoA));
 
-        // ── 2. Get world positions of connection points ────────────────────
-        // Use the scanner's computed mouth centre (average of all spawn tiles).
-        // Fall back to the RoomConnector transform if no spawn tiles found.
-        Vector3 exitWorld  = scannerA.HasDoor(dirAtoB)
+        // ── 2. Get world mouth centres ─────────────────────────────────────
+        Vector3 exitWorld = scannerA.HasDoor(dirAtoB)
             ? scannerA.GetMouthCentreWorld(dirAtoB)
-            : (roomA.connector.GetConnectionPoint(dirAtoB)?.transform?.position ?? roomA.worldPosition);
+            : (roomA.connector.GetConnectionPoint(dirAtoB)?.transform?.position
+               ?? roomA.worldPosition);
 
         Vector3 entryWorld = scannerB.HasDoor(dirBtoA)
             ? scannerB.GetMouthCentreWorld(dirBtoA)
-            : (roomB.connector.GetConnectionPoint(dirBtoA)?.transform?.position ?? roomB.worldPosition);
+            : (roomB.connector.GetConnectionPoint(dirBtoA)?.transform?.position
+               ?? roomB.worldPosition);
 
         // ── 3. Create HallwayGrid ──────────────────────────────────────────
         string name = $"Hallway_{roomA.roomInstance.name}_{dirAtoB}";
@@ -75,22 +81,35 @@ public static class HallwayBuilder
         if (!hallway.IsReady)
         {
             Debug.LogError($"[HallwayBuilder] HallwayGrid failed to initialize for {name}.");
-            Object.Destroy(hallway.gameObject);
+            UnityEngine.Object.Destroy(hallway.gameObject);
             return null;
         }
 
-        // ── 6. Place entry triggers ────────────────────────────────────────
-        // Trigger A: sits at roomA's door mouth → transitions player INTO roomA when returning
-        AddEntryTrigger(hallway, exitWorld,  widthA, cellSize,
-                        destinationRoom: roomA,
-                        entryDirection:  dirBtoA,   // player enters roomA from B's side
-                        name: "Trigger_ToRoomA");
+        // ── 6. Walk triggers — swap player onto hallway grid on entry ──────
+        // Sits at room A's mouth so the player is handed to the hallway
+        // as soon as they step off room A's tiles.
+        AddWalkTrigger(hallway, exitWorld,  widthA, cellSize, "WalkTrigger_FromA");
 
-        // Trigger B: sits at roomB's door mouth → transitions player INTO roomB when going forward
+        // Sits at room B's mouth so the player is handed to the hallway
+        // when they come back through from room B.
+        AddWalkTrigger(hallway, entryWorld, widthB, cellSize, "WalkTrigger_FromB");
+
+        // ── 7. Entry triggers — transition into destination room ───────────
+        // Trigger_ToRoomA: at room A's mouth, player arriving back at A.
+        // EntryDirection = dirAtoB because they're entering room A
+        // from the direction that leads toward B.
+        AddEntryTrigger(hallway, exitWorld,  widthA, cellSize,
+            destinationRoom: roomA,
+            entryDirection:  dirAtoB,
+            name: "Trigger_ToRoomA");
+
+        // Trigger_ToRoomB: at room B's mouth, player arriving at B.
+        // EntryDirection = dirBtoA because they're entering room B
+        // from the direction that leads back toward A.
         AddEntryTrigger(hallway, entryWorld, widthB, cellSize,
-                        destinationRoom: roomB,
-                        entryDirection:  dirBtoA,   // player enters roomB from A's side (opposite)
-                        name: "Trigger_ToRoomB");
+            destinationRoom: roomB,
+            entryDirection:  dirBtoA,
+            name: "Trigger_ToRoomB");
 
         Debug.Log($"[HallwayBuilder] Built {name}. " +
                   $"WidthA={widthA} WidthB={widthB} " +
@@ -108,6 +127,36 @@ public static class HallwayBuilder
         return s;
     }
 
+    /// <summary>
+    /// Shallow trigger at a hallway mouth that hands the player off to the
+    /// hallway's RoomGrid so they can walk on hallway tiles.
+    /// </summary>
+    private static void AddWalkTrigger(
+        HallwayGrid hallway,
+        Vector3     mouthWorldPos,
+        int         mouthWidthTiles,
+        float       cellSize,
+        string      name)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(hallway.transform, worldPositionStays: false);
+        go.transform.position = mouthWorldPos;
+
+        var col = go.AddComponent<BoxCollider2D>();
+        col.isTrigger = true;
+
+        // 1.5 tiles deep so it catches the player before they fully step off
+        // the room tiles — avoids a gap where neither grid owns them.
+        col.size = new Vector2(mouthWidthTiles * cellSize, cellSize * 1.5f);
+
+        var trigger = go.AddComponent<HallwayWalkTrigger>();
+        trigger.Initialize(hallway);
+    }
+
+    /// <summary>
+    /// Deep trigger at the far end of the hallway that fires when the player
+    /// arrives at the destination room mouth and transitions them in.
+    /// </summary>
     private static void AddEntryTrigger(
         HallwayGrid                  hallway,
         Vector3                      mouthWorldPos,
@@ -120,16 +169,14 @@ public static class HallwayBuilder
         var go = new GameObject(name);
         go.transform.SetParent(hallway.transform, worldPositionStays: false);
         go.transform.position = mouthWorldPos;
-        go.tag = "HallwayTrigger"; // optional — set up tag in Unity if you want to query these
+        go.tag = "HallwayTrigger";
 
-        // BoxCollider2D sized to the door mouth
-        var col     = go.AddComponent<BoxCollider2D>();
+        var col = go.AddComponent<BoxCollider2D>();
         col.isTrigger = true;
 
+        // Size the collider to the door mouth width × 1 tile tall
         bool horizontal = entryDirection == LevelGenerator.Direction.North
                        || entryDirection == LevelGenerator.Direction.South;
-
-        // Width covers all mouth tiles; height is 1 tile so it only fires at the threshold
         float w = horizontal ? mouthWidthTiles * cellSize : cellSize;
         float h = horizontal ? cellSize                   : mouthWidthTiles * cellSize;
         col.size = new Vector2(w, h);

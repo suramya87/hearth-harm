@@ -14,5 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HallwayTileSet
   FloorTile: {fileID: 11400000, guid: 74f81714805e4c34aa44ba1d61d0209e, type: 2}
   WallSideTile: {fileID: 11400000, guid: 5e3f33036ed0b804980b8535ca8038fa, type: 2}
-  CornerConvexTile: {fileID: 0}
-  CornerConcaveTile: {fileID: 0}
+  CornerConvexTile: {fileID: 11400000, guid: 10b75da2501806d4fb455bd275d33c2b, type: 2}
+  CornerConcaveTile: {fileID: 11400000, guid: 5faf50b7754c7e44aa123ce5bab7c1f6, type: 2}

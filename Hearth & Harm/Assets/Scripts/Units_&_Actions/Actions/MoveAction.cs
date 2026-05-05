@@ -8,6 +8,9 @@ public class MoveAction : BaseAction
     [SerializeField] private int   maxMoveDistance = 4;
     [SerializeField] private float moveSpeed       = 8f;
 
+    // Exposed so HallwayWalkTrigger and HallwayEntryTrigger can wait on it
+    public bool IsActive => isActive;
+
     private int MoveDistance => playerStats != null
         ? Mathf.Max(0, playerStats.currentStamina)
         : maxMoveDistance;
@@ -72,6 +75,13 @@ public class MoveAction : BaseAction
 
         onComplete?.Invoke();
 
+        // Skip PlaceInRoom snap if the unit is on a hallway grid —
+        // HallwayEntryTrigger handles the transition into the destination room.
+        bool onHallway = unit.GetCurrentRoomGrid() is { } currentGrid
+                      && currentGrid.GetComponent<HallwayGrid>() != null;
+
+        if (onHallway) yield break;
+
         if (GameManager.IsMultiplayer)
         {
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
@@ -108,11 +118,23 @@ public class MoveAction : BaseAction
         if (!CanMove()) return list;
 
         var room = unit.GetCurrentRoomGrid();
-        if (room == null) return list;
+        if (room == null)
+        {
+            Debug.LogWarning("[MoveAction] GetValidTargets: currentRoomGrid is null!");
+            return list;
+        }
 
         var unitPos = unit.GetGridPosition();
         int dist    = MoveDistance;
-        var pf      = new Pathfinder(room);
+
+        Debug.Log($"[MoveAction] GetValidTargets | grid={room.gameObject.name} " +
+                  $"| unitPos={unitPos} " +
+                  $"| validPos={room.IsValidGridPosition(unitPos)} " +
+                  $"| walkable={room.IsWalkableIgnoreOccupancy(unitPos)} " +
+                  $"| dist={dist} " +
+                  $"| gridW={room.GetWidth()} gridH={room.GetHeight()}");
+
+        var pf = new Pathfinder(room);
 
         for (int dx = -dist; dx <= dist; dx++)
         for (int dy = -dist; dy <= dist; dy++)
@@ -128,6 +150,8 @@ public class MoveAction : BaseAction
             var path = pf.FindPath(unitPos, test);
             if (path.Count > 0 && path.Count <= dist) list.Add(test);
         }
+
+        Debug.Log($"[MoveAction] Found {list.Count} valid targets in {room.gameObject.name}");
 
         return list;
     }

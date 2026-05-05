@@ -1,28 +1,14 @@
+using System.Collections;
 using UnityEngine;
 
-/// <summary>
-/// Placed at each end of a hallway (one trigger near room A's door,
-/// one near room B's door).
-///
-/// BEHAVIOUR
-///   • The player walks freely through the hallway — no teleportation.
-///   • When the player reaches the far-end trigger, RoomManager transitions
-///     to the destination room, EnemySpawner spawns that room's enemies,
-///     and doors lock until all enemies are dead.
-///   • On room clear, doors re-open and fast-travel becomes available.
-/// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class HallwayEntryTrigger : MonoBehaviour
 {
-    // ── Configuration (set by HallwayBuilder) ─────────────────────────────
-
     public HallwayGrid               Hallway         { get; private set; }
     public LevelGenerator.PlacedRoom DestinationRoom { get; private set; }
     public LevelGenerator.Direction  EntryDirection  { get; private set; }
 
-    private bool triggered;
-
-    // ── Init ───────────────────────────────────────────────────────────────
+    private bool cooling;
 
     public void Initialize(
         HallwayGrid                  hallway,
@@ -34,29 +20,51 @@ public class HallwayEntryTrigger : MonoBehaviour
         EntryDirection  = entryDirection;
 
         GetComponent<Collider2D>().isTrigger = true;
-        triggered = false;
+        cooling = false;
     }
 
-    public void ResetTrigger() => triggered = false;
-
-    // ── Trigger ────────────────────────────────────────────────────────────
+    public void ResetTrigger()
+    {
+        StopAllCoroutines();
+        cooling = false;
+    }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (triggered) return;
+        if (cooling) return;
         if (!other.CompareTag("Player")) return;
         if (DestinationRoom?.roomGrid == null) return;
 
-        triggered = true;
-        TransitionToDestination(other.gameObject);
+        var unit = other.GetComponent<Unit>()
+                ?? other.GetComponentInParent<Unit>();
+        if (unit == null) return;
+
+        if (GameManager.IsMultiplayer)
+        {
+            var bridge = unit.GetComponent<NetworkedPlayerBridge>();
+            if (bridge == null || !bridge.IsOwner) return;
+        }
+
+        if (unit.GetCurrentRoomGrid() == DestinationRoom.roomGrid) return;
+
+        StartCoroutine(TransitionAfterMove(unit));
     }
 
-    // ── Transition ─────────────────────────────────────────────────────────
-
-    private void TransitionToDestination(GameObject playerGo)
+    private IEnumerator TransitionAfterMove(Unit unit)
     {
-        var roomManager = RoomManager.Instance;
-        if (roomManager == null) return;
+        cooling = true;
+
+        var move = unit.GetMoveAction();
+        if (move != null)
+            while (move.IsActive) yield return null;
+
+        yield return new WaitForSeconds(0.05f);
+
+        if (unit.GetCurrentRoomGrid() == DestinationRoom.roomGrid)
+        {
+            cooling = false;
+            yield break;
+        }
 
         GridPosition spawnPos = GetDestinationSpawnPos();
 
@@ -64,32 +72,25 @@ public class HallwayEntryTrigger : MonoBehaviour
         {
             foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
             {
-                if (bridge.IsOwner)
-                {
-                    bridge.TransitionToRoom(DestinationRoom.roomGrid, spawnPos);
-                    break;
-                }
+                if (!bridge.IsOwner) continue;
+                bridge.TransitionToRoom(DestinationRoom.roomGrid, spawnPos);
+                break;
             }
         }
         else
         {
-            var unit = playerGo.GetComponent<Unit>()
-                    ?? playerGo.GetComponentInParent<Unit>();
-            if (unit == null)
-            {
-                Debug.LogWarning("[HallwayEntryTrigger] Could not find Unit on player.");
-                return;
-            }
-
-            roomManager.SetCurrentRoom(DestinationRoom);
+            RoomManager.Instance?.SetCurrentRoom(DestinationRoom);
             unit.PlaceInRoom(DestinationRoom.roomGrid, spawnPos);
             CameraController2D.Instance?.SnapToTarget();
         }
 
         LockRoomAndSpawnEnemies(DestinationRoom);
 
-        Debug.Log($"[HallwayEntryTrigger] Player entered {DestinationRoom.roomInstance.name} " +
-                  $"from {EntryDirection}.");
+        Debug.Log($"[HallwayEntryTrigger] {unit.name} entered " +
+                  $"{DestinationRoom.roomInstance.name} via {EntryDirection}.");
+
+        yield return new WaitForSeconds(1f);
+        cooling = false;
     }
 
     private GridPosition GetDestinationSpawnPos()
@@ -98,6 +99,8 @@ public class HallwayEntryTrigger : MonoBehaviour
         if (reader != null && reader.HasSpawnPoint(EntryDirection))
             return reader.GetSpawnPosition(EntryDirection, DestinationRoom.roomGrid);
 
+        Debug.LogWarning($"[HallwayEntryTrigger] No spawn for {EntryDirection} " +
+                         $"in {DestinationRoom.roomInstance.name}. Using centre.");
         return new GridPosition(
             DestinationRoom.roomGrid.GetWidth()  / 2,
             DestinationRoom.roomGrid.GetHeight() / 2);
@@ -107,33 +110,24 @@ public class HallwayEntryTrigger : MonoBehaviour
 
     private static void LockRoomAndSpawnEnemies(LevelGenerator.PlacedRoom room)
     {
-        if (room == null || room.connector == null) return;
-
-        // Start room never gets enemies or locked doors
+        if (room?.connector == null) return;
         if (room.prefabData.roomType == LevelGenerator.RoomType.Start) return;
 
-        // If living enemies are already present this room was previously entered —
-        // keep doors locked but don't spawn again
         bool alreadyActive = EnemyManager.Instance != null &&
                              EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
         if (alreadyActive) return;
 
-        // Lock all connected doors immediately
         room.connector.CloseAllDoors();
 
-        // Spawn enemies via the scene-level EnemySpawner
         var spawner = FindAnyObjectByType<EnemySpawner>();
         if (spawner != null)
             spawner.SpawnForRoom(room);
         else
-            Debug.LogWarning("[HallwayEntryTrigger] No EnemySpawner in scene — enemies won't spawn.");
+            Debug.LogWarning("[HallwayEntryTrigger] No EnemySpawner found.");
 
-        // Subscribe to re-open doors once every enemy in this room is dead
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnRoomCleared += OnRoomCleared;
     }
-
-    // ── Room cleared ───────────────────────────────────────────────────────
 
     private static void OnRoomCleared(RoomGrid clearedRoom)
     {
@@ -143,8 +137,6 @@ public class HallwayEntryTrigger : MonoBehaviour
         foreach (var placed in gen.GetAllRooms())
         {
             if (placed.roomGrid != clearedRoom) continue;
-
-            // Re-open every door that has a connection
             foreach (LevelGenerator.Direction dir in
                 System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             {
@@ -154,7 +146,6 @@ public class HallwayEntryTrigger : MonoBehaviour
             break;
         }
 
-        // One-shot — unsubscribe immediately after firing
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnRoomCleared -= OnRoomCleared;
     }

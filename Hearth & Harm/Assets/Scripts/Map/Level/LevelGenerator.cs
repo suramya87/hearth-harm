@@ -446,7 +446,10 @@ public class LevelGenerator : MonoBehaviour
         spawnedPlayer.name = "Player";
 
         var unit = spawnedPlayer.GetComponent<Unit>();
-        unit?.PlaceInRoom(start.roomGrid, sp.Value);
+
+        // USE PlaceInRoomWhenReady instead of PlaceInRoom —
+        // waits for the grid to fully initialize before placing
+        unit?.PlaceInRoomWhenReady(start.roomGrid, sp.Value);
 
         Debug.Log($"[LevelGenerator] Player spawned at {sp.Value}");
     }
