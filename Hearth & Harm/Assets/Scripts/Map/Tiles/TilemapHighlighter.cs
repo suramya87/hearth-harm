@@ -2,6 +2,20 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
+/// <summary>
+/// Paints move/range/AoE highlights onto the active floor tilemap.
+///
+/// KEY FIXES vs original:
+///   1. RefreshTilemap() and Update() both resolve the active tilemap from
+///      unit.GetCurrentRoomGrid() first — this means the highlighter
+///      automatically follows the unit into hallways without any extra
+///      event wiring.
+///   2. OnRoomChanged handles a null room gracefully (happens when the
+///      player is in transit through a hallway and RoomManager has no
+///      current room set).
+///   3. activeGrid is resolved from the unit's current grid so mouse→tile
+///      conversion works correctly on hallway tiles too.
+/// </summary>
 public class TilemapHighlighter : MonoBehaviour
 {
     public static TilemapHighlighter Instance { get; private set; }
@@ -41,7 +55,13 @@ public class TilemapHighlighter : MonoBehaviour
     }
 
     private void OnLevelReady()                              => RefreshTilemap();
-    private void OnRoomChanged(LevelGenerator.PlacedRoom _) => RefreshTilemap();
+
+    /// <summary>
+    /// Called when RoomManager's current room changes — including when it is
+    /// set to null while the player is in a hallway. We still call
+    /// RefreshTilemap() so the unit-grid fallback path runs.
+    /// </summary>
+    private void OnRoomChanged(LevelGenerator.PlacedRoom room) => RefreshTilemap();
 
     // ── Tilemap resolution ─────────────────────────────────────────────────
 
@@ -49,9 +69,8 @@ public class TilemapHighlighter : MonoBehaviour
     {
         ResetAll();
 
-        // Prefer the room the player is actually registered in — this covers
-        // both normal rooms and hallways (unit.GetCurrentRoomGrid() returns
-        // the HallwayGrid's RoomGrid when in transit).
+        // Primary: use whatever grid the unit is registered in right now.
+        // This covers both normal rooms and hallways transparently.
         var unit = FindLocalUnit();
         if (unit != null)
         {
@@ -63,7 +82,8 @@ public class TilemapHighlighter : MonoBehaviour
             }
         }
 
-        // Fallback: use RoomManager's current room
+        // Fallback: RoomManager's current room (covers the brief window
+        // before the unit is registered in a grid)
         paintedTilemap = RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap();
 
         if (paintedTilemap == null && GameManager.IsMultiplayer)
@@ -94,8 +114,7 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void Update()
     {
-        // Resolve the active tilemap from whoever owns the unit right now
-        // (room or hallway) so highlights always follow the unit.
+        // Resolve tilemap from unit grid every frame so hallway transit is seamless.
         var unit     = FindLocalUnit();
         var unitGrid = unit?.GetCurrentRoomGrid();
         var tilemap  = unitGrid?.GetFloorTilemap()
@@ -110,17 +129,16 @@ public class TilemapHighlighter : MonoBehaviour
         if (paintedTilemap == null) return;
 
         ResetAll();
-        if (GridCostVisualizer.Instance != null)
-            GridCostVisualizer.Instance.ClearAll();
+        GridCostVisualizer.Instance?.ClearAll();
 
         if (!IsPlayerPhaseNow()) return;
 
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
 
-        // Use whichever grid the unit is currently on for mouse→grid conversion
-        var activeGrid = unitGrid
-                      ?? RoomManager.Instance?.GetCurrentRoomGrid();
+        // Use the unit's current grid for all mouse → grid position conversions.
+        // This is correct in rooms AND in hallways.
+        var activeGrid = unitGrid ?? RoomManager.Instance?.GetCurrentRoomGrid();
 
         if (action is MoveAction move)
         {
@@ -151,7 +169,7 @@ public class TilemapHighlighter : MonoBehaviour
             }
         }
 
-        // Hover
+        // Hover highlight
         if (activeGrid != null)
         {
             var gp = activeGrid.GetGridPosition(MouseWorld2D.GetPosition());

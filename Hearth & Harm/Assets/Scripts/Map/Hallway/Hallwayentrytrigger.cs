@@ -1,6 +1,19 @@
 using System.Collections;
 using UnityEngine;
 
+/// <summary>
+/// Placed at each end of a hallway. When the player reaches this trigger
+/// they are transitioned into the destination room, enemies spawn, and
+/// doors lock until all are dead.
+///
+/// DRAG-BACK FIX:
+///   Sets HallwayWalkTrigger.EntryTransitionInProgress = true before
+///   transitioning the player. This tells any overlapping WalkTrigger
+///   at the same mouth not to pull the player back into the hallway
+///   immediately after they arrive in the room.
+///   The flag is cleared after a short hold (2 seconds) which is longer
+///   than the WalkTrigger's internal cooldown window.
+/// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class HallwayEntryTrigger : MonoBehaviour
 {
@@ -9,6 +22,8 @@ public class HallwayEntryTrigger : MonoBehaviour
     public LevelGenerator.Direction  EntryDirection  { get; private set; }
 
     private bool cooling;
+
+    // ── Init ───────────────────────────────────────────────────────────────
 
     public void Initialize(
         HallwayGrid                  hallway,
@@ -29,6 +44,8 @@ public class HallwayEntryTrigger : MonoBehaviour
         cooling = false;
     }
 
+    // ── Trigger ────────────────────────────────────────────────────────────
+
     private void OnTriggerEnter2D(Collider2D other)
     {
         if (cooling) return;
@@ -45,26 +62,37 @@ public class HallwayEntryTrigger : MonoBehaviour
             if (bridge == null || !bridge.IsOwner) return;
         }
 
-        if (unit.GetCurrentRoomGrid() == DestinationRoom.roomGrid) return;
+        // Already in the destination room — nothing to do
+        if (IsOnDestinationGrid(unit)) return;
 
         StartCoroutine(TransitionAfterMove(unit));
     }
+
+    // ── Transition ─────────────────────────────────────────────────────────
 
     private IEnumerator TransitionAfterMove(Unit unit)
     {
         cooling = true;
 
+        // Wait for any in-progress move to finish
         var move = unit.GetMoveAction();
         if (move != null)
             while (move.IsActive) yield return null;
 
         yield return new WaitForSeconds(0.05f);
 
-        if (unit.GetCurrentRoomGrid() == DestinationRoom.roomGrid)
+        // Re-check after waiting
+        if (IsOnDestinationGrid(unit))
         {
             cooling = false;
             yield break;
         }
+
+        // ── Signal walk triggers to stand down ────────────────────────────
+        // This must be set BEFORE PlaceInRoom so that when the physics engine
+        // processes the new position and the walk trigger's OnTriggerEnter2D
+        // fires (because the collider is still overlapping), it bails out.
+        HallwayWalkTrigger.EntryTransitionInProgress = true;
 
         GridPosition spawnPos = GetDestinationSpawnPos();
 
@@ -87,10 +115,28 @@ public class HallwayEntryTrigger : MonoBehaviour
         LockRoomAndSpawnEnemies(DestinationRoom);
 
         Debug.Log($"[HallwayEntryTrigger] {unit.name} entered " +
-                  $"{DestinationRoom.roomInstance.name} via {EntryDirection}.");
+                  $"{DestinationRoom.roomInstance.name} from {EntryDirection}.");
 
-        yield return new WaitForSeconds(1f);
+        // Hold the flag long enough for the walk trigger's internal cooldown
+        // to expire and for any physics callbacks to settle.
+        yield return new WaitForSeconds(2f);
+        HallwayWalkTrigger.EntryTransitionInProgress = false;
+
+        // Keep our own cooldown active a bit longer so this trigger can't
+        // double-fire if the player lingers at the threshold.
+        yield return new WaitForSeconds(0.5f);
         cooling = false;
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private bool IsOnDestinationGrid(Unit unit)
+    {
+        var current = unit.GetCurrentRoomGrid();
+        if (current == null) return false;
+        if (current == DestinationRoom.roomGrid) return true;
+        // Name fallback for multiplayer where references may differ
+        return current.gameObject.name == DestinationRoom.roomGrid.gameObject.name;
     }
 
     private GridPosition GetDestinationSpawnPos()
@@ -99,7 +145,7 @@ public class HallwayEntryTrigger : MonoBehaviour
         if (reader != null && reader.HasSpawnPoint(EntryDirection))
             return reader.GetSpawnPosition(EntryDirection, DestinationRoom.roomGrid);
 
-        Debug.LogWarning($"[HallwayEntryTrigger] No spawn for {EntryDirection} " +
+        Debug.LogWarning($"[HallwayEntryTrigger] No spawn point for {EntryDirection} " +
                          $"in {DestinationRoom.roomInstance.name}. Using centre.");
         return new GridPosition(
             DestinationRoom.roomGrid.GetWidth()  / 2,
@@ -128,6 +174,8 @@ public class HallwayEntryTrigger : MonoBehaviour
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnRoomCleared += OnRoomCleared;
     }
+
+    // ── Room cleared ───────────────────────────────────────────────────────
 
     private static void OnRoomCleared(RoomGrid clearedRoom)
     {

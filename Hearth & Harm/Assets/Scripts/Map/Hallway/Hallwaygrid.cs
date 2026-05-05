@@ -6,11 +6,18 @@ using UnityEngine.Tilemaps;
 ///
 /// Hierarchy created at runtime:
 ///   HallwayGrid (GameObject)
-///     Grid  (Unity Grid component here, HallwayGrid here, RoomGrid here, TilemapRoomGrid here)
+///     Grid  (Unity Grid component, HallwayGrid, RoomGrid, TilemapRoomGrid all here)
 ///       Floor  (Tilemap + TilemapRenderer, sortOrder 0)
 ///       Walls  (Tilemap + TilemapRenderer, sortOrder 1)
 ///
 /// Call Initialize() after painting tiles into Floor/Walls.
+///
+/// WIDTH CONTROL (for future use):
+///   HallwayBuilder passes widthA/widthB from the room's SpawnPointTile count.
+///   To override, set a defaultHallwayWidth on LevelGenerator and pass it into
+///   HallwayBuilder.Build() as a fallback when GetMouthWidth() returns 0.
+///   The painter then uses it as exitWidth/entryWidth, which flows through
+///   midWidth = (exitWidth + entryWidth + 1) / 2 for bends automatically.
 /// </summary>
 [RequireComponent(typeof(Grid))]
 [RequireComponent(typeof(RoomGrid))]
@@ -18,35 +25,34 @@ using UnityEngine.Tilemaps;
 public class HallwayGrid : MonoBehaviour
 {
     // ── Sub-tilemaps (set by factory) ──────────────────────────────────────
-    public Tilemap FloorTilemap  { get; private set; }
-    public Tilemap WallsTilemap  { get; private set; }
+    public Tilemap  FloorTilemap { get; private set; }
+    public Tilemap  WallsTilemap { get; private set; }
     public RoomGrid RoomGrid     { get; private set; }
 
-    // Which rooms this hallway connects
-    public LevelGenerator.PlacedRoom RoomA { get; private set; }
-    public LevelGenerator.PlacedRoom RoomB { get; private set; }
-    public LevelGenerator.Direction  DirAtoB { get; private set; }
+    // Which rooms this hallway connects and in which direction
+    public LevelGenerator.PlacedRoom RoomA    { get; private set; }
+    public LevelGenerator.PlacedRoom RoomB    { get; private set; }
+    public LevelGenerator.Direction  DirAtoB  { get; private set; }
 
     // ── Factory ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates the full GameObject hierarchy for one hallway and returns
-    /// the HallwayGrid component ready for tile painting.
+    /// Creates the full GameObject hierarchy for one hallway.
+    /// Returns the HallwayGrid component ready for tile painting.
     /// </summary>
     public static HallwayGrid Create(
-        Transform parent,
+        Transform                 parent,
         LevelGenerator.PlacedRoom roomA,
         LevelGenerator.PlacedRoom roomB,
         LevelGenerator.Direction  dirAtoB,
-        string name = "Hallway")
+        string                    name = "Hallway")
     {
-        // Root
-        var go   = new GameObject(name);
+        // Root object with all required components
+        var go = new GameObject(name);
         go.transform.SetParent(parent, worldPositionStays: false);
 
-        // Required components on root
         go.AddComponent<Grid>();
-        go.AddComponent<TilemapRoomGrid>();          // RoomGrid [RequireComponent] pulls this
+        go.AddComponent<TilemapRoomGrid>();   // RoomGrid [RequireComponent] pulls TilemapRoomGrid
         var hg = go.AddComponent<HallwayGrid>();
         var rg = go.AddComponent<RoomGrid>();
 
@@ -89,6 +95,6 @@ public class HallwayGrid : MonoBehaviour
                       $"W={RoomGrid.GetWidth()} H={RoomGrid.GetHeight()}");
     }
 
-    /// <summary>Convenience — the RoomGrid is ready to use.</summary>
+    /// <summary>True once Initialize() has completed successfully.</summary>
     public bool IsReady => RoomGrid != null && RoomGrid.IsInitialized();
 }
