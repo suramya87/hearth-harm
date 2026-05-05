@@ -2,141 +2,230 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 
 /// <summary>
-/// Orchestrates building one procedural hallway between two PlacedRooms.
+/// Paints hallway tiles directly into roomA and roomB's existing tilemaps,
+/// then re-initializes both rooms' RoomGrids so the new tiles are walkable.
 ///
-/// Called by LevelGenerator.PaintHallways() for every connection pair.
-/// Creates the HallwayGrid, runs HallwayTilemapPainter, then attaches
-/// HallwayEntryTrigger colliders at both mouths.
+/// SEAMLESS GRID APPROACH:
+///   Hallway tiles are painted INTO the rooms' own tilemaps. The hallway cells
+///   become part of roomA's and roomB's RoomGrid. The player never switches grids.
+///   Pathfinding, highlighting, and movement all work exactly like normal floor tiles.
 ///
-/// TRIGGER SIZING
-///   Each trigger is a BoxCollider2D sized to the door mouth width × 1 tile tall,
-///   centred exactly on the door mouth in world space.
+/// SEAM WALL FIX:
+///   ClearSeamWalls now clears walls at the mouth row AND one tile outward
+///   (into the hallway), ensuring there is no invisible wall at the crossing.
+///   The previous version cleared only inward, which could leave the door wall
+///   intact.
+///
+/// REFRESH ORDER FIX:
+///   RefreshRoomGrid is called AFTER painting, which re-scans HasTile so all
+///   new hallway floor cells are valid grid positions. The cells dictionary in
+///   TilemapRoomGrid is rebuilt from scratch to include hallway tiles.
 /// </summary>
 public static class HallwayBuilder
 {
-    /// <summary>
-    /// Build a complete hallway between roomA and roomB.
-    /// Returns the HallwayGrid, or null on failure.
-    /// </summary>
-    public static HallwayGrid Build(
+    public static void Build(
         LevelGenerator.PlacedRoom roomA,
         LevelGenerator.PlacedRoom roomB,
         LevelGenerator.Direction  dirAtoB,
-        Transform                 parent,
-        HallwayTileSet            tileSet,
-        float                     cellSize = 1f)
+        HallwayTileSet            tileSet)
     {
-        if (tileSet == null || tileSet.FloorTile == null)
+        if (tileSet == null || !tileSet.IsValid)
         {
-            Debug.LogError("[HallwayBuilder] HallwayTileSet not assigned or FloorTile missing!");
-            return null;
+            Debug.LogError("[HallwayBuilder] HallwayTileSet not assigned or invalid!");
+            return;
         }
 
-        // ── 1. Scan spawn point widths ─────────────────────────────────────
+        if (roomA.roomGrid == null || roomB.roomGrid == null)
+        {
+            Debug.LogError("[HallwayBuilder] One or both rooms have null roomGrid!");
+            return;
+        }
+
+        Tilemap floorA = roomA.roomGrid.GetFloorTilemap();
+        Tilemap wallsA = roomA.roomGrid.GetWallsTilemap();
+        Tilemap floorB = roomB.roomGrid.GetFloorTilemap();
+        Tilemap wallsB = roomB.roomGrid.GetWallsTilemap();
+
+        if (floorA == null || floorB == null)
+        {
+            Debug.LogError("[HallwayBuilder] Missing floor tilemap on a room.");
+            return;
+        }
+
+        // ── 1. Scan door mouth widths and world positions ──────────────────
         var scannerA = GetOrAddScanner(roomA.roomInstance);
         var scannerB = GetOrAddScanner(roomB.roomInstance);
-
         scannerA.Scan();
         scannerB.Scan();
 
         LevelGenerator.Direction dirBtoA = Opposite(dirAtoB);
-
         int widthA = Mathf.Max(1, scannerA.GetMouthWidth(dirAtoB));
         int widthB = Mathf.Max(1, scannerB.GetMouthWidth(dirBtoA));
 
-        // ── 2. Get world positions of connection points ────────────────────
-        // Use the scanner's computed mouth centre (average of all spawn tiles).
-        // Fall back to the RoomConnector transform if no spawn tiles found.
-        Vector3 exitWorld  = scannerA.HasDoor(dirAtoB)
+        Vector3 exitWorld = scannerA.HasDoor(dirAtoB)
             ? scannerA.GetMouthCentreWorld(dirAtoB)
-            : (roomA.connector.GetConnectionPoint(dirAtoB)?.transform?.position ?? roomA.worldPosition);
+            : roomA.connector?.GetConnectionPoint(dirAtoB)?.transform?.position
+              ?? roomA.worldPosition;
 
         Vector3 entryWorld = scannerB.HasDoor(dirBtoA)
             ? scannerB.GetMouthCentreWorld(dirBtoA)
-            : (roomB.connector.GetConnectionPoint(dirBtoA)?.transform?.position ?? roomB.worldPosition);
+            : roomB.connector?.GetConnectionPoint(dirBtoA)?.transform?.position
+              ?? roomB.worldPosition;
 
-        // ── 3. Create HallwayGrid ──────────────────────────────────────────
-        string name = $"Hallway_{roomA.roomInstance.name}_{dirAtoB}";
-        HallwayGrid hallway = HallwayGrid.Create(parent, roomA, roomB, dirAtoB, name);
+        // ── 2. Paint hallway tiles into roomA and roomB tilemaps ──────────
+        HallwayTilemapPainter.PaintIntoRooms(
+            floorA, wallsA, floorB, wallsB,
+            exitWorld, entryWorld,
+            widthA, widthB, dirAtoB, tileSet);
 
-        // ── 4. Paint tiles ─────────────────────────────────────────────────
-        HallwayTilemapPainter.Paint(
-            hallway,
-            exitWorld,
-            entryWorld,
-            widthA,
-            widthB,
-            dirAtoB,
-            tileSet);
+        // ── 3. Clear wall tiles at both door seams ────────────────────────
+        // Clear walls at the mouth row AND one tile outward into the hallway
+        // so there is no invisible wall blocking passage in either direction.
+        ClearSeamWalls(wallsA, floorA, exitWorld,  widthA, dirAtoB);
+        ClearSeamWalls(wallsB, floorB, entryWorld, widthB, dirBtoA);
 
-        // ── 5. Initialize RoomGrid (must happen AFTER tiles are painted) ───
-        hallway.Initialize();
+        // ── 4. Re-initialize both room grids so new tiles are included ─────
+        // Must happen AFTER painting so HasTile returns true for new cells.
+        RefreshRoomGrid(roomA);
+        RefreshRoomGrid(roomB);
 
-        if (!hallway.IsReady)
+        Debug.Log($"[HallwayBuilder] Hallway painted: {roomA.roomInstance.name} " +
+                  $"{dirAtoB} ↔ {roomB.roomInstance.name}. " +
+                  $"WidthA={widthA} WidthB={widthB}");
+    }
+
+    // ── Seam wall clearing ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Clears wall tiles at and around a door seam so there is no invisible
+    /// collision blocking the player from crossing between room and hallway.
+    ///
+    /// Clears three rows:
+    ///   - mouthCell row (the spawn-point / door row itself)
+    ///   - one tile INWARD (into the room, away from the hallway direction)
+    ///   - one tile OUTWARD (into the hallway, toward the door direction)
+    ///
+    /// This is more aggressive than strictly necessary but guarantees no wall
+    /// tile is missed regardless of how the room was authored.
+    /// </summary>
+    private static void ClearSeamWalls(
+        Tilemap walls, Tilemap floor,
+        Vector3 mouthWorld, int width,
+        LevelGenerator.Direction doorDir)
+    {
+        if (walls == null || floor == null) return;
+
+        Vector3Int mouthCell = floor.WorldToCell(mouthWorld);
+
+        // One tile inward (INTO the room, away from the hallway)
+        Vector3Int inward    = StepInward(mouthCell, doorDir, 1);
+        // One tile outward (INTO the hallway, in the door direction)
+        Vector3Int outward   = StepOutward(mouthCell, doorDir, 1);
+
+        int  half  = width / 2;
+        bool horiz = doorDir == LevelGenerator.Direction.East
+                  || doorDir == LevelGenerator.Direction.West;
+
+        ClearRow(walls, mouthCell, horiz, half);
+        ClearRow(walls, inward,    horiz, half);
+        ClearRow(walls, outward,   horiz, half);
+    }
+
+    private static void ClearRow(Tilemap walls, Vector3Int centre, bool horizontal, int half)
+    {
+        for (int offset = -half; offset <= half; offset++)
         {
-            Debug.LogError($"[HallwayBuilder] HallwayGrid failed to initialize for {name}.");
-            Object.Destroy(hallway.gameObject);
-            return null;
+            Vector3Int cell = horizontal
+                ? new Vector3Int(centre.x, centre.y + offset, 0)
+                : new Vector3Int(centre.x + offset, centre.y, 0);
+
+            if (walls.HasTile(cell))
+                walls.SetTile(cell, null);
+        }
+    }
+
+    // ── Room grid refresh ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Re-initializes the TilemapRoomGrid and RoomGrid after hallway tiles
+    /// have been painted in. This re-scans HasTile so all new floor cells
+    /// are registered as valid grid positions.
+    ///
+    /// IMPORTANT: call this AFTER HallwayTilemapPainter.PaintIntoRooms()
+    /// and AFTER ClearSeamWalls(), otherwise the re-scan will miss tiles or
+    /// include cleared wall cells.
+    /// </summary>
+    private static void RefreshRoomGrid(LevelGenerator.PlacedRoom room)
+    {
+        if (room?.roomGrid == null) return;
+
+        var trg = room.roomInstance.GetComponent<TilemapRoomGrid>();
+        if (trg == null)
+        {
+            Debug.LogError($"[HallwayBuilder] No TilemapRoomGrid on '{room.roomInstance.name}'");
+            return;
         }
 
-        // ── 6. Place entry triggers ────────────────────────────────────────
-        // Trigger A: sits at roomA's door mouth → transitions player INTO roomA when returning
-        AddEntryTrigger(hallway, exitWorld,  widthA, cellSize,
-                        destinationRoom: roomA,
-                        entryDirection:  dirBtoA,   // player enters roomA from B's side
-                        name: "Trigger_ToRoomA");
+        Tilemap floor = room.roomGrid.GetFloorTilemap();
+        Tilemap walls = room.roomGrid.GetWallsTilemap();
 
-        // Trigger B: sits at roomB's door mouth → transitions player INTO roomB when going forward
-        AddEntryTrigger(hallway, entryWorld, widthB, cellSize,
-                        destinationRoom: roomB,
-                        entryDirection:  dirBtoA,   // player enters roomB from A's side (opposite)
-                        name: "Trigger_ToRoomB");
+        if (floor == null)
+        {
+            Debug.LogError($"[HallwayBuilder] No floor tilemap on '{room.roomInstance.name}'");
+            return;
+        }
 
-        Debug.Log($"[HallwayBuilder] Built {name}. " +
-                  $"WidthA={widthA} WidthB={widthB} " +
-                  $"Exit={exitWorld} Entry={entryWorld}");
+        // Re-initialize re-scans HasTile so all new hallway floor cells
+        // are added to the valid cell set. Both TilemapRoomGrid and RoomGrid
+        // must be refreshed so the delegate chain stays consistent.
+        trg.Initialize(walls, floor);
+        room.roomGrid.Initialize(walls, floor);
 
-        return hallway;
+        Debug.Log($"[HallwayBuilder] Refreshed '{room.roomInstance.name}' — " +
+                  $"floor tiles: {CountTiles(floor)}");
+    }
+
+    private static int CountTiles(Tilemap tm)
+    {
+        if (tm == null) return 0;
+        int n = 0;
+        foreach (var p in tm.cellBounds.allPositionsWithin)
+            if (tm.HasTile(p)) n++;
+        return n;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private static HallwaySpawnPointScanner GetOrAddScanner(UnityEngine.GameObject go)
+    private static HallwaySpawnPointScanner GetOrAddScanner(GameObject go)
     {
         var s = go.GetComponent<HallwaySpawnPointScanner>();
-        if (s == null) s = go.AddComponent<HallwaySpawnPointScanner>();
-        return s;
+        return s ?? go.AddComponent<HallwaySpawnPointScanner>();
     }
 
-    private static void AddEntryTrigger(
-        HallwayGrid                  hallway,
-        Vector3                      mouthWorldPos,
-        int                          mouthWidthTiles,
-        float                        cellSize,
-        LevelGenerator.PlacedRoom    destinationRoom,
-        LevelGenerator.Direction     entryDirection,
-        string                       name)
+    /// <summary>Steps a cell away from the door direction (into the room).</summary>
+    private static Vector3Int StepInward(
+        Vector3Int cell, LevelGenerator.Direction dir, int steps)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(hallway.transform, worldPositionStays: false);
-        go.transform.position = mouthWorldPos;
-        go.tag = "HallwayTrigger"; // optional — set up tag in Unity if you want to query these
-
-        // BoxCollider2D sized to the door mouth
-        var col     = go.AddComponent<BoxCollider2D>();
-        col.isTrigger = true;
-
-        bool horizontal = entryDirection == LevelGenerator.Direction.North
-                       || entryDirection == LevelGenerator.Direction.South;
-
-        // Width covers all mouth tiles; height is 1 tile so it only fires at the threshold
-        float w = horizontal ? mouthWidthTiles * cellSize : cellSize;
-        float h = horizontal ? cellSize                   : mouthWidthTiles * cellSize;
-        col.size = new Vector2(w, h);
-
-        var trigger = go.AddComponent<HallwayEntryTrigger>();
-        trigger.Initialize(hallway, destinationRoom, entryDirection);
+        Vector3Int delta = DirDelta(dir);
+        return cell - delta * steps;   // opposite of door direction = into room
     }
+
+    /// <summary>Steps a cell in the door direction (into the hallway).</summary>
+    private static Vector3Int StepOutward(
+        Vector3Int cell, LevelGenerator.Direction dir, int steps)
+    {
+        Vector3Int delta = DirDelta(dir);
+        return cell + delta * steps;   // same as door direction = into hallway
+    }
+
+    private static Vector3Int DirDelta(LevelGenerator.Direction dir) => dir switch
+    {
+        LevelGenerator.Direction.North => Vector3Int.up,
+        LevelGenerator.Direction.South => Vector3Int.down,
+        LevelGenerator.Direction.East  => Vector3Int.right,
+        LevelGenerator.Direction.West  => Vector3Int.left,
+        _                              => Vector3Int.zero
+    };
 
     private static LevelGenerator.Direction Opposite(LevelGenerator.Direction d) => d switch
     {

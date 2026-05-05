@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9d1514134bc4fbd41bb739b1b9a49231, type: 3}
-  m_Name: HallwayWall
+  m_Name: HallwayFloor 4
   m_EditorClassIdentifier: Unity.2D.Tilemap.Extras::UnityEngine.RuleTile
-  m_DefaultSprite: {fileID: 1483686956, guid: 90e3b51f8f0d5384a849c0a19e2bbbba, type: 3}
+  m_DefaultSprite: {fileID: 1318249406, guid: 90e3b51f8f0d5384a849c0a19e2bbbba, type: 3}
   m_DefaultGameObject: {fileID: 0}
   m_DefaultColliderType: 1
   m_TilingRules: []

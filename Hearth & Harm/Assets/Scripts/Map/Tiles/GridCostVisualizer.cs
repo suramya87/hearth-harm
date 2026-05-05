@@ -2,6 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 
+/// <summary>
+/// Displays movement cost numbers over tiles.
+/// No changes from original — included for completeness.
+/// Uses RoomManager.GetCurrentRoomGrid() consistent with the rest of the system.
+/// </summary>
 public class GridCostVisualizer : MonoBehaviour
 {
     public static GridCostVisualizer Instance;
@@ -21,7 +26,10 @@ public class GridCostVisualizer : MonoBehaviour
         if (activeTexts.ContainsKey(pos))
             return;
 
+        // Use GetCurrentRoomGrid() so cost labels work in hallways too
         RoomGrid room = RoomManager.Instance.GetCurrentRoomGrid();
+        if (room == null) return;
+
         Vector3 world = room.GetWorldPosition(pos);
 
         GameObject obj = Instantiate(

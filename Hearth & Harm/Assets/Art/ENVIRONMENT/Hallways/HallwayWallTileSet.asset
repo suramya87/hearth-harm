@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69e600b4eb92d3849b5b361295a825eb, type: 3}
+  m_Name: HallwayWallTileSet
+  m_EditorClassIdentifier: Assembly-CSharp::HallwayWallTileSet
+  Top: {fileID: -1168797871, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  Bottom: {fileID: 1178517782, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  Left: {fileID: -1256131705, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  Right: {fileID: 298134489, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  TopLeft_Convex: {fileID: -7617610107729117700, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  TopRight_Convex: {fileID: -1473677734, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  BottomLeft_Convex: {fileID: -1335076899, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  BottomRight_Convex: {fileID: -370003321, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  TopLeft_Concave: {fileID: -1689201217, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  TopRight_Concave: {fileID: -23768312, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  BottomLeft_Concave: {fileID: 372439959, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  BottomRight_Concave: {fileID: -792341968, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  EndCap_Top: {fileID: -1168797871, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  EndCap_Bottom: {fileID: 1178517782, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  EndCap_Left: {fileID: -1256131705, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}
+  EndCap_Right: {fileID: 298134489, guid: ca93248aecc455c4da6ce59b7ef1f99c, type: 3}

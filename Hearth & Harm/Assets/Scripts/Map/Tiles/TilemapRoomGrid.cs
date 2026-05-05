@@ -2,10 +2,27 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-[RequireComponent(typeof(Tilemap))]
+/// <summary>
+/// Wraps a Unity 2D Tilemap and provides grid position/walkability/occupancy.
+///
+/// CHANGE FROM ORIGINAL: removed [RequireComponent(typeof(Tilemap))].
+/// For rooms, Tilemap is always present on the same GO (added by Unity's tilemap
+/// system). For hallways, TilemapRoomGrid sits on the root while the actual
+/// Floor/Walls Tilemaps are children — the Initialize(walls, floor) method
+/// receives them directly so no same-GO Tilemap is needed.
+///
+/// FIX: IsValidGridPosition checks HasTile directly — the source of truth.
+///
+/// FIX: CompressBounds() is called before scanning cellBounds. Unity does not
+/// expand cellBounds automatically when tiles are painted at runtime. Without
+/// this, hallway tiles painted outside the original room bounds are invisible
+/// to cellBounds.allPositionsWithin, and GetWidth()*GetHeight() returns a
+/// value too small to cover the hallway — the Pathfinder hits its iteration
+/// limit before reaching hallway cells and returns an empty path.
+/// </summary>
 public class TilemapRoomGrid : MonoBehaviour
 {
-    [Header("Tilemaps (auto-resolved by RoomTilemapSetup)")]
+    [Header("Tilemaps (auto-resolved by RoomTilemapSetup / HallwayGrid)")]
     [SerializeField] private Tilemap wallsTilemap;
     [SerializeField] private Tilemap floorTilemap;
 
@@ -15,7 +32,6 @@ public class TilemapRoomGrid : MonoBehaviour
 
     // ── Init ───────────────────────────────────────────────────────────────
 
-    /// <summary>Called by RoomTilemapSetup once tilemaps are resolved.</summary>
     public void Initialize(Tilemap walls, Tilemap floor)
     {
         wallsTilemap   = walls;
@@ -28,13 +44,26 @@ public class TilemapRoomGrid : MonoBehaviour
             return;
         }
 
+        // Force Unity to expand cellBounds to include any tiles painted at
+        // runtime after the tilemap was first created. Without this, tiles
+        // painted outside the original bounds are invisible to
+        // cellBounds.allPositionsWithin, and GetWidth()*GetHeight() returns
+        // a stale smaller value — the Pathfinder iteration limit is hit
+        // before it can reach hallway cells, returning an empty path.
+        primaryTilemap.CompressBounds();
+        if (walls != null) walls.CompressBounds();
+
         cells.Clear();
         foreach (Vector3Int pos in primaryTilemap.cellBounds.allPositionsWithin)
-            cells[pos] = new TilemapCell();
+        {
+            if (primaryTilemap.HasTile(pos))
+                cells[pos] = new TilemapCell();
+        }
 
         initialized = true;
         Debug.Log($"[TilemapRoomGrid] {gameObject.name} ready. " +
-                  $"Bounds: {primaryTilemap.cellBounds}");
+                  $"Bounds: {primaryTilemap.cellBounds} " +
+                  $"Cells with tiles: {cells.Count}");
     }
 
     public bool IsInitialized => initialized;
@@ -72,7 +101,6 @@ public class TilemapRoomGrid : MonoBehaviour
     public bool IsWall(GridPosition gp) =>
         wallsTilemap != null && wallsTilemap.HasTile(new Vector3Int(gp.x, gp.y, 0));
 
-
     public bool IsWalkable(GridPosition gp) =>
         IsValidGridPosition(gp) && !IsWall(gp) && !IsOccupied(gp);
 
@@ -87,17 +115,17 @@ public class TilemapRoomGrid : MonoBehaviour
 
     // ── Unit occupancy ─────────────────────────────────────────────────────
 
-    public void AddUnit(GridPosition gp, Unit u)           => GetOrCreate(gp).AddUnit(u);
-    public void RemoveUnit(GridPosition gp, Unit u)        => GetCell(gp)?.RemoveUnit(u);
-    public List<Unit> GetUnitsAt(GridPosition gp)          => GetCell(gp)?.GetUnits() ?? new();
-    public bool HasAnyUnit(GridPosition gp)                => GetCell(gp)?.HasUnit() ?? false;
+    public void AddUnit(GridPosition gp, Unit u)    => GetOrCreate(gp).AddUnit(u);
+    public void RemoveUnit(GridPosition gp, Unit u) => GetCell(gp)?.RemoveUnit(u);
+    public List<Unit> GetUnitsAt(GridPosition gp)   => GetCell(gp)?.GetUnits() ?? new();
+    public bool HasAnyUnit(GridPosition gp)         => GetCell(gp)?.HasUnit() ?? false;
 
     // ── Enemy occupancy ────────────────────────────────────────────────────
 
-    public void AddEnemy(GridPosition gp, EnemyUnit e)      => GetOrCreate(gp).AddEnemy(e);
-    public void RemoveEnemy(GridPosition gp, EnemyUnit e)   => GetCell(gp)?.RemoveEnemy(e);
-    public List<EnemyUnit> GetEnemiesAt(GridPosition gp)    => GetCell(gp)?.GetEnemies() ?? new();
-    public bool HasAnyEnemy(GridPosition gp)                => GetCell(gp)?.HasEnemy() ?? false;
+    public void AddEnemy(GridPosition gp, EnemyUnit e)    => GetOrCreate(gp).AddEnemy(e);
+    public void RemoveEnemy(GridPosition gp, EnemyUnit e) => GetCell(gp)?.RemoveEnemy(e);
+    public List<EnemyUnit> GetEnemiesAt(GridPosition gp)  => GetCell(gp)?.GetEnemies() ?? new();
+    public bool HasAnyEnemy(GridPosition gp)              => GetCell(gp)?.HasEnemy() ?? false;
 
     public EnemyUnit GetEnemyAt(GridPosition gp)
     {
@@ -112,8 +140,8 @@ public class TilemapRoomGrid : MonoBehaviour
 
     // ── Tilemap accessors ──────────────────────────────────────────────────
 
-    public Tilemap GetFloorTilemap() => floorTilemap;
-    public Tilemap GetWallsTilemap() => wallsTilemap;
+    public Tilemap GetFloorTilemap()  => floorTilemap;
+    public Tilemap GetWallsTilemap()  => wallsTilemap;
 
     // ── Private helpers ────────────────────────────────────────────────────
 
@@ -126,11 +154,7 @@ public class TilemapRoomGrid : MonoBehaviour
     private TilemapCell GetOrCreate(GridPosition gp)
     {
         var key = new Vector3Int(gp.x, gp.y, 0);
-        if (!cells.TryGetValue(key, out var c))
-        {
-            c = new TilemapCell();
-            cells[key] = c;
-        }
+        if (!cells.TryGetValue(key, out var c)) { c = new TilemapCell(); cells[key] = c; }
         return c;
     }
 }

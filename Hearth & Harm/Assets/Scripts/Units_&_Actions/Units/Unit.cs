@@ -2,16 +2,24 @@ using System;
 using System.Collections;
 using UnityEngine;
 
+/// <summary>
+/// Represents the player unit on the grid.
+///
+/// SIMPLIFIED — NO SWITCHGRID:
+/// Because hallway tiles are now painted into room tilemaps, the unit never
+/// needs to switch grids when entering a hallway. WorldRoomTracker calls
+/// SetGridState() when the player crosses into a different room's tiles —
+/// this is a lightweight update that keeps gridPosition and currentRoomGrid
+/// in sync without any occupancy juggling or coordinate remapping.
+/// </summary>
 public class Unit : MonoBehaviour
 {
     [Header("Visual Settings")]
-    [Tooltip("Adjust this to center the sprite in the tile (usually 0.5, 0.5)")]
     [SerializeField] private Vector2 visualOffset = new Vector2(0.5f, 0.5f);
 
     private GridPosition gridPosition;
     private RoomGrid     currentRoomGrid;
     private bool         isInitialized;
-
     private MoveAction   moveAction;
     private BaseAction[] allActions;
     private PlayerStats  playerStats;
@@ -49,9 +57,14 @@ public class Unit : MonoBehaviour
 
     // ── Grid placement ─────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Places the unit at a specific grid position, snapping world position.
+    /// Used for spawning, room entry via RoomDoor, and end-of-move registration.
+    /// </summary>
     public void PlaceInRoom(RoomGrid room, GridPosition newPos)
     {
-        // Always update grid state (remove from old cell, register in new cell)
+        if (room == null) { Debug.LogWarning("[Unit] PlaceInRoom: null room."); return; }
+
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
 
@@ -67,8 +80,7 @@ public class Unit : MonoBehaviour
             transform.position = new Vector3(
                 world.x + visualOffset.x,
                 world.y + visualOffset.y,
-                transform.position.z
-            );
+                transform.position.z);
         }
 
         if (GameManager.IsMultiplayer && !IsSyncingFromNetwork)
@@ -77,6 +89,67 @@ public class Unit : MonoBehaviour
             if (bridge != null && bridge.IsSpawned && bridge.IsOwner)
                 bridge.SyncGridPosition(room, newPos);
         }
+    }
+
+    /// <summary>
+    /// Lightweight grid/position update called by WorldRoomTracker when the
+    /// player's world position crosses into a different room's tile set.
+    ///
+    /// Does NOT snap transform.position — the player walked here physically.
+    /// Occupancy is managed by the caller (WorldRoomTracker) so this just
+    /// updates the cached references.
+    /// </summary>
+    public void SetGridState(RoomGrid grid, GridPosition pos)
+    {
+        currentRoomGrid = grid;
+        gridPosition    = pos;
+        isInitialized   = true;
+    }
+
+    /// <summary>
+    /// Reference-only grid update. Does not touch gridPosition or occupancy.
+    /// Use SetGridState when you have a valid new position; use this only when
+    /// you need to point at a grid without knowing the cell yet.
+    /// </summary>
+    public void SetCurrentRoomGrid(RoomGrid grid)
+    {
+        if (grid != null) currentRoomGrid = grid;
+    }
+
+    /// <summary>
+    /// Compatibility alias — hallways are now part of room grids so this is
+    /// identical to PlaceInRoom. Kept so any existing call sites compile.
+    /// </summary>
+    public void PlaceInHallway(RoomGrid grid) => PlaceInRoom(grid, grid.GetGridPosition(transform.position));
+
+    /// <summary>
+    /// Legacy compatibility — calls PlaceInRoom with a world-derived position.
+    /// Kept so any existing SwitchGrid call sites compile.
+    /// </summary>
+    public void SwitchGrid(RoomGrid newGrid)
+    {
+        if (newGrid == null || !newGrid.IsInitialized()) return;
+        var newCell = newGrid.GetGridPosition(transform.position);
+        if (!newGrid.IsValidGridPosition(newCell))
+            newCell = FindNearestValidCell(newGrid, transform.position);
+        if (newGrid.IsValidGridPosition(newCell))
+            PlaceInRoom(newGrid, newCell);
+    }
+
+    // ── Nearest valid cell ─────────────────────────────────────────────────
+
+    private static GridPosition FindNearestValidCell(RoomGrid grid, Vector3 worldPos)
+    {
+        var center = grid.GetGridPosition(worldPos);
+        for (int r = 1; r <= 5; r++)
+        for (int dx = -r; dx <= r; dx++)
+        for (int dy = -r; dy <= r; dy++)
+        {
+            if (Math.Abs(dx) != r && Math.Abs(dy) != r) continue;
+            var c = new GridPosition(center.x + dx, center.y + dy);
+            if (grid.IsValidGridPosition(c)) return c;
+        }
+        return center;
     }
 
     // ── Turn events ────────────────────────────────────────────────────────
@@ -89,7 +162,7 @@ public class Unit : MonoBehaviour
 
     // ── Accessors ──────────────────────────────────────────────────────────
 
-    public GridPosition  GetGridPosition()   => isInitialized ? gridPosition : default;
+    public GridPosition  GetGridPosition()    => isInitialized ? gridPosition : default;
     public RoomGrid      GetCurrentRoomGrid() => currentRoomGrid;
     public bool          IsInitialized()      => isInitialized;
     public MoveAction    GetMoveAction()      => moveAction;

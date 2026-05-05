@@ -12,7 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8d2bca3557726cd429e2aee98b6f2536, type: 3}
   m_Name: HallwayTileSet
   m_EditorClassIdentifier: Assembly-CSharp::HallwayTileSet
-  FloorTile: {fileID: 11400000, guid: 74f81714805e4c34aa44ba1d61d0209e, type: 2}
-  WallSideTile: {fileID: 11400000, guid: 5e3f33036ed0b804980b8535ca8038fa, type: 2}
-  CornerConvexTile: {fileID: 0}
-  CornerConcaveTile: {fileID: 0}
+  FloorTiles:
+  - {fileID: 11400000, guid: 74f81714805e4c34aa44ba1d61d0209e, type: 2}
+  - {fileID: 11400000, guid: 8dad2d119384fe64dba14a081eb8e94a, type: 2}
+  - {fileID: 11400000, guid: 922e1e6096d92bb4cb408f506ae1a4e0, type: 2}
+  - {fileID: 11400000, guid: 912ae5f350b4d6e49bb7c6edc486da61, type: 2}
+  - {fileID: 11400000, guid: 51ec02c19f05afc408b94276bf317d7f, type: 2}
+  - {fileID: 11400000, guid: c253b209b802f974ca09253fba45a858, type: 2}
+  WallTileSet: {fileID: 11400000, guid: 6a4dcd3504e1ee6469e89c51f0f92c1b, type: 2}

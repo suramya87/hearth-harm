@@ -2,7 +2,14 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-
+/// <summary>
+/// Highlights walkable tiles for MoveAction and CombatAction.
+///
+/// CHANGES FROM ORIGINAL
+///   • RefreshTilemap now accepts hallway PlacedRooms (PlacedRoom.IsHallway == true).
+///     Hallways use their own RoomGrid floor tilemap just like normal rooms.
+///   • OnRoomChanged handler also fires when RoomManager switches to a hallway.
+/// </summary>
 public class TilemapHighlighter : MonoBehaviour
 {
     public static TilemapHighlighter Instance { get; private set; }
@@ -47,7 +54,11 @@ public class TilemapHighlighter : MonoBehaviour
     private void RefreshTilemap()
     {
         ResetAll();
-        var grid = RoomManager.Instance?.GetCurrentRoom()?.roomGrid;
+
+        // RoomManager.GetCurrentRoom() now returns hallway PlacedRooms too,
+        // so this single path handles both rooms and hallways.
+        var placed = RoomManager.Instance?.GetCurrentRoom();
+        var grid   = placed?.roomGrid;
         paintedTilemap = grid?.GetFloorTilemap();
 
         if (paintedTilemap == null && GameManager.IsMultiplayer)
@@ -62,6 +73,18 @@ public class TilemapHighlighter : MonoBehaviour
             var pos = bridge.GetNetworkGridPosition();
             var gen = FindAnyObjectByType<LevelGenerator>();
             if (gen == null) return;
+
+            // Check hallways first (they are narrower, so more specific)
+            foreach (var hallway in gen.GetAllHallways())
+            {
+                if (!hallway.IsReady) continue;
+                if (hallway.RoomGrid.IsValidGridPosition(pos))
+                {
+                    RoomManager.Instance?.SetCurrentRoom(hallway.AsPlacedRoom());
+                    return;
+                }
+            }
+
             foreach (var placed in gen.GetAllRooms())
             {
                 if (placed.roomGrid == null || !placed.roomGrid.IsInitialized()) continue;
@@ -76,7 +99,8 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void Update()
     {
-        var room    = RoomManager.Instance?.GetCurrentRoomGrid();
+        var placed  = RoomManager.Instance?.GetCurrentRoom();
+        var room    = placed?.roomGrid;
         var tilemap = room?.GetFloorTilemap();
 
         if (tilemap != paintedTilemap)
@@ -90,7 +114,6 @@ public class TilemapHighlighter : MonoBehaviour
         ResetAll();
         if (GridCostVisualizer.Instance != null)
             GridCostVisualizer.Instance.ClearAll();
-
 
         if (!IsPlayerPhaseNow()) return;
 
@@ -137,10 +160,6 @@ public class TilemapHighlighter : MonoBehaviour
 
     // ── Turn-phase helper ──────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns true when it's the player's turn in EITHER the SP or MP system.
-    /// In single-player TurnSystem drives things; in multiplayer NetworkedTurnSystem does.
-    /// </summary>
     private static bool IsPlayerPhaseNow()
     {
         if (GameManager.IsMultiplayer)

@@ -3,6 +3,19 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// Shows which directions have connected rooms.
+///
+/// CHANGE: Travel() has been removed. With seamless hallway tilemaps the
+/// player walks between rooms using MoveAction — no teleportation needed.
+/// The buttons now show connection info only (or can be removed from the UI
+/// entirely). They no longer move the player.
+///
+/// If you want to keep the buttons for fast-travel or accessibility, re-add
+/// Travel() but have it call unit.PlaceInRoom on the TARGET room's grid using
+/// the spawn point reader — the key is to always use the target room's own
+/// RoomGrid, not a hallway grid.
+/// </summary>
 public class RoomNavigationUI : MonoBehaviour
 {
     [Header("Buttons")]
@@ -34,10 +47,7 @@ public class RoomNavigationUI : MonoBehaviour
             { LevelGenerator.Direction.West,  westText  }
         };
 
-        northButton?.onClick.AddListener(() => Travel(LevelGenerator.Direction.North));
-        southButton?.onClick.AddListener(() => Travel(LevelGenerator.Direction.South));
-        eastButton?.onClick.AddListener(()  => Travel(LevelGenerator.Direction.East));
-        westButton?.onClick.AddListener(()  => Travel(LevelGenerator.Direction.West));
+        // Buttons are display-only now — no travel listeners
     }
 
     private void OnEnable()
@@ -73,12 +83,13 @@ public class RoomNavigationUI : MonoBehaviour
     private void UpdateButtons()
     {
         var room = RoomManager.Instance?.GetCurrentRoom();
-        if (room == null) return;
+        if (room == null || room.IsHallway) return;
 
         bool enemies = EnemyManager.Instance != null &&
                        EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
 
-        foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+        foreach (LevelGenerator.Direction dir in
+            System.Enum.GetValues(typeof(LevelGenerator.Direction)))
         {
             var btn = buttons[dir];
             var lbl = labels[dir];
@@ -94,8 +105,8 @@ public class RoomNavigationUI : MonoBehaviour
             var connected = gen?.GetConnectedRoom(room, dir);
             if (connected != null)
             {
-                btn.interactable = true;
-                if (lbl) lbl.text = $"{dir}\n({connected.prefabData.roomType})";
+                btn.interactable = false; // display only — player walks there
+                if (lbl) lbl.text = $"{dir}\n({connected.prefabData?.roomType})";
             }
             else
             {
@@ -105,57 +116,7 @@ public class RoomNavigationUI : MonoBehaviour
         }
     }
 
-    // ── Travel ─────────────────────────────────────────────────────────────
-
-    private void Travel(LevelGenerator.Direction dir)
-    {
-        var room = RoomManager.Instance?.GetCurrentRoom();
-        if (room == null) return;
-
-        if (EnemyManager.Instance?.GetEnemiesInRoom(room.roomGrid).Count > 0)
-        { Debug.Log("[RoomNav] Blocked by enemies."); return; }
-
-        var target = gen?.GetConnectedRoom(room, dir);
-        if (target == null) return;
-
-        if (GameManager.IsMultiplayer)
-        {
-            var bridge = FindLocalPlayerBridge();
-            if (bridge == null)
-            {
-                Debug.LogWarning("[RoomNav] Could not find local player bridge for room transition.");
-                return;
-            }
-
-            var entryDir = gen.GetOppositeDirection(dir);
-            var spawnPos = GetSpawnPosition(target, entryDir);
-            bridge.TransitionToRoom(target.roomGrid, spawnPos);
-            UpdateButtons();
-            return;
-        }
-        // ─────────────────────────────────────────────────────────────────
-
-        // Single-player path (unchanged)
-        var player = FindAnyObjectByType<Unit>();
-        if (player == null) return;
-
-        var spEntry  = gen.GetOppositeDirection(dir);
-        var spPos    = GetSpawnPosition(target, spEntry);
-
-        RoomManager.Instance.SetCurrentRoom(target);
-        player.PlaceInRoom(target.roomGrid, spPos);
-        CameraController2D.Instance?.SnapToTarget();
-        UpdateButtons();
-    }
-
     // ── Helpers ────────────────────────────────────────────────────────────
-
-    private NetworkedPlayerBridge FindLocalPlayerBridge()
-    {
-        foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
-            if (bridge.IsOwner) return bridge;
-        return null;
-    }
 
     private GridPosition GetSpawnPosition(LevelGenerator.PlacedRoom room,
                                           LevelGenerator.Direction  entry)
