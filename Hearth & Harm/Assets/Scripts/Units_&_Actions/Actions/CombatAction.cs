@@ -305,6 +305,6 @@ public class CombatAction : BaseAction
     {
         var moveAction = GetComponent<MoveAction>();
         if (moveAction == null || UnitActionSystem.Instance == null) return;
-        UnitActionSystem.Instance.SetSelectedAction(moveAction);
+        UnitActionSystem.Instance.SetSelectedAction(moveAction, false);
     }
 }
