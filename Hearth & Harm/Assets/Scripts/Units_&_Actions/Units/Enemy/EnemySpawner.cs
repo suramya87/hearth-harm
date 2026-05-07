@@ -25,10 +25,17 @@ public class EnemySpawner : MonoBehaviour
     private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
     private void OnDisable() => LevelGenerator.OnLevelReady -= OnLevelReady;
 
-    private void OnLevelReady() { if (spawnOnLevelReady) SpawnAll(); }
+    private void OnLevelReady()
+    {
+        // With the new hallway walk-in system, enemies spawn on room entry
+        // rather than all at once. Set spawnOnLevelReady = false in the Inspector
+        // to opt into the new behaviour. Legacy projects can keep it true.
+        if (spawnOnLevelReady) SpawnAll();
+    }
 
     // ── Public API ─────────────────────────────────────────────────────────
 
+    /// <summary>Spawn all enemies across all rooms at once (legacy / opt-in).</summary>
     public void SpawnAll()
     {
         var gen = FindAnyObjectByType<LevelGenerator>();
@@ -40,7 +47,80 @@ public class EnemySpawner : MonoBehaviour
             SpawnLegacy(gen);
     }
 
-    // ── Table spawning ─────────────────────────────────────────────────────
+    /// <summary>
+    /// Spawn enemies for ONE specific room — called by HallwayEntryTrigger
+    /// when the player first walks into that room.
+    ///
+    /// Uses the same spawn-table / legacy logic as SpawnAll() but scoped
+    /// to the single PlacedRoom that was just entered.
+    /// </summary>
+    public void SpawnForRoom(LevelGenerator.PlacedRoom room)
+    {
+        if (room == null || room.roomGrid == null || !room.roomGrid.IsInitialized())
+        {
+            Debug.LogWarning("[EnemySpawner] SpawnForRoom: invalid room.");
+            return;
+        }
+
+        int level  = WaveManager.Instance?.CurrentLevel ?? 1;
+        int budget = WaveManager.Instance?.GetTotalEnemyBudget() ?? 10;
+
+        bool anySpawned = false;
+
+        if (spawnTables != null && spawnTables.Count > 0)
+        {
+            foreach (var table in spawnTables)
+            {
+                if (table == null) continue;
+                if (!table.IsActiveForLevel(level)) continue;
+                if (table.roomType != room.prefabData.roomType) continue;
+
+                // Scale the budget down proportionally by room count so the
+                // total across all rooms roughly matches the overall budget.
+                var gen = FindAnyObjectByType<LevelGenerator>();
+                int roomsOfType = gen != null
+                    ? gen.GetAllRooms().FindAll(r => r.prefabData.roomType == table.roomType).Count
+                    : 1;
+                int roomBudget = Mathf.Max(1, budget / Mathf.Max(1, roomsOfType));
+
+                foreach (var (prefab, count) in table.CalculateSpawns(roomBudget))
+                for (int i = 0; i < count; i++)
+                {
+                    var pos = RandomWalkableTile(room.roomGrid);
+                    if (pos != null)
+                    {
+                        SpawnEnemy(prefab, room.roomGrid, pos.Value);
+                        anySpawned = true;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Legacy fallback
+            foreach (var entry in legacyEntries)
+            {
+                if (entry.prefab == null) continue;
+                if (entry.roomType != room.prefabData.roomType) continue;
+
+                for (int i = 0; i < entry.count; i++)
+                {
+                    var pos = RandomWalkableTile(room.roomGrid);
+                    if (pos != null)
+                    {
+                        SpawnEnemy(entry.prefab, room.roomGrid, pos.Value);
+                        anySpawned = true;
+                    }
+                }
+            }
+        }
+
+        if (!anySpawned)
+            Debug.Log($"[EnemySpawner] No enemies spawned for {room.roomInstance.name} " +
+                      $"(type: {room.prefabData.roomType}) — no matching table/entry.");
+    }
+
+    // ── Table spawning (scene-wide) ────────────────────────────────────────
 
     private void SpawnFromTables(LevelGenerator gen)
     {

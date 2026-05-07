@@ -1,24 +1,21 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using Random = UnityEngine.Random;
 
-
 public class LevelGenerator : MonoBehaviour
 {
-
     [Serializable]
     public class RoomPrefabData
     {
         public GameObject prefab;
         public RoomType   roomType;
-        [Range(0f,1f)] public float spawnWeight = 1f;
+        [Range(0f, 1f)] public float spawnWeight = 1f;
 
-        [HideInInspector] public int    width      = 20;
-        [HideInInspector] public int    height     = 20;
-        [HideInInspector] public float  cellSize   = 1f;
+        [HideInInspector] public int   width    = 20;
+        [HideInInspector] public int   height   = 20;
+        [HideInInspector] public float cellSize = 1f;
     }
 
     public enum RoomType  { Start, End, Normal, Special, Boss }
@@ -30,20 +27,28 @@ public class LevelGenerator : MonoBehaviour
         public RoomPrefabData prefabData;
         public RoomConnector  connector;
         public Vector3        worldPosition;
-        public Vector2Int     gridPosition;    
+        public Vector2Int     gridPosition;
         public RoomGrid       roomGrid;
     }
+
+    // ── Inspector ──────────────────────────────────────────────────────────
 
     [Header("Room Prefabs")]
     [SerializeField] private List<RoomPrefabData> roomPrefabs;
 
-    [Header("Hallways (prefab-based)")]
-    [Tooltip("Prefab for a horizontal (East/West) hallway. Oriented left-right in your art.")]
-    [SerializeField] private GameObject hallwayHorizontalPrefab;
-    [Tooltip("Prefab for a vertical (North/South) hallway. Oriented up-down in your art.")]
-    [SerializeField] private GameObject hallwayVerticalPrefab;
-    [Tooltip("Single prefab fallback. If set, this is used for all directions and rotated 90 deg for vertical.")]
-    [SerializeField] private GameObject hallwaySinglePrefab;
+    [Header("Hallways (PCG)")]
+    [Tooltip("ScriptableObject with Floor, WallSide, CornerConvex and CornerConcave tile assets. " +
+             "Create one via Assets → Create → Level Generation → Hallway Tile Set.")]
+    [SerializeField] private HallwayTileSet hallwayTileSet;
+
+    [Tooltip("Cell size used when sizing hallway entry triggers. " +
+             "Match your room Grid's Cell Size (usually 1).")]
+    [SerializeField] private float hallwayCellSize = 1f;
+
+    [Tooltip("Fallback hallway width in tiles when a room has no SpawnPointTiles on a door. " +
+             "Set to 0 to always use SpawnPointTile count. " +
+             "Increase this later to make all hallways wider regardless of spawn points.")]
+    [SerializeField] private int defaultHallwayWidth = 3;
 
     [Header("Generation")]
     [SerializeField] private int   minRooms          = 5;
@@ -60,12 +65,19 @@ public class LevelGenerator : MonoBehaviour
     [SerializeField] private List<GameObject> playerPrefabs;
     [SerializeField] private bool spawnPlayerOnGenerate = true;
 
+    // ── Events ─────────────────────────────────────────────────────────────
+
     public static Action OnLevelReady;
 
-    private List<PlacedRoom>                                               placedRooms;
-    private Dictionary<Vector2Int, PlacedRoom>                             roomLayoutGrid;
-    private Dictionary<(PlacedRoom, Direction), PlacedRoom>                connections;
-    private GameObject                                                     spawnedPlayer;
+    // ── Runtime state ──────────────────────────────────────────────────────
+
+    private List<PlacedRoom>                                placedRooms;
+    private Dictionary<Vector2Int, PlacedRoom>              roomLayoutGrid;
+    private Dictionary<(PlacedRoom, Direction), PlacedRoom> connections;
+    private GameObject                                      spawnedPlayer;
+    private readonly List<HallwayGrid>                      spawnedHallways = new();
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Start()
     {
@@ -86,10 +98,12 @@ public class LevelGenerator : MonoBehaviour
         ConfigureDoors();
         InitRoomGrids();
         InitDoors();
-        PaintHallways();
+        BuildHallways();
 
         PlacedRoom start = placedRooms.Find(r =>
-            r.prefabData.roomType == RoomType.Start && r.roomGrid != null && r.roomGrid.IsInitialized());
+            r.prefabData.roomType == RoomType.Start
+            && r.roomGrid != null
+            && r.roomGrid.IsInitialized());
 
         if (start == null)
         {
@@ -101,16 +115,21 @@ public class LevelGenerator : MonoBehaviour
         if (spawnPlayerOnGenerate && playerPrefabs != null && playerPrefabs.Count > 0)
             SpawnPlayer(start);
 
-        Debug.Log($"[LevelGenerator] {placedRooms.Count} rooms generated.");
+        Debug.Log($"[LevelGenerator] {placedRooms.Count} rooms + {spawnedHallways.Count} hallways generated.");
         OnLevelReady?.Invoke();
     }
 
-    public List<PlacedRoom>    GetAllRooms()   => placedRooms;
-    public PlacedRoom          GetConnectedRoom(PlacedRoom room, Direction dir)
+    // ── Public queries ─────────────────────────────────────────────────────
+
+    public List<PlacedRoom>  GetAllRooms()     => placedRooms;
+    public List<HallwayGrid> GetAllHallways()  => spawnedHallways;
+
+    public PlacedRoom GetConnectedRoom(PlacedRoom room, Direction dir)
     {
         connections.TryGetValue((room, dir), out var r);
         return r;
     }
+
     public Direction GetOppositeDirection(Direction d) => d switch
     {
         Direction.North => Direction.South,
@@ -120,17 +139,18 @@ public class LevelGenerator : MonoBehaviour
         _               => Direction.North
     };
 
+    // ── Clear ──────────────────────────────────────────────────────────────
+
     private void ClearLevel()
     {
         foreach (Transform c in transform) Destroy(c.gameObject);
-
         if (spawnedPlayer != null) { Destroy(spawnedPlayer); spawnedPlayer = null; }
-
-        ClearHallways();
-
+        spawnedHallways.Clear();
         EnemyManager.Instance?.ClearAllEnemies();
         RoomManager.Instance?.ClearCurrentRoom();
     }
+
+    // ── Layout generation ──────────────────────────────────────────────────
 
     private bool GenerateLayout()
     {
@@ -147,16 +167,13 @@ public class LevelGenerator : MonoBehaviour
             WaveManager.Instance?.GetMinRooms() ?? minRooms,
             (WaveManager.Instance?.GetMaxRooms() ?? maxRooms) + 1);
 
-        // targetNormalRooms = number of non-Start, non-End, non-Boss rooms we want.
-        // Total layout = Start + normals/specials + (optional Boss) + End
-
-        var queue        = new Queue<PlacedRoom>();
-        int placedMiddle = 0;   // counts Normal/Special/Boss rooms placed so far
-        bool bossPlaced  = false;
+        var  queue        = new Queue<PlacedRoom>();
+        int  placedMiddle = 0;
+        bool bossPlaced   = false;
 
         queue.Enqueue(start);
 
-        int attempts = 0;
+        int        attempts   = 0;
         PlacedRoom lastPlaced = start;
 
         while (queue.Count > 0 && attempts < 1000)
@@ -169,15 +186,12 @@ public class LevelGenerator : MonoBehaviour
 
             foreach (Direction dir in dirs)
             {
-                // How many "middle" rooms do we still need?
-                int middleNeeded = targetNormalRooms - placedMiddle;
+                int  middleNeeded  = targetNormalRooms - placedMiddle;
+                bool needBoss      = spawnBossRoom && !bossPlaced
+                                     && GetRandomPrefab(RoomType.Boss) != null;
+                int  reservedSlots = 1 + (needBoss ? 1 : 0);
 
-                // Reserve slots: 1 for End, optionally 1 for Boss
-                bool needBoss = spawnBossRoom && !bossPlaced
-                                && GetRandomPrefab(RoomType.Boss) != null;
-                int reservedSlots = 1 + (needBoss ? 1 : 0); // End + maybe Boss
-
-                if (middleNeeded <= 0) break; // middle rooms done, stop expanding
+                if (middleNeeded <= 0) break;
 
                 RoomType type;
                 if (needBoss && middleNeeded == reservedSlots)
@@ -193,26 +207,21 @@ public class LevelGenerator : MonoBehaviour
                 Connect(current, newRoom, dir);
                 lastPlaced = newRoom;
                 placedMiddle++;
-
                 if (type == RoomType.Boss) bossPlaced = true;
 
                 queue.Enqueue(newRoom);
-
                 if (placedMiddle >= targetNormalRooms) break;
             }
 
             if (placedMiddle >= targetNormalRooms) break;
         }
 
-        // If we ran out of space before hitting the target, warn but continue
         if (placedMiddle < targetNormalRooms)
-            Debug.LogWarning($"[LevelGenerator] Only placed {placedMiddle}/{targetNormalRooms} " +
-                            $"middle rooms. Consider increasing roomSpacing or reducing maxRooms.");
+            Debug.LogWarning($"[LevelGenerator] Only placed {placedMiddle}/{targetNormalRooms} rooms.");
 
-        // Always cap with an End room attached to the last placed room
+        // Place end room
         bool endPlaced = false;
-        var candidates = new List<PlacedRoom>(placedRooms);
-        // Try from the last placed room outward
+        var  candidates = new List<PlacedRoom>(placedRooms);
         candidates.Remove(lastPlaced);
         candidates.Insert(0, lastPlaced);
 
@@ -254,11 +263,17 @@ public class LevelGenerator : MonoBehaviour
         if (conn == null)
         {
             Debug.LogError($"[LevelGenerator] {data.prefab.name} missing RoomConnector!");
-            Destroy(inst); return null;
+            Destroy(inst);
+            return null;
         }
 
         var setup = inst.GetComponent<RoomTilemapSetup>();
-        if (setup != null) { data.width = setup.GetWidth(); data.height = setup.GetHeight(); data.cellSize = setup.GetCellSize(); }
+        if (setup != null)
+        {
+            data.width    = setup.GetWidth();
+            data.height   = setup.GetHeight();
+            data.cellSize = setup.GetCellSize();
+        }
 
         var placed = new PlacedRoom
         {
@@ -268,6 +283,7 @@ public class LevelGenerator : MonoBehaviour
             worldPosition = worldPos,
             gridPosition  = layoutPos
         };
+
         placedRooms.Add(placed);
         roomLayoutGrid[layoutPos] = placed;
         return placed;
@@ -287,14 +303,13 @@ public class LevelGenerator : MonoBehaviour
         Direction opp = GetOppositeDirection(dir);
         if (!tempConn.HasConnectionPoint(opp)) return null;
 
-        var entryPt = tempConn.GetConnectionPoint(opp);
+        var entryPt  = tempConn.GetConnectionPoint(opp);
+        Vector3 offset   = DirToVector(dir) * roomSpacing;
+        Vector3 newWorld = exitPt.transform.position
+                           - entryPt.transform.localPosition
+                           + offset;
 
-        Vector3 offset    = DirToVector(dir) * roomSpacing;
-        Vector3 newWorld  = exitPt.transform.position
-                            - entryPt.transform.localPosition
-                            + offset;
         Vector2Int newLayout = from.gridPosition + DirOffset(dir);
-
         return PlaceRoom(type, newLayout, newWorld);
     }
 
@@ -316,34 +331,31 @@ public class LevelGenerator : MonoBehaviour
         b.connector.MarkConnectionUsed(opp);
     }
 
-    // ── Hallway spawning (prefab-based) ───────────────────────────────────
+    // ── PCG Hallway building ───────────────────────────────────────────────
 
-    private readonly List<GameObject> spawnedHallways = new();
-
-    private void ClearHallways()
+    /// <summary>
+    /// Builds a procedural tilemap hallway for every connected room pair.
+    ///
+    /// WIDTH CONTROL:
+    ///   Width is read from the SpawnPointTile count on each room's SpawnPoints
+    ///   tilemap layer. If a door has 0 spawn tiles, defaultHallwayWidth is used
+    ///   as the fallback so you always get a sensible corridor.
+    ///   To globally widen all hallways, increase defaultHallwayWidth in the
+    ///   Inspector. To widen a specific door, add more SpawnPointTiles to that
+    ///   room's SpawnPoints layer.
+    /// </summary>
+    private void BuildHallways()
     {
-        foreach (var h in spawnedHallways)
-            if (h != null) Destroy(h);
-        spawnedHallways.Clear();
-    }
-
-    private void PaintHallways()
-    {
-        bool hasAny = hallwayHorizontalPrefab != null
-                   || hallwayVerticalPrefab   != null
-                   || hallwaySinglePrefab     != null;
-
-        if (!hasAny)
+        if (hallwayTileSet == null)
         {
-            Debug.LogWarning("[LevelGenerator] No hallway prefabs assigned — skipping hallways. " +
-                             "Assign hallwayHorizontalPrefab / hallwayVerticalPrefab in the Inspector.");
+            Debug.LogWarning("[LevelGenerator] No HallwayTileSet assigned — skipping hallways.");
             return;
         }
 
         var visited = new HashSet<(PlacedRoom, Direction)>();
 
         foreach (PlacedRoom room in placedRooms)
-        foreach (Direction dir in Enum.GetValues(typeof(Direction)))
+        foreach (Direction  dir  in Enum.GetValues(typeof(Direction)))
         {
             if (!connections.TryGetValue((room, dir), out var neighbour)) continue;
             if (visited.Contains((room, dir))) continue;
@@ -351,44 +363,21 @@ public class LevelGenerator : MonoBehaviour
             visited.Add((room, dir));
             visited.Add((neighbour, GetOppositeDirection(dir)));
 
-            SpawnHallway(room, neighbour, dir);
+            HallwayGrid hallway = HallwayBuilder.Build(
+                roomA:            room,
+                roomB:            neighbour,
+                dirAtoB:          dir,
+                parent:           transform,
+                tileSet:          hallwayTileSet,
+                cellSize:         hallwayCellSize,
+                defaultWidth:     defaultHallwayWidth);
+
+            if (hallway != null)
+                spawnedHallways.Add(hallway);
         }
     }
 
-    private void SpawnHallway(PlacedRoom a, PlacedRoom b, Direction dir)
-    {
-        bool horizontal = dir == Direction.East || dir == Direction.West;
-
-        // Pick the right prefab
-        GameObject prefab = horizontal
-            ? (hallwayHorizontalPrefab != null ? hallwayHorizontalPrefab : hallwaySinglePrefab)
-            : (hallwayVerticalPrefab   != null ? hallwayVerticalPrefab   : hallwaySinglePrefab);
-
-        if (prefab == null) return;
-
-        // Get the world positions of both connection points
-        Vector3 exitPos  = a.connector.GetConnectionPoint(dir)?.transform?.position
-                           ?? a.worldPosition;
-        Vector3 entryPos = b.connector.GetConnectionPoint(GetOppositeDirection(dir))?.transform?.position
-                           ?? b.worldPosition;
-
-        // Place the hallway prefab centred between the two connection points
-        Vector3 centre = (exitPos + entryPos) * 0.5f;
-        centre.y += 1f;
-        centre.z = 0f;
-
-        Quaternion rot = Quaternion.identity;
-        if (!horizontal && hallwayVerticalPrefab == null && hallwaySinglePrefab != null)
-            rot = Quaternion.Euler(0f, 0f, 90f);
-
-        float length   = Vector3.Distance(exitPos, entryPos);
-        var   go       = Instantiate(prefab, centre, rot, transform);
-        go.name        = $"Hallway_{a.roomInstance.name}_{dir}";
-
-
-        spawnedHallways.Add(go);
-    }
-
+    // ── Door configuration ─────────────────────────────────────────────────
 
     private void ConfigureDoors()
     {
@@ -405,11 +394,11 @@ public class LevelGenerator : MonoBehaviour
 
                 if (isBoss && neighbour.prefabData.roomType == RoomType.End)
                 {
-                    // Boss room exit → locked door managed by BossRoomDoor
                     var strip = GetStripObject(room.connector, dir);
                     if (strip != null)
                     {
-                        var brd = strip.GetComponent<BossRoomDoor>() ?? strip.AddComponent<BossRoomDoor>();
+                        var brd = strip.GetComponent<BossRoomDoor>()
+                               ?? strip.AddComponent<BossRoomDoor>();
                         brd.Initialize(room.roomGrid);
                     }
                 }
@@ -421,19 +410,18 @@ public class LevelGenerator : MonoBehaviour
         }
     }
 
-
     private void InitRoomGrids()
     {
         foreach (PlacedRoom room in placedRooms)
         {
             var setup = room.roomInstance.GetComponent<RoomTilemapSetup>()
-                    ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
+                     ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
             setup.Initialize();
 
             room.roomGrid = room.roomInstance.GetComponent<RoomGrid>();
 
             var spawnReader = room.roomInstance.GetComponent<RoomSpawnPointReader>()
-                        ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
+                           ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
             spawnReader.Initialize();
         }
     }
@@ -445,69 +433,45 @@ public class LevelGenerator : MonoBehaviour
             door.Initialize(room);
     }
 
+    // ── Player spawning ────────────────────────────────────────────────────
 
     private void SpawnPlayer(PlacedRoom start)
     {
-        // Skip in multiplayer — NetworkedPlayerSpawner handles this
         if (GameManager.IsMultiplayer) return;
-        
-        // Extra safety check in case GameManager mode isn't set yet
-        if (Unity.Netcode.NetworkManager.Singleton != null && 
+        if (Unity.Netcode.NetworkManager.Singleton != null &&
             Unity.Netcode.NetworkManager.Singleton.IsListening) return;
-    
+
         RoomManager.Instance?.SetCurrentRoom(start);
-    
-        int index = CharacterSelection.Index;
+
+        int        index  = CharacterSelection.Index;
         GameObject prefab = (index >= 0 && index < playerPrefabs.Count)
             ? playerPrefabs[index] : playerPrefabs[0];
         if (prefab == null) { Debug.LogError("[LevelGenerator] Player prefab null!"); return; }
-    
+
         GridPosition? sp = FindSpawnTileFromSpawnPoints(start)
                         ?? FindSpawnTile(start.roomGrid);
-    
+
         if (sp == null) { Debug.LogError("[LevelGenerator] No spawn tile in start room!"); return; }
-    
-        spawnedPlayer = Instantiate(prefab);
+
+        spawnedPlayer      = Instantiate(prefab);
         spawnedPlayer.name = "Player";
-    
+
         var unit = spawnedPlayer.GetComponent<Unit>();
-        unit?.PlaceInRoom(start.roomGrid, sp.Value);
-    
+        unit?.PlaceInRoomWhenReady(start.roomGrid, sp.Value);
+
         Debug.Log($"[LevelGenerator] Player spawned at {sp.Value}");
     }
-
 
     private GridPosition? FindSpawnTileFromSpawnPoints(PlacedRoom room)
     {
         var reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
-        if (reader == null)
-        {
-            Debug.LogWarning("[LevelGenerator] No RoomSpawnPointReader on start room.");
-            return null;
-        }
+        if (reader == null) return null;
 
         var all = reader.GetAll();
+        if (all.Count == 0) return null;
 
-        if (all.Count == 0)
-        {
-            Debug.LogWarning("[LevelGenerator] RoomSpawnPointReader found no spawn points at all.");
-            return null;
-        }
-
-        foreach (var preferredDir in new[]
-        {
-            Direction.South,
-            Direction.North,
-            Direction.West,
-            Direction.East
-        })
-        {
-            if (all.TryGetValue(preferredDir, out var pos))
-            {
-                Debug.Log($"[LevelGenerator] Using {preferredDir} spawn → {pos}");
-                return pos;
-            }
-        }
+        foreach (var preferredDir in new[] { Direction.South, Direction.North, Direction.West, Direction.East })
+            if (all.TryGetValue(preferredDir, out var pos)) return pos;
 
         return null;
     }
@@ -518,8 +482,8 @@ public class LevelGenerator : MonoBehaviour
         if (tilemap == null) return null;
 
         var bounds = tilemap.cellBounds;
-        int cx = (bounds.xMin + bounds.xMax) / 2;
-        int cy = (bounds.yMin + bounds.yMax) / 2;
+        int cx     = (bounds.xMin + bounds.xMax) / 2;
+        int cy     = (bounds.yMin + bounds.yMax) / 2;
 
         var center = new GridPosition(cx, cy);
         if (roomGrid.IsWalkable(center)) return center;
@@ -532,8 +496,11 @@ public class LevelGenerator : MonoBehaviour
             var c = new GridPosition(x, y);
             if (roomGrid.IsWalkable(c)) return c;
         }
+
         return null;
     }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
 
     private void ReadPrefabDimensions()
     {
@@ -546,15 +513,6 @@ public class LevelGenerator : MonoBehaviour
             d.height   = s.GetHeight();
             d.cellSize = s.GetCellSize();
         }
-    }
-
-    private RoomType DetermineType(int count, int target, bool bossPlaced)
-    {
-        bool canBoss = spawnBossRoom && !bossPlaced && GetRandomPrefab(RoomType.Boss) != null;
-        if (canBoss && count == target - 2) return RoomType.Boss;
-        if (count == target - 1) return RoomType.End;
-        if (Random.value < specialRoomChance) return RoomType.Special;
-        return RoomType.Normal;
     }
 
     private List<Direction> GetAvailableDirections(PlacedRoom room)
@@ -572,10 +530,10 @@ public class LevelGenerator : MonoBehaviour
 
     private static Vector2Int DirOffset(Direction d) => d switch
     {
-        Direction.North => new(0,  1),
-        Direction.South => new(0, -1),
-        Direction.East  => new(1,  0),
-        Direction.West  => new(-1, 0),
+        Direction.North => new(0,   1),
+        Direction.South => new(0,  -1),
+        Direction.East  => new(1,   0),
+        Direction.West  => new(-1,  0),
         _               => Vector2Int.zero
     };
 
@@ -583,7 +541,8 @@ public class LevelGenerator : MonoBehaviour
     {
         var valid = roomPrefabs.FindAll(p => p.roomType == type);
         if (valid.Count == 0) return null;
-        float total = 0; foreach (var p in valid) total += p.spawnWeight;
+        float total = 0;
+        foreach (var p in valid) total += p.spawnWeight;
         float r = Random.value * total, cur = 0;
         foreach (var p in valid) { cur += p.spawnWeight; if (r <= cur) return p; }
         return valid[0];

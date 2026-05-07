@@ -1,18 +1,7 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Attach this to the ROOT of every room prefab.
-///
-/// PREFAB SETUP
-///   RoomPrefabRoot  (Grid component here, RoomTilemapSetup here, RoomGrid here, TilemapRoomGrid here)
-///     └ Floor       (Tilemap + TilemapRenderer, sorting order 0)
-///     └ Walls       (Tilemap + TilemapRenderer, sorting order 1)
-///     └ SpawnPoints (Tilemap + TilemapRenderer, sorting order 5, renderer disabled at runtime)
-///
-/// The script auto-finds tilemaps by GameObject name so you don't have to
-/// wire them in the Inspector (but you can override if you want).
-/// </summary>
+
 public class RoomTilemapSetup : MonoBehaviour
 {
     [Header("Override (leave blank to auto-find by name)")]
@@ -21,7 +10,6 @@ public class RoomTilemapSetup : MonoBehaviour
 
     private bool initialized;
 
-    /// <summary>Called once by LevelGenerator after the room is instantiated.</summary>
     public void Initialize()
     {
         if (initialized) return;
@@ -47,11 +35,9 @@ public class RoomTilemapSetup : MonoBehaviour
         if (floor == null)
             Debug.LogError($"[RoomTilemapSetup] No 'Floor' tilemap found in {gameObject.name}!");
 
-        // Wire RoomGrid / TilemapRoomGrid
         var roomGrid = GetComponent<RoomGrid>() ?? gameObject.AddComponent<RoomGrid>();
 
-        // Ensure TilemapRoomGrid exists (RoomGrid [RequireComponent] adds it automatically,
-        // but belt-and-braces here in case script order matters at edit time)
+
         if (GetComponent<TilemapRoomGrid>() == null)
             gameObject.AddComponent<TilemapRoomGrid>();
 
@@ -62,7 +48,7 @@ public class RoomTilemapSetup : MonoBehaviour
 
     public bool IsInitialized => initialized;
 
-    // ── Size helpers (read from floor tilemap) ────────────────────────────
+    // ── Size helpers ────────────────────────────
 
     public int    GetWidth()  => GetFloor()?.cellBounds.size.x ?? 0;
     public int    GetHeight() => GetFloor()?.cellBounds.size.y ?? 0;
