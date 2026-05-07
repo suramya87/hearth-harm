@@ -17,6 +17,13 @@ using UnityEngine.Tilemaps;
 ///   CornerConcaveTile— inner corner where corridor bends (concave, 270° exterior)
 ///                      If null, WallSideTile is used as fallback.
 ///
+/// TRIM TILES:
+///   The `trimTiles` parameter (default 1) causes the painter to stop that many
+///   cells short of each room mouth. This prevents hallway floor tiles from
+///   landing on or overlapping the room's SpawnPoint tiles, which are the
+///   canonical entry cells. With trimTiles = 1 there is always a one-tile gap
+///   between the last hallway floor cell and the room's threshold.
+///
 /// COORDINATE SYSTEM
 ///   All painting uses world integer tile coords via Tilemap.WorldToCell, so the
 ///   hallway can live anywhere in world space regardless of room positions.
@@ -32,6 +39,10 @@ public static class HallwayTilemapPainter
     /// <param name="entryWidth">Mouth width of room B's door in tiles.</param>
     /// <param name="dirAtoB">Cardinal direction from room A toward room B.</param>
     /// <param name="tiles">Tile assets to use.</param>
+    /// <param name="trimTiles">
+    ///   How many tiles to leave unpainted at each room mouth so hallway floor
+    ///   tiles never overwrite the room's SpawnPoint tiles. Default is 1.
+    /// </param>
     public static void Paint(
         HallwayGrid              hallway,
         Vector3                  exitWorld,
@@ -39,7 +50,8 @@ public static class HallwayTilemapPainter
         int                      exitWidth,
         int                      entryWidth,
         LevelGenerator.Direction dirAtoB,
-        HallwayTileSet           tiles)
+        HallwayTileSet           tiles,
+        int                      trimTiles = 1)
     {
         if (tiles == null || tiles.FloorTile == null)
         {
@@ -54,9 +66,17 @@ public static class HallwayTilemapPainter
         Vector3Int exitCell  = floor.WorldToCell(exitWorld);
         Vector3Int entryCell = floor.WorldToCell(entryWorld);
 
+        // Clamp trim so we never trim more than the corridor allows
+        int clampedTrim = Mathf.Max(0, trimTiles);
+
+        // Offset the start/end cells inward by trimTiles along the primary axis
+        // so hallway floor tiles stop before the room threshold.
+        Vector3Int exitCellTrimmed  = TrimCell(exitCell,  dirAtoB,                 clampedTrim);
+        Vector3Int entryCellTrimmed = TrimCell(entryCell, Opposite(dirAtoB), clampedTrim);
+
         // Build the centreline path (list of tile coords, mouth-to-mouth)
-        List<Segment> segments = BuildSegments(exitCell, entryCell, dirAtoB,
-                                               exitWidth, entryWidth);
+        List<Segment> segments = BuildSegments(
+            exitCellTrimmed, entryCellTrimmed, dirAtoB, exitWidth, entryWidth);
 
         // Paint each segment
         foreach (var seg in segments)
@@ -66,6 +86,40 @@ public static class HallwayTilemapPainter
         for (int i = 0; i < segments.Count - 1; i++)
             PaintJunction(floor, walls, segments[i], segments[i + 1], tiles);
     }
+
+    // ── Trim helper ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Moves a cell `amount` steps in `direction` — i.e. away from the room mouth
+    /// and into the hallway body, shrinking the painted area.
+    /// </summary>
+    private static Vector3Int TrimCell(
+        Vector3Int               cell,
+        LevelGenerator.Direction direction,
+        int                      amount)
+    {
+        if (amount <= 0) return cell;
+        Vector3Int step = DirectionToStep(direction);
+        return cell + step * amount;
+    }
+
+    private static Vector3Int DirectionToStep(LevelGenerator.Direction d) => d switch
+    {
+        LevelGenerator.Direction.North => new Vector3Int( 0,  1, 0),
+        LevelGenerator.Direction.South => new Vector3Int( 0, -1, 0),
+        LevelGenerator.Direction.East  => new Vector3Int( 1,  0, 0),
+        LevelGenerator.Direction.West  => new Vector3Int(-1,  0, 0),
+        _                              => Vector3Int.zero
+    };
+
+    private static LevelGenerator.Direction Opposite(LevelGenerator.Direction d) => d switch
+    {
+        LevelGenerator.Direction.North => LevelGenerator.Direction.South,
+        LevelGenerator.Direction.South => LevelGenerator.Direction.North,
+        LevelGenerator.Direction.East  => LevelGenerator.Direction.West,
+        LevelGenerator.Direction.West  => LevelGenerator.Direction.East,
+        _                              => LevelGenerator.Direction.North
+    };
 
     // ── Segment definition ─────────────────────────────────────────────────
 
@@ -93,10 +147,8 @@ public static class HallwayTilemapPainter
         int dx = entryCell.x - exitCell.x;
         int dy = entryCell.y - exitCell.y;
 
-        // Average the two widths for transition segments; keep individual widths at mouths
         int midWidth = Mathf.Max(1, (exitWidth + entryWidth + 1) / 2);
 
-        // Check alignment
         bool aligned = primaryHorizontal ? (dy == 0) : (dx == 0);
 
         if (aligned)
@@ -113,15 +165,10 @@ public static class HallwayTilemapPainter
             };
         }
 
-        // ── L-bend or S-bend ───────────────────────────────────────────────
-        // We always travel in the primary direction first, then turn.
-        // For large offsets we use an S (two turns).
-
         var segs = new List<Segment>();
 
         if (primaryHorizontal)
         {
-            // Segment 1: horizontal from exitCell until we're at entryCell.x
             int midX = entryCell.x;
             Vector3Int corner1 = new(midX, exitCell.y, exitCell.z);
 
@@ -130,13 +177,10 @@ public static class HallwayTilemapPainter
                 Width = exitWidth, Horizontal = true
             });
 
-            // Is the vertical offset large enough to warrant an S?
-            // We use an S if |dy| > exitWidth * 2  (otherwise L is fine visually)
             bool useS = Mathf.Abs(dy) > exitWidth * 2;
 
             if (!useS)
             {
-                // L-bend: one vertical segment
                 segs.Add(new Segment {
                     Start = corner1, End = entryCell,
                     Width = midWidth, Horizontal = false
@@ -144,7 +188,6 @@ public static class HallwayTilemapPainter
             }
             else
             {
-                // S-bend: go half-way vertically, horizontal again, then rest of vertical
                 int halfY    = exitCell.y + dy / 2;
                 Vector3Int c2 = new(midX,        halfY,      exitCell.z);
                 Vector3Int c3 = new(entryCell.x, halfY,      exitCell.z);
@@ -165,7 +208,6 @@ public static class HallwayTilemapPainter
         }
         else
         {
-            // Primary direction is vertical (North/South)
             int midY = entryCell.y;
             Vector3Int corner1 = new(exitCell.x, midY, exitCell.z);
 
@@ -218,7 +260,6 @@ public static class HallwayTilemapPainter
         Vector3Int start = seg.Start;
         Vector3Int end   = seg.End;
 
-        // Iterate along travel axis
         if (seg.Horizontal)
         {
             int xMin = Mathf.Min(start.x, end.x);
@@ -226,11 +267,9 @@ public static class HallwayTilemapPainter
 
             for (int x = xMin; x <= xMax; x++)
             {
-                // Floor strip
                 for (int y = start.y - half; y <= start.y + half; y++)
                     SetFloor(floor, new Vector3Int(x, y, 0), tiles.FloorTile);
 
-                // Wall tiles above and below
                 if (tiles.WallSideTile != null)
                 {
                     SetWall(walls, new Vector3Int(x, start.y + half + 1, 0), tiles.WallSideTile);
@@ -259,22 +298,16 @@ public static class HallwayTilemapPainter
 
     // ── Junction / corner painting ─────────────────────────────────────────
 
-    /// <summary>
-    /// Fills the rectangular gap between two perpendicular segments and
-    /// places corner tiles on the outer and inner edges.
-    /// </summary>
     private static void PaintJunction(
         Tilemap floor, Tilemap walls,
         Segment segA, Segment segB,
         HallwayTileSet tiles)
     {
-        // The junction point is segA.End == segB.Start (they share it)
-        Vector3Int pivot = segA.End; // == segB.Start
+        Vector3Int pivot = segA.End;
 
         int halfA = segA.Width / 2;
         int halfB = segB.Width / 2;
 
-        // Fill the junction box with floor tiles
         int xMin = Mathf.Min(pivot.x - halfA, pivot.x - halfB);
         int xMax = Mathf.Max(pivot.x + halfA, pivot.x + halfB);
         int yMin = Mathf.Min(pivot.y - halfA, pivot.y - halfB);
@@ -284,13 +317,11 @@ public static class HallwayTilemapPainter
         for (int y = yMin; y <= yMax; y++)
             SetFloor(floor, new Vector3Int(x, y, 0), tiles.FloorTile);
 
-        // Outer convex corners
         TileBase convex  = tiles.CornerConvexTile  ?? tiles.WallSideTile;
         TileBase concave = tiles.CornerConcaveTile ?? tiles.WallSideTile;
 
         if (convex != null)
         {
-            // Place convex corners at the four outside corners of the junction box
             SetWall(walls, new Vector3Int(xMin - 1, yMin - 1, 0), convex);
             SetWall(walls, new Vector3Int(xMax + 1, yMin - 1, 0), convex);
             SetWall(walls, new Vector3Int(xMin - 1, yMax + 1, 0), convex);
@@ -299,13 +330,9 @@ public static class HallwayTilemapPainter
 
         if (concave != null && segA.Horizontal != segB.Horizontal)
         {
-            // Determine which two of the four corners are "inside" (concave)
-            // by checking which quadrant is NOT covered by either segment.
-            // segA travel direction tells us which axis it runs along.
             bool aGoesRight = segA.End.x > segA.Start.x;
             bool bGoesUp    = segB.End.y > segB.Start.y;
 
-            // The concave corner is where the corridor "bends inward"
             if (segA.Horizontal)
             {
                 int cx = aGoesRight ? xMax + 1 : xMin - 1;
@@ -314,14 +341,12 @@ public static class HallwayTilemapPainter
             }
             else
             {
-                int cx = bGoesUp    ? xMax + 1 : xMin - 1; // repurposed for V→H
+                int cx = bGoesUp    ? xMax + 1 : xMin - 1;
                 int cy = aGoesRight ? yMin - 1 : yMax + 1;
                 SetWall(walls, new Vector3Int(cx, cy, 0), concave);
             }
         }
 
-        // Fill wall tiles along the exposed edges of the junction box
-        // (covers the gap where segment wall tiles don't reach)
         if (tiles.WallSideTile != null)
         {
             for (int x = xMin; x <= xMax; x++)
@@ -341,7 +366,6 @@ public static class HallwayTilemapPainter
 
     private static void SetFloor(Tilemap floor, Vector3Int cell, TileBase tile)
     {
-        // Floor always wins — don't overwrite with null
         if (tile != null) floor.SetTile(cell, tile);
     }
 
@@ -350,7 +374,6 @@ public static class HallwayTilemapPainter
         if (tile != null) walls.SetTile(cell, tile);
     }
 
-    /// <summary>Only sets a wall tile if there is no floor tile at that cell.</summary>
     private static void TrySetWall(Tilemap walls, Tilemap floor, Vector3Int cell, TileBase tile)
     {
         if (tile == null) return;

@@ -3,43 +3,37 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 
 /// <summary>
-/// Placed at each hallway mouth. When the player steps into the trigger they
-/// are handed off to the hallway's RoomGrid so MoveAction pathfinds on
-/// hallway tiles.
+/// Placed at each hallway mouth on the room side.
+/// When the player steps through it they are handed off to the hallway's
+/// RoomGrid so MoveAction pathfinds on hallway tiles, and the camera
+/// switches to free-follow mode (no room bounds clamping).
 ///
-/// DRAG-BACK FIX:
-///   After HallwayEntryTrigger transitions the player into a room, the player's
-///   physics body is briefly still inside this trigger zone (the colliders
-///   overlap at the mouth). Without a proper guard, OnTriggerEnter2D would
-///   fire again and drag the player back into the hallway.
-///
-///   We fix this by checking whether the unit's current grid is ALREADY the
-///   hallway grid before doing anything. If HallwayEntryTrigger already placed
-///   the unit on the room grid, the unit's currentRoomGrid != hallway.RoomGrid
-///   so... wait, that would pass the "already on hallway" guard wrong way.
-///
-///   Correct logic:
-///     • If unit is already ON the hallway grid  → nothing to do (guard at top of HandOff)
-///     • If unit is on a ROOM grid               → hand off to hallway UNLESS it just
-///       arrived via HallwayEntryTrigger (detected by the entry trigger setting a flag)
-///
-///   The cleanest solution: track whether the unit arrived in a room via an
-///   entry trigger on the Unit itself. We expose a static flag for that here
-///   and HallwayEntryTrigger sets it. The walk trigger respects it.
+/// LOCK SUPPORT:
+///   Call SetLocked(true)  to prevent the trigger from firing (e.g. enemies are alive).
+///   Call SetLocked(false) to re-enable it (e.g. room cleared).
+///   An optional door-strip GameObject can be supplied; it will be shown/hidden
+///   in sync with the lock state so the player sees a physical barrier.
 /// </summary>
 [RequireComponent(typeof(Collider2D))]
 public class HallwayWalkTrigger : MonoBehaviour
 {
     /// <summary>
-    /// Set by HallwayEntryTrigger immediately before it transitions the player
-    /// into a room. Prevents this walk trigger from pulling the player back
-    /// into the hallway when the physics collider is still overlapping.
-    /// Cleared after a short delay by HallwayEntryTrigger.
+    /// Set by HallwayEntryTrigger before transitioning the player into a room.
+    /// Prevents this trigger from pulling them back into the hallway while
+    /// their physics collider is still overlapping the mouth zone.
+    /// Cleared after a delay by HallwayEntryTrigger.
     /// </summary>
     public static bool EntryTransitionInProgress { get; set; }
 
     private HallwayGrid hallway;
     private bool        cooling;
+    private bool        locked;
+
+    /// <summary>
+    /// Optional door-strip sprite/object shown when this trigger is locked.
+    /// Assign via HallwayBuilder after creation.
+    /// </summary>
+    public GameObject DoorStripObject { get; set; }
 
     public void Initialize(HallwayGrid hg)
     {
@@ -53,10 +47,24 @@ public class HallwayWalkTrigger : MonoBehaviour
         cooling = false;
     }
 
+    /// <summary>
+    /// Lock or unlock this mouth. While locked the player cannot enter the hallway
+    /// from this side. The door-strip object (if any) mirrors the lock state.
+    /// </summary>
+    public void SetLocked(bool isLocked)
+    {
+        locked = isLocked;
+        if (DoorStripObject != null)
+            DoorStripObject.SetActive(isLocked);
+    }
+
+    // ── Trigger ────────────────────────────────────────────────────────────
+
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (cooling) return;
-        if (EntryTransitionInProgress) return;   // ← entry trigger just fired; don't drag back
+        if (cooling)  return;
+        if (locked)   return;   // ← room has enemies; block exit
+        if (EntryTransitionInProgress) return;
         if (!other.CompareTag("Player")) return;
         if (hallway == null || !hallway.IsReady) return;
 
@@ -76,11 +84,13 @@ public class HallwayWalkTrigger : MonoBehaviour
         StartCoroutine(HandOffAfterMove(unit));
     }
 
+    // ── Hand off to hallway ────────────────────────────────────────────────
+
     private IEnumerator HandOffAfterMove(Unit unit)
     {
         cooling = true;
 
-        // Wait for any in-progress move animation to finish first
+        // Wait for any in-progress move animation to finish
         var move = unit.GetMoveAction();
         if (move != null)
             while (move.IsActive) yield return null;
@@ -88,14 +98,7 @@ public class HallwayWalkTrigger : MonoBehaviour
         yield return new WaitForSeconds(0.05f);
 
         // Re-check: another trigger may have acted while we waited
-        if (unit.GetCurrentRoomGrid() == hallway.RoomGrid)
-        {
-            cooling = false;
-            yield break;
-        }
-
-        // Also bail if an entry transition fired while we were waiting
-        if (EntryTransitionInProgress)
+        if (unit.GetCurrentRoomGrid() == hallway.RoomGrid || EntryTransitionInProgress || locked)
         {
             cooling = false;
             yield break;
@@ -111,11 +114,8 @@ public class HallwayWalkTrigger : MonoBehaviour
             yield break;
         }
 
-        GridPosition? bestGP = FindNearestWalkableToWorld(
-            roomGrid, floorTilemap, transform.position);
-
-        if (bestGP == null)
-            bestGP = FindAnyWalkable(roomGrid, floorTilemap);
+        GridPosition? bestGP = FindNearestWalkableToWorld(roomGrid, floorTilemap, transform.position)
+                            ?? FindAnyWalkable(roomGrid, floorTilemap);
 
         if (bestGP == null)
         {
@@ -124,16 +124,21 @@ public class HallwayWalkTrigger : MonoBehaviour
             yield break;
         }
 
-        Debug.Log($"[HallwayWalkTrigger] Handing {unit.name} to {hallway.name} at {bestGP.Value}");
+        // ── Switch to hallway ──────────────────────────────────────────────
+        // Tell RoomManager the player is in a hallway — this clears room bounds
+        // on the camera so it follows the player freely.
+        RoomManager.Instance?.SetInHallway();
 
-        // Place unit on the hallway grid.
-        // Do NOT call RoomManager.SetCurrentRoom(null) — TilemapHighlighter
-        // resolves its tilemap from unit.GetCurrentRoomGrid() each frame.
+        // Move the unit onto the hallway grid
         unit.PlaceInRoom(roomGrid, bestGP.Value);
+
+        Debug.Log($"[HallwayWalkTrigger] Player entered hallway '{hallway.name}' at {bestGP.Value}.");
 
         yield return new WaitForSeconds(0.5f);
         cooling = false;
     }
+
+    // ── Tile search helpers ────────────────────────────────────────────────
 
     private static GridPosition? FindNearestWalkableToWorld(
         RoomGrid roomGrid, Tilemap floorTilemap, Vector3 targetWorld)
@@ -141,12 +146,12 @@ public class HallwayWalkTrigger : MonoBehaviour
         GridPosition? best     = null;
         float         bestDist = float.MaxValue;
 
-        foreach (Vector3Int cell in floorTilemap.cellBounds.allPositionsWithin)
+        foreach (var cell in floorTilemap.cellBounds.allPositionsWithin)
         {
             if (!floorTilemap.HasTile(cell)) continue;
-            var   gp      = new GridPosition(cell.x, cell.y);
+            var   gp   = new GridPosition(cell.x, cell.y);
             if (!roomGrid.IsWalkableIgnoreOccupancy(gp)) continue;
-            float dist    = Vector3.Distance(floorTilemap.GetCellCenterWorld(cell), targetWorld);
+            float dist = Vector3.Distance(floorTilemap.GetCellCenterWorld(cell), targetWorld);
             if (dist < bestDist) { bestDist = dist; best = gp; }
         }
 
@@ -155,7 +160,7 @@ public class HallwayWalkTrigger : MonoBehaviour
 
     private static GridPosition? FindAnyWalkable(RoomGrid roomGrid, Tilemap floorTilemap)
     {
-        foreach (Vector3Int cell in floorTilemap.cellBounds.allPositionsWithin)
+        foreach (var cell in floorTilemap.cellBounds.allPositionsWithin)
         {
             if (!floorTilemap.HasTile(cell)) continue;
             var gp = new GridPosition(cell.x, cell.y);
