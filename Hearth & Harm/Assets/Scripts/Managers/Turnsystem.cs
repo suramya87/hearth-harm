@@ -46,6 +46,20 @@ public class TurnSystem : MonoBehaviour
     public void NextTurn()
     {
         if (!playerTurn) return;
+
+        Debug.LogWarning("[TurnSystem] NextTurn clicked. Checking stamina before enemy phase.");
+
+        Unit selectedUnit = UnitActionSystem.Instance != null
+            ? UnitActionSystem.Instance.GetSelectedUnit()
+            : null;
+
+        if (selectedUnit != null)
+        {
+            PlayerStats stats = selectedUnit.GetComponent<PlayerStats>();
+            if (stats != null)
+                Debug.LogWarning($"[TurnSystem] BEFORE enemy phase stamina: {stats.currentStamina}/{stats.maxStamina}", stats);
+        }
+
         playerTurn = false;
         turnNumber++;
         OnTurnChanged?.Invoke(this, EventArgs.Empty);
@@ -80,9 +94,32 @@ public class TurnSystem : MonoBehaviour
     private void HandleEnemyTurnsComplete()
     {
         playerTurn = true;
+
+        RecoverPlayerStaminaForNewTurn();
+
         OnEnemyPhaseEnd?.Invoke();
         OnTurnChanged?.Invoke(this, EventArgs.Empty);
         OnPlayerTurnBegin?.Invoke();
+
         Debug.Log($"[TurnSystem] Player turn {turnNumber} begins.");
+    }
+
+    private void RecoverPlayerStaminaForNewTurn()
+    {
+        Unit selectedUnit = UnitActionSystem.Instance != null
+            ? UnitActionSystem.Instance.GetSelectedUnit()
+            : null;
+
+        if (selectedUnit == null)
+            return;
+
+        PlayerStats stats = selectedUnit.GetComponent<PlayerStats>();
+
+        if (stats == null)
+            return;
+
+        int recovered = stats.RollStaminaRecovery();
+
+        Debug.Log($"[TurnSystem] Recovered {recovered} stamina at start of player turn.");
     }
 }

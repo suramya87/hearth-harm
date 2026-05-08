@@ -83,8 +83,6 @@ public class Unit : MonoBehaviour
 
     private void OnTurnChanged(object sender, EventArgs e)
     {
-        if (playerStats != null)
-            playerStats.SetCurrentStaminaPoints(playerStats.GetMaxStaminaPoints());
     }
 
     // ── Accessors ──────────────────────────────────────────────────────────

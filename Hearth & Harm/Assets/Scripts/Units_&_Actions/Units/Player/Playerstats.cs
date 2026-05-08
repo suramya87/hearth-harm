@@ -18,6 +18,10 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     public int maxStamina;
     public int currentStamina;
 
+    [Header("Stamina Popup")]
+    [SerializeField] private GameObject staminaNumberPrefab;
+    [SerializeField] private Vector3 staminaPopupOffset = new(0f, 1f, 0f);
+
     [Header("Core Stats")]
     public int strength;
     public int constitution;
@@ -58,7 +62,7 @@ public class PlayerStats : MonoBehaviour, IHasHealth
 
     private void OnRoomChanged(LevelGenerator.PlacedRoom _)
     {
-        currentStamina = maxStamina;
+        RefillStaminaToMax();
         TurnSystem.Instance?.ForcePlayerTurn();
         Debug.Log("[PlayerStats] Room entered → stamina refilled, player turn forced.");
     }
@@ -84,8 +88,7 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         luck = stats.luck;
 
         maxHealth = Mathf.Max(1, stats.baseMaxHealth + constitution);
-        maxStamina = Mathf.Max(1, stats.baseMaxStamina + dexterity);
-
+        maxStamina = Mathf.Max(1, 10 + dexterity * 2);
         currentHealth = maxHealth;
         currentStamina = maxStamina;
     }
@@ -94,9 +97,16 @@ public class PlayerStats : MonoBehaviour, IHasHealth
 
     public int GetCurrentStaminaPoints() => currentStamina;
 
-    public void SetCurrentStaminaPoints(int value)
+    public void SetCurrentStaminaPoints_BROKEN_FIND_CALLER(int value)
     {
+        int before = currentStamina;
         currentStamina = Mathf.Clamp(value, 0, maxStamina);
+
+        Debug.LogWarning(
+            $"[PlayerStats] SetCurrentStaminaPoints called: {before} → {currentStamina}\n" +
+            $"{System.Environment.StackTrace}",
+            this
+        );
     }
 
     public int GetMaxStaminaPoints() => maxStamina;
@@ -104,5 +114,59 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     public int GetPopularityBonusPercent()
     {
         return charisma;
+    }
+
+    public int RollStaminaRecovery()
+    {
+        int diceCount = Mathf.Max(1, Mathf.CeilToInt(dexterity / 2f));
+
+        int rolledRecovery = 0;
+
+        for (int i = 0; i < diceCount; i++)
+            rolledRecovery += Random.Range(1, 7);
+
+        int before = currentStamina;
+        int after = Mathf.Clamp(before + rolledRecovery, 0, maxStamina);
+
+        currentStamina = after;
+
+        int actualRecovered = after - before;
+
+        if (actualRecovered > 0)
+        {
+            StaminaNumber.Spawn(
+                staminaNumberPrefab,
+                transform.position + staminaPopupOffset,
+                actualRecovered
+            );
+        }
+
+        Debug.Log(
+            $"[PlayerStats] Stamina recovery: {diceCount}d6 rolled {rolledRecovery}, " +
+            $"before {before}, recovered {actualRecovered}, current {currentStamina}/{maxStamina}"
+        );
+
+        return actualRecovered;
+    }
+
+    public void SpendStamina(int amount)
+    {
+        if (amount <= 0) return;
+        currentStamina = Mathf.Clamp(currentStamina - amount, 0, maxStamina);
+    }
+
+    public void RefillStaminaToMax()
+    {
+        currentStamina = maxStamina;
+    }
+
+    public int RecoverStamina(int amount)
+    {
+        if (amount <= 0) return 0;
+
+        int before = currentStamina;
+        currentStamina = Mathf.Clamp(currentStamina + amount, 0, maxStamina);
+
+        return currentStamina - before;
     }
 }
