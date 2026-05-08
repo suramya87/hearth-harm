@@ -22,4 +22,8 @@ MonoBehaviour:
   turnsBeforeFirstAction: 0
   _summary: 'HP:16  Move:1  Range:4
 
-    Attack:Attack  Kite:True(2)'
+    Attack:Attack  Kite:True(2)
+
+    Coins:1-5'
+  minCoinsDropped: 1
+  maxCoinsDropped: 5

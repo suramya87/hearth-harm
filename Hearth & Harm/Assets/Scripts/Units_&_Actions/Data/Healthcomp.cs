@@ -11,14 +11,14 @@ public class HealthComponent : MonoBehaviour
     [Header("Damage Flash")]
     [SerializeField] private GameObject damageFlashObject;
     [SerializeField] private float flashDuration = 0.15f;
-    [SerializeField] private int   flashCount    = 1;
+    [SerializeField] private int flashCount = 1;
 
     [Header("Health Settings")]
-    [Min(1)][SerializeField] private int maxHealth     = 100;
+    [Min(1)][SerializeField] private int maxHealth = 100;
     [Min(0)][SerializeField] private int startingHealth = 0;
 
     [Header("Death Behaviour")]
-    [SerializeField] private bool  destroyOnDeath = false;
+    [SerializeField] private bool destroyOnDeath = false;
     [SerializeField, Min(0f)] private float deathDelay = 0f;
 
     [Header("Debug")]
@@ -27,17 +27,17 @@ public class HealthComponent : MonoBehaviour
 
     // ── Events ─────────────────────────────────────────────────────────────
     public event Action<int, int> OnHealthChanged;
-    public event Action           OnDeath;
+    public event Action OnDeath;
 
     // ── Properties ─────────────────────────────────────────────────────────
-    public int   CurrentHealth  => _currentHealth;
-    public int   MaxHealth      => maxHealth;
-    public bool  IsDead         => _currentHealth <= 0;
-    public float HealthPercent  => maxHealth > 0 ? (float)_currentHealth / maxHealth : 0f;
+    public int CurrentHealth => _currentHealth;
+    public int MaxHealth => maxHealth;
+    public bool IsDead => _currentHealth <= 0;
+    public float HealthPercent => maxHealth > 0 ? (float)_currentHealth / maxHealth : 0f;
 
     // ── Runtime ────────────────────────────────────────────────────────────
     private SpriteRenderer flashRenderer;
-    private Coroutine      flashRoutine;
+    private Coroutine flashRoutine;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ public class HealthComponent : MonoBehaviour
         var provider = GetComponent<IHasHealth>();
         if (provider != null)
         {
-            maxHealth      = provider.GetMaxHealth();
+            maxHealth = provider.GetMaxHealth();
             _currentHealth = maxHealth;
         }
         else
@@ -142,7 +142,7 @@ public class HealthComponent : MonoBehaviour
     private IEnumerator Fade(float from, float to, float dur)
     {
         float t = 0f;
-        while (t < dur) { t += Time.deltaTime; SetFlashAlpha(Mathf.Lerp(from, to, t/dur)); yield return null; }
+        while (t < dur) { t += Time.deltaTime; SetFlashAlpha(Mathf.Lerp(from, to, t / dur)); yield return null; }
         SetFlashAlpha(to);
     }
 

@@ -29,12 +29,28 @@ public class EnemyStats : ScriptableObject
 
 #if UNITY_EDITOR
     [Header("Summary (read-only)")]
-    [SerializeField, TextArea(2,3)] private string _summary;
+    [SerializeField, TextArea(2, 3)] private string _summary;
     private void OnValidate()
     {
+        if (maxCoinsDropped < minCoinsDropped)
+            maxCoinsDropped = minCoinsDropped;
+
         int r = attackData != null ? attackData.maxRange : 1;
         _summary = $"HP:{maxHealth}  Move:{moveRange}  Range:{r}\n" +
-                   $"Attack:{(attackData ? attackData.actionName : "None")}  Kite:{kiteEnabled}({kiteRange})";
+                   $"Attack:{(attackData ? attackData.actionName : "None")}  Kite:{kiteEnabled}({kiteRange})\n" +
+                   $"Coins:{minCoinsDropped}-{maxCoinsDropped}";
+    }
+
+    [Header("Currency Drop")]
+    [Min(0)] public int minCoinsDropped = 0;
+    [Min(0)] public int maxCoinsDropped = 5;
+
+    public int RollCoinDrop()
+    {
+        int min = Mathf.Min(minCoinsDropped, maxCoinsDropped);
+        int max = Mathf.Max(minCoinsDropped, maxCoinsDropped);
+
+        return Random.Range(min, max + 1);
     }
 #endif
 }
