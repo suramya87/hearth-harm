@@ -51,21 +51,27 @@ public class DicePhysicsDie : MonoBehaviour
             return 1;
         }
 
-        Face bestFace = faces[0];
-        float bestDot = -999f;
+        Face bestFace = null;
+        float highestWorldY = float.NegativeInfinity;
 
         foreach (Face face in faces)
         {
             if (face == null || face.faceTransform == null)
                 continue;
 
-            float dot = Vector3.Dot(face.faceTransform.up, Vector3.up);
+            float worldY = face.faceTransform.position.y;
 
-            if (dot > bestDot)
+            if (worldY > highestWorldY)
             {
-                bestDot = dot;
+                highestWorldY = worldY;
                 bestFace = face;
             }
+        }
+
+        if (bestFace == null)
+        {
+            Debug.LogWarning($"{name} has no valid dice face transforms.");
+            return 1;
         }
 
         return bestFace.value;
