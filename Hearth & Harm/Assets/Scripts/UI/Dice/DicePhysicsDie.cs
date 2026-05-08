@@ -52,27 +52,34 @@ public class DicePhysicsDie : MonoBehaviour
         }
 
         Face bestFace = null;
-        float highestWorldY = float.NegativeInfinity;
+        float highestY = float.NegativeInfinity;
+
+        string debug = $"[DicePhysicsDie] {name} face heights:\n";
 
         foreach (Face face in faces)
         {
             if (face == null || face.faceTransform == null)
                 continue;
 
-            float worldY = face.faceTransform.position.y;
+            float y = face.faceTransform.position.y;
 
-            if (worldY > highestWorldY)
+            debug += $"Value {face.value} | Transform {face.faceTransform.name} | Y {y:F3}\n";
+
+            if (y > highestY)
             {
-                highestWorldY = worldY;
+                highestY = y;
                 bestFace = face;
             }
         }
 
         if (bestFace == null)
         {
-            Debug.LogWarning($"{name} has no valid dice face transforms.");
+            Debug.LogWarning($"{name} has no valid face transforms.");
             return 1;
         }
+
+        debug += $"WINNER: {bestFace.value}";
+        Debug.Log(debug);
 
         return bestFace.value;
     }
