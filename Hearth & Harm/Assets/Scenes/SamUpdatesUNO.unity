@@ -2892,7 +2892,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4554993905955ea4cb32917b4a12978a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DicePhysicsRoller
-  d6Prefab: {fileID: 314301093849567004, guid: a1b4cb1b622e82c4fbca3d050fd5dc06, type: 3}
+  d6Prefab: {fileID: 314301093849567004, guid: f58f6d3c28eec57448886ea91bcedde6, type: 3}
   spawnPoint: {fileID: 1215914008}
   diceParent: {fileID: 1771081042}
   upwardForce: 1
