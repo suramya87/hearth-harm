@@ -2,6 +2,20 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
+/// <summary>
+/// Wraps a Unity 2D Tilemap and provides:
+///   - GridPosition ↔ world position conversion
+///   - Wall / walkability queries
+///   - Unit and enemy occupancy tracking per cell
+///
+/// This is the SINGLE source of truth for the grid.
+/// LevelGrid has been removed — ask RoomManager for the current RoomGrid
+/// and use TilemapRoomGrid through it.
+///
+/// SETUP (on the room prefab)
+///   Add a Grid component at the root, then child Tilemaps named "Floor" and "Walls".
+///   Attach RoomTilemapSetup to the root; it finds and wires everything automatically.
+/// </summary>
 [RequireComponent(typeof(Tilemap))]
 public class TilemapRoomGrid : MonoBehaviour
 {
@@ -41,13 +55,16 @@ public class TilemapRoomGrid : MonoBehaviour
 
     // ── Coordinate helpers ─────────────────────────────────────────────────
 
+    /// <summary>Grid position → world centre of that cell (Y = room transform Y).</summary>
     public Vector3 GetWorldPosition(GridPosition gp)
     {
         if (primaryTilemap == null) return Vector3.zero;
         Vector3 cell = primaryTilemap.GetCellCenterWorld(new Vector3Int(gp.x, gp.y, 0));
+        // Keep the room's Z so layering works correctly in 2D
         return new Vector3(cell.x, cell.y, transform.position.z);
     }
 
+    /// <summary>World position → grid position.</summary>
     public GridPosition GetGridPosition(Vector3 worldPos)
     {
         if (primaryTilemap == null) return default;
@@ -55,12 +72,14 @@ public class TilemapRoomGrid : MonoBehaviour
         return new GridPosition(c.x, c.y);
     }
 
+    /// <summary>True if the grid position has a floor tile (is inside the room).</summary>
     public bool IsValidGridPosition(GridPosition gp)
     {
         if (!initialized || primaryTilemap == null) return false;
         return primaryTilemap.HasTile(new Vector3Int(gp.x, gp.y, 0));
     }
 
+    /// <summary>True if the world position maps to a tile inside this room.</summary>
     public bool IsPositionInRoom(Vector3 worldPos)
     {
         if (primaryTilemap == null) return false;

@@ -8,9 +8,6 @@ public class MoveAction : BaseAction
     [SerializeField] private int   maxMoveDistance = 4;
     [SerializeField] private float moveSpeed       = 8f;
 
-    /// <summary>True while a move animation is in progress.</summary>
-    public bool IsActive => isActive;
-
     private int MoveDistance => playerStats != null
         ? Mathf.Max(0, playerStats.currentStamina)
         : maxMoveDistance;
@@ -18,8 +15,6 @@ public class MoveAction : BaseAction
     public bool CanMove() => MoveDistance > 0;
 
     public override string GetActionName() => "Move";
-
-    // ── Move ───────────────────────────────────────────────────────────────
 
     public void Move(GridPosition target, Action onComplete)
     {
@@ -35,38 +30,25 @@ public class MoveAction : BaseAction
         var usedPath = path.GetRange(0, steps);
         var finalPos = usedPath[^1];
 
-        // Update grid occupancy immediately so pathfinding elsewhere is
-        // correct before the visual animation completes.
+        // Update grid occupancy immediately (before the visual move)
         room.RemoveUnitAtGridPosition(unit.GetGridPosition(), unit);
         room.AddUnitAtGridPosition(finalPos, unit);
-
-        // Snapshot the grid we started on. If a HallwayWalkTrigger hands the
-        // unit to a different grid during the animation, we detect that at the
-        // end and skip the PlaceInRoom snap (the trigger handles placement).
-        var startingGrid = room;
 
         if (playerStats != null)
             playerStats.currentStamina = Mathf.Max(0, playerStats.currentStamina - steps);
 
         var waypoints = new List<Vector3>();
-        foreach (var gp in usedPath)
-            waypoints.Add(room.GetWorldPosition(gp));
+        foreach (var gp in usedPath) waypoints.Add(room.GetWorldPosition(gp));
 
         SetFacingToward(usedPath[0]);
         unitAnimator?.SetMoving(true);
 
         isActive = true;
-        StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, startingGrid, onComplete));
+        StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, onComplete));
     }
 
-    // ── Move coroutine ─────────────────────────────────────────────────────
-
-    private IEnumerator MoveAlongPath(
-        List<Vector3>      waypoints,
-        List<GridPosition> gridPath,
-        GridPosition       finalGP,
-        RoomGrid           startingGrid,
-        Action             onComplete)
+    private IEnumerator MoveAlongPath(List<Vector3> waypoints, List<GridPosition> gridPath,
+                                      GridPosition finalGP, Action onComplete)
     {
         for (int i = 0; i < waypoints.Count; i++)
         {
@@ -77,8 +59,8 @@ public class MoveAction : BaseAction
 
             while (Vector2.Distance(transform.position, target) > 0.05f)
             {
-                transform.position = Vector3.MoveTowards(
-                    transform.position, target, moveSpeed * Time.deltaTime);
+                transform.position = Vector3.MoveTowards(transform.position, target,
+                                                          moveSpeed * Time.deltaTime);
                 yield return null;
             }
             transform.position = target;
@@ -90,34 +72,17 @@ public class MoveAction : BaseAction
 
         onComplete?.Invoke();
 
-        // ── Post-move grid sync ────────────────────────────────────────────
-        // Only call PlaceInRoom if the unit is STILL on the same grid it
-        // started the move on. If a trigger handed the unit to a different
-        // grid during animation (hallway or room), skip — that trigger owns
-        // the placement and calling PlaceInRoom here would create a ghost
-        // by double-registering the unit on the old grid position.
-        var currentGrid = unit.GetCurrentRoomGrid();
-        if (currentGrid != startingGrid)
-        {
-            Debug.Log($"[MoveAction] Grid changed mid-move " +
-                      $"({startingGrid?.gameObject.name} → {currentGrid?.gameObject.name}), " +
-                      $"skipping end-of-move PlaceInRoom.");
-            yield break;
-        }
-
         if (GameManager.IsMultiplayer)
         {
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null && bridge.IsOwner)
-                bridge.SyncGridPosition(currentGrid, finalGP);
+                bridge.SyncGridPosition(unit.GetCurrentRoomGrid(), finalGP);
         }
         else
         {
-            unit.PlaceInRoom(currentGrid, finalGP);
+            unit.PlaceInRoom(unit.GetCurrentRoomGrid(), finalGP);
         }
     }
-
-    // ── Facing ─────────────────────────────────────────────────────────────
 
     private void SetFacingToward(GridPosition next)
     {
@@ -125,16 +90,16 @@ public class MoveAction : BaseAction
         int dx = next.x - current.x;
         int dy = next.y - current.y;
 
-        unitAnimator?.SetFacing(new Vector2Int(
+        var dir = new Vector2Int(
             dx == 0 ? 0 : (int)Mathf.Sign(dx),
             dy == 0 ? 0 : (int)Mathf.Sign(dy)
-        ));
+        );
+
+        unitAnimator?.SetFacing(dir);
     }
 
-    // ── Valid targets ──────────────────────────────────────────────────────
-
-    public bool IsValidTarget(GridPosition gp)                 => GetValidTargets().Contains(gp);
-    public bool isValidActionGridPosition(GridPosition gp)     => IsValidTarget(gp);
+    public bool IsValidTarget(GridPosition gp) => GetValidTargets().Contains(gp);
+    public bool isValidActionGridPosition(GridPosition gp) => IsValidTarget(gp);
     public List<GridPosition> GetValidActionGridPositionList() => GetValidTargets();
 
     private List<GridPosition> GetValidTargets()
@@ -143,11 +108,7 @@ public class MoveAction : BaseAction
         if (!CanMove()) return list;
 
         var room = unit.GetCurrentRoomGrid();
-        if (room == null)
-        {
-            Debug.LogWarning("[MoveAction] GetValidTargets: currentRoomGrid is null!");
-            return list;
-        }
+        if (room == null) return list;
 
         var unitPos = unit.GetGridPosition();
         int dist    = MoveDistance;
@@ -170,8 +131,6 @@ public class MoveAction : BaseAction
 
         return list;
     }
-
-    // ── Move cost ──────────────────────────────────────────────────────────
 
     public int GetMoveCost(GridPosition target)
     {

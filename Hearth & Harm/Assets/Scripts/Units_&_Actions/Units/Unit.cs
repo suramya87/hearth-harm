@@ -49,63 +49,9 @@ public class Unit : MonoBehaviour
 
     // ── Grid placement ─────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Waits until the room grid is fully initialized then places the unit.
-    /// Use this for initial spawn to avoid timing issues where the grid
-    /// isn't ready yet when the level first loads.
-    /// </summary>
-    public void PlaceInRoomWhenReady(RoomGrid room, GridPosition pos)
-    {
-        StartCoroutine(WaitAndPlace(room, pos));
-    }
-
-    private IEnumerator WaitAndPlace(RoomGrid room, GridPosition pos)
-    {
-        if (room == null)
-        {
-            Debug.LogError("[Unit] PlaceInRoomWhenReady called with null room!");
-            yield break;
-        }
-
-        float timeout = 5f;
-        float elapsed = 0f;
-        while (!room.IsInitialized())
-        {
-            elapsed += Time.deltaTime;
-            if (elapsed >= timeout)
-            {
-                Debug.LogError($"[Unit] Timed out waiting for {room.gameObject.name} to initialize!");
-                yield break;
-            }
-            yield return null;
-        }
-
-        // One extra frame so TilemapRoomGrid cell bounds are fully settled
-        yield return null;
-
-        PlaceInRoom(room, pos);
-        Debug.Log($"[Unit] Placed in {room.gameObject.name} at {pos} after grid ready.");
-    }
-
-    /// <summary>
-    /// Immediately places the unit in a room. The room must already be initialized.
-    /// For initial spawn use PlaceInRoomWhenReady instead.
-    /// </summary>
     public void PlaceInRoom(RoomGrid room, GridPosition newPos)
     {
-        if (room == null)
-        {
-            Debug.LogError("[Unit] PlaceInRoom called with null room!");
-            return;
-        }
-
-        if (!room.IsInitialized())
-        {
-            Debug.LogWarning($"[Unit] PlaceInRoom called on uninitialized grid " +
-                             $"{room.gameObject.name}. Use PlaceInRoomWhenReady for initial spawn.");
-        }
-
-        // Remove from old cell
+        // Always update grid state (remove from old cell, register in new cell)
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
 
@@ -143,7 +89,7 @@ public class Unit : MonoBehaviour
 
     // ── Accessors ──────────────────────────────────────────────────────────
 
-    public GridPosition  GetGridPosition()    => isInitialized ? gridPosition : default;
+    public GridPosition  GetGridPosition()   => isInitialized ? gridPosition : default;
     public RoomGrid      GetCurrentRoomGrid() => currentRoomGrid;
     public bool          IsInitialized()      => isInitialized;
     public MoveAction    GetMoveAction()      => moveAction;

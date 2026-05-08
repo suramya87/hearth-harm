@@ -206,10 +206,9 @@ GameObject:
   - component: {fileID: 3093765938525369660}
   - component: {fileID: 6175624030602409087}
   - component: {fileID: 3409371213736552391}
-  - component: {fileID: 2360376215583930293}
   m_Layer: 6
   m_Name: Sconstance
-  m_TagString: Player
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -588,15 +587,3 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedHealthBridge
   ShowTopMostFoldoutHeaderGroup: 1
---- !u!114 &2360376215583930293
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9198468102176965729}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c5fb8474d02fb0b4880abdc77add8e2e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HallwayWalkTrigger
