@@ -6,6 +6,7 @@ public class RoomManager : MonoBehaviour
     public static RoomManager Instance { get; private set; }
 
     private LevelGenerator.PlacedRoom currentRoom;
+    private bool inHallway;
 
     public event Action<LevelGenerator.PlacedRoom> OnRoomChanged;
     public static event Action<LevelGenerator.PlacedRoom> OnAnyRoomChanged;
@@ -18,13 +19,10 @@ public class RoomManager : MonoBehaviour
 
     // ── Room entry ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Call when the player enters a real room.
-    /// Applies room bounds to the camera and snaps to the player.
-    /// </summary>
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
         currentRoom = room;
+        inHallway   = false;
         OnRoomChanged?.Invoke(room);
         OnAnyRoomChanged?.Invoke(room);
 
@@ -37,31 +35,22 @@ public class RoomManager : MonoBehaviour
 
     // ── Hallway entry ──────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Call when the player enters a hallway.
-    /// Clears room bounds so the camera follows the player freely.
-    ///
-    /// ENEMY GUARD: if the current room still has live enemies the transition
-    /// is silently blocked — the walk trigger's own lock should have prevented
-    /// this, but this is a second line of defence so nothing slips through.
-    /// </summary>
+
     public void SetInHallway()
     {
-        // ── Guard: refuse if current room has live enemies ─────────────────
         if (CurrentRoomHasEnemies())
         {
-            Debug.LogWarning("[RoomManager] SetInHallway blocked — enemies still alive in current room.");
+            Debug.LogWarning("[RoomManager] SetInHallway blocked — enemies still alive.");
             return;
         }
 
-        // Don't clear currentRoom — we still want GetCurrentRoom() to return
-        // the last room for systems that need it (e.g. TilemapHighlighter).
+        inHallway = true;
+        // Don't clear currentRoom — GetCurrentRoom() still returns the last room
+        // so systems like TilemapHighlighter keep working.
         OnRoomChanged?.Invoke(null);
         OnAnyRoomChanged?.Invoke(null);
 
-        CameraController2D.Instance?.ClearRoomBounds();
-
-        Debug.Log("[RoomManager] In hallway — camera following player freely.");
+        Debug.Log("[RoomManager] In hallway.");
     }
 
     // ── Clear ──────────────────────────────────────────────────────────────
@@ -69,6 +58,7 @@ public class RoomManager : MonoBehaviour
     public void ClearCurrentRoom()
     {
         currentRoom = null;
+        inHallway   = false;
         OnRoomChanged?.Invoke(null);
         OnAnyRoomChanged?.Invoke(null);
         CameraController2D.Instance?.ClearRoomBounds();
@@ -78,11 +68,8 @@ public class RoomManager : MonoBehaviour
 
     public LevelGenerator.PlacedRoom GetCurrentRoom()     => currentRoom;
     public RoomGrid                  GetCurrentRoomGrid() => currentRoom?.roomGrid;
+    public bool                      IsInHallway()        => inHallway;
 
-    /// <summary>
-    /// Returns true if there are any live enemies in the room the player is
-    /// currently standing in. Used to block hallway entry mid-combat.
-    /// </summary>
     public bool CurrentRoomHasEnemies()
     {
         if (currentRoom?.roomGrid == null) return false;

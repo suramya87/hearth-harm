@@ -37,18 +37,9 @@ public class LevelGenerator : MonoBehaviour
     [SerializeField] private List<RoomPrefabData> roomPrefabs;
 
     [Header("Hallways (PCG)")]
-    [Tooltip("ScriptableObject with Floor, WallSide, CornerConvex and CornerConcave tile assets. " +
-             "Create one via Assets → Create → Level Generation → Hallway Tile Set.")]
     [SerializeField] private HallwayTileSet hallwayTileSet;
-
-    [Tooltip("Cell size used when sizing hallway entry triggers. " +
-             "Match your room Grid's Cell Size (usually 1).")]
-    [SerializeField] private float hallwayCellSize = 1f;
-
-    [Tooltip("Fallback hallway width in tiles when a room has no SpawnPointTiles on a door. " +
-             "Set to 0 to always use SpawnPointTile count. " +
-             "Increase this later to make all hallways wider regardless of spawn points.")]
-    [SerializeField] private int defaultHallwayWidth = 3;
+    [SerializeField] private float hallwayCellSize    = 1f;
+    [SerializeField] private int   defaultHallwayWidth = 3;
 
     [Header("Generation")]
     [SerializeField] private int   minRooms          = 5;
@@ -57,11 +48,9 @@ public class LevelGenerator : MonoBehaviour
     [SerializeField] private bool  spawnBossRoom     = true;
 
     [Header("Layout spacing (world units between room centres)")]
-    [Tooltip("How far apart room centres are placed. Set this larger than your biggest room.")]
     [SerializeField] private float roomSpacing = 25f;
 
     [Header("Player Prefabs")]
-    [Tooltip("Index matches character selection (0=Knight, 1=Rogue …)")]
     [SerializeField] private List<GameObject> playerPrefabs;
     [SerializeField] private bool spawnPlayerOnGenerate = true;
 
@@ -121,8 +110,8 @@ public class LevelGenerator : MonoBehaviour
 
     // ── Public queries ─────────────────────────────────────────────────────
 
-    public List<PlacedRoom>  GetAllRooms()     => placedRooms;
-    public List<HallwayGrid> GetAllHallways()  => spawnedHallways;
+    public List<PlacedRoom>  GetAllRooms()    => placedRooms;
+    public List<HallwayGrid> GetAllHallways() => spawnedHallways;
 
     public PlacedRoom GetConnectedRoom(PlacedRoom room, Direction dir)
     {
@@ -219,7 +208,6 @@ public class LevelGenerator : MonoBehaviour
         if (placedMiddle < targetNormalRooms)
             Debug.LogWarning($"[LevelGenerator] Only placed {placedMiddle}/{targetNormalRooms} rooms.");
 
-        // Place end room
         bool endPlaced = false;
         var  candidates = new List<PlacedRoom>(placedRooms);
         candidates.Remove(lastPlaced);
@@ -333,17 +321,6 @@ public class LevelGenerator : MonoBehaviour
 
     // ── PCG Hallway building ───────────────────────────────────────────────
 
-    /// <summary>
-    /// Builds a procedural tilemap hallway for every connected room pair.
-    ///
-    /// WIDTH CONTROL:
-    ///   Width is read from the SpawnPointTile count on each room's SpawnPoints
-    ///   tilemap layer. If a door has 0 spawn tiles, defaultHallwayWidth is used
-    ///   as the fallback so you always get a sensible corridor.
-    ///   To globally widen all hallways, increase defaultHallwayWidth in the
-    ///   Inspector. To widen a specific door, add more SpawnPointTiles to that
-    ///   room's SpawnPoints layer.
-    /// </summary>
     private void BuildHallways()
     {
         if (hallwayTileSet == null)
@@ -364,13 +341,13 @@ public class LevelGenerator : MonoBehaviour
             visited.Add((neighbour, GetOppositeDirection(dir)));
 
             HallwayGrid hallway = HallwayBuilder.Build(
-                roomA:            room,
-                roomB:            neighbour,
-                dirAtoB:          dir,
-                parent:           transform,
-                tileSet:          hallwayTileSet,
-                cellSize:         hallwayCellSize,
-                defaultWidth:     defaultHallwayWidth);
+                roomA:        room,
+                roomB:        neighbour,
+                dirAtoB:      dir,
+                parent:       transform,
+                tileSet:      hallwayTileSet,
+                cellSize:     hallwayCellSize,
+                defaultWidth: defaultHallwayWidth);
 
             if (hallway != null)
                 spawnedHallways.Add(hallway);
@@ -448,8 +425,10 @@ public class LevelGenerator : MonoBehaviour
             ? playerPrefabs[index] : playerPrefabs[0];
         if (prefab == null) { Debug.LogError("[LevelGenerator] Player prefab null!"); return; }
 
-        GridPosition? sp = FindSpawnTileFromSpawnPoints(start)
-                        ?? FindSpawnTile(start.roomGrid);
+        // Prefer a dedicated PlayerSpawnTile first, then fall back to a central
+        // floor tile that is NOT a SpawnPointTile (hallway-entry cell).
+        GridPosition? sp = FindPlayerSpawnTile(start)
+                        ?? FindCentralFloorTile(start.roomGrid);
 
         if (sp == null) { Debug.LogError("[LevelGenerator] No spawn tile in start room!"); return; }
 
@@ -462,39 +441,62 @@ public class LevelGenerator : MonoBehaviour
         Debug.Log($"[LevelGenerator] Player spawned at {sp.Value}");
     }
 
-    private GridPosition? FindSpawnTileFromSpawnPoints(PlacedRoom room)
+    /// <summary>
+    /// Looks for a PlayerSpawnTile in any tilemap on the start room.
+    /// This is the preferred, explicit spawn location.
+    /// </summary>
+    private static GridPosition? FindPlayerSpawnTile(PlacedRoom room)
     {
-        var reader = room.roomInstance.GetComponent<RoomSpawnPointReader>();
-        if (reader == null) return null;
-
-        var all = reader.GetAll();
-        if (all.Count == 0) return null;
-
-        foreach (var preferredDir in new[] { Direction.South, Direction.North, Direction.West, Direction.East })
-            if (all.TryGetValue(preferredDir, out var pos)) return pos;
-
+        foreach (Tilemap tm in room.roomInstance.GetComponentsInChildren<Tilemap>())
+        {
+            foreach (Vector3Int pos in tm.cellBounds.allPositionsWithin)
+            {
+                if (tm.GetTile(pos) is PlayerSpawnTile)
+                    return new GridPosition(pos.x, pos.y);
+            }
+        }
         return null;
     }
 
-    private GridPosition? FindSpawnTile(RoomGrid roomGrid)
+    /// <summary>
+    /// Finds a walkable floor tile near the room's centre that is NOT a
+    /// SpawnPointTile (hallway-entry cell). Used as the fallback spawn when no
+    /// PlayerSpawnTile is present in the start room.
+    /// </summary>
+    private static GridPosition? FindCentralFloorTile(RoomGrid roomGrid)
     {
         var tilemap = roomGrid.GetFloorTilemap();
         if (tilemap == null) return null;
+
+        // Build a set of all SpawnPointTile positions so we can exclude them
+        var spawnCells = new HashSet<GridPosition>();
+        var root       = tilemap.transform.parent; // room root
+        if (root != null)
+        {
+            foreach (Tilemap tm in root.GetComponentsInChildren<Tilemap>())
+            {
+                foreach (Vector3Int pos in tm.cellBounds.allPositionsWithin)
+                {
+                    if (tm.GetTile(pos) is SpawnPointTile)
+                        spawnCells.Add(new GridPosition(pos.x, pos.y));
+                }
+            }
+        }
 
         var bounds = tilemap.cellBounds;
         int cx     = (bounds.xMin + bounds.xMax) / 2;
         int cy     = (bounds.yMin + bounds.yMax) / 2;
 
-        var center = new GridPosition(cx, cy);
-        if (roomGrid.IsWalkable(center)) return center;
-
-        for (int r = 1; r < Mathf.Max(bounds.size.x, bounds.size.y); r++)
+        // Spiral outward from centre looking for a walkable non-spawn tile
+        for (int r = 0; r < Mathf.Max(bounds.size.x, bounds.size.y); r++)
         for (int x = cx - r; x <= cx + r; x++)
         for (int y = cy - r; y <= cy + r; y++)
         {
             if (Mathf.Abs(x - cx) != r && Mathf.Abs(y - cy) != r) continue;
-            var c = new GridPosition(x, y);
-            if (roomGrid.IsWalkable(c)) return c;
+            var gp = new GridPosition(x, y);
+            if (spawnCells.Contains(gp))    continue; // skip hallway-entry cells
+            if (!roomGrid.IsWalkable(gp))   continue;
+            return gp;
         }
 
         return null;
