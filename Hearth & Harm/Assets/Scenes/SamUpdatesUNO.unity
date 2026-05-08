@@ -13415,7 +13415,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1713042350}
-  - component: {fileID: 1713042351}
+  - component: {fileID: 1713042355}
   - component: {fileID: 1713042353}
   - component: {fileID: 1713042354}
   m_Layer: 0
@@ -13440,18 +13440,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1713042351
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1713042349}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 674e2dc92c440b34fbecc7cbfb862b46, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TurnSystem
 --- !u!114 &1713042353
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -13490,6 +13478,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedTurnSystem
   ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &1713042355
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1713042349}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 674e2dc92c440b34fbecc7cbfb862b46, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurnSystem
 --- !u!1 &1718764493
 GameObject:
   m_ObjectHideFlags: 0
