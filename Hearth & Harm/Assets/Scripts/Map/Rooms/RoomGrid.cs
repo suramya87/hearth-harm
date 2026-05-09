@@ -5,11 +5,6 @@ using UnityEngine.Tilemaps;
 /// <summary>
 /// Thin adapter component that lives on every room prefab root.
 /// Delegates all real work to TilemapRoomGrid.
-///
-/// WHY KEEP THIS?
-///   Many systems (MoveAction, EnemyAI, LevelGenerator …) already hold a
-///   reference typed as RoomGrid.  Keeping this wrapper means those scripts
-///   need zero changes.
 /// </summary>
 [RequireComponent(typeof(TilemapRoomGrid))]
 public class RoomGrid : MonoBehaviour
@@ -18,9 +13,6 @@ public class RoomGrid : MonoBehaviour
 
     // ── Init ───────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Called by RoomTilemapSetup after it resolves the child tilemaps.
-    /// </summary>
     public void Initialize(Tilemap walls, Tilemap floor)
     {
         tilemapGrid = GetComponent<TilemapRoomGrid>();
@@ -47,6 +39,10 @@ public class RoomGrid : MonoBehaviour
     public void         AddUnitAtGridPosition(GridPosition gp, Unit u)    => tilemapGrid.AddUnit(gp, u);
     public void         RemoveUnitAtGridPosition(GridPosition gp, Unit u) => tilemapGrid.RemoveUnit(gp, u);
     public bool         HasAnyUnitOnGridPosition(GridPosition gp)          => tilemapGrid.HasAnyUnit(gp);
+    
+    /// <summary>
+    /// Returns the list of all units currently tracked at this position.
+    /// </summary>
     public List<Unit>   GetUnitsAtGridPosition(GridPosition gp)            => tilemapGrid.GetUnitsAt(gp);
 
     // ── Enemy management ───────────────────────────────────────────────────

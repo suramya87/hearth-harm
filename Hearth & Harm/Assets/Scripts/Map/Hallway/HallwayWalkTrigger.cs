@@ -2,18 +2,13 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-
 [RequireComponent(typeof(Collider2D))]
 public class HallwayWalkTrigger : MonoBehaviour
 {
-
-    public static bool EntryTransitionInProgress { get; set; }
-
     private HallwayGrid hallway;
     private bool        cooling;
     private bool        locked;
 
-    /// <summary>Optional door-strip shown when this trigger is locked.</summary>
     public GameObject DoorStripObject { get; set; }
 
     public void Initialize(HallwayGrid hg)
@@ -22,177 +17,143 @@ public class HallwayWalkTrigger : MonoBehaviour
         GetComponent<Collider2D>().isTrigger = true;
     }
 
-    public void ResetTrigger()
-    {
-        StopAllCoroutines();
-        cooling = false;
-    }
-
     public void SetLocked(bool isLocked)
     {
         locked = isLocked;
-        if (DoorStripObject != null)
-            DoorStripObject.SetActive(isLocked);
+        if (DoorStripObject != null) DoorStripObject.SetActive(isLocked);
     }
 
-    // ── Trigger callbacks ──────────────────────────────────────────────────
+    public void DisableTemporarily(float seconds) => StartCoroutine(TemporaryDisableRoutine(seconds));
+
+    private IEnumerator TemporaryDisableRoutine(float seconds)
+    {
+        cooling = true;
+        yield return new WaitForSeconds(seconds);
+        cooling = false;
+    }
 
     private void OnTriggerEnter2D(Collider2D other) => TryHandOff(other);
-
-    /// <summary>
-    /// Fires every physics tick while overlapping.
-    /// Handles the case where the player is standing at the door when
-    /// the enemy-lock releases — Enter won't re-fire, Stay will.
-    /// </summary>
-    private void OnTriggerStay2D(Collider2D other) => TryHandOff(other);
-
-    private void OnTriggerExit2D(Collider2D other)
-    {
-        if (other.CompareTag("Player"))
-            cooling = false;
-    }
-
-    // ── Shared hand-off logic ──────────────────────────────────────────────
+    private void OnTriggerStay2D(Collider2D other)  => TryHandOff(other);
 
     private void TryHandOff(Collider2D other)
     {
-        if (cooling)  return;
-        if (locked)   return;
-        if (EntryTransitionInProgress) return;
+        if (cooling || locked) return;
         if (!other.CompareTag("Player")) return;
+        
         if (hallway == null || !hallway.IsReady) return;
 
-        var unit = other.GetComponent<Unit>()
-                ?? other.GetComponentInParent<Unit>();
+        var unit = other.GetComponent<Unit>() ?? other.GetComponentInParent<Unit>();
         if (unit == null) return;
 
-        if (GameManager.IsMultiplayer)
-        {
-            var bridge = unit.GetComponent<NetworkedPlayerBridge>();
-            if (bridge == null || !bridge.IsOwner) return;
-        }
-
-        // Already on this hallway's grid — nothing to do
         if (unit.GetCurrentRoomGrid() == hallway.RoomGrid) return;
+
+        var move = unit.GetMoveAction();
+        if (move != null && move.IsActive) return;
+
+        if (RoomManager.Instance != null && RoomManager.Instance.CurrentRoomHasEnemies())
+        {
+            return; 
+        }
 
         StartCoroutine(HandOffAfterMove(unit));
     }
-
-    // ── Hand off to hallway ────────────────────────────────────────────────
 
     private IEnumerator HandOffAfterMove(Unit unit)
     {
         cooling = true;
 
-        // Wait for any in-progress move to finish
         var move = unit.GetMoveAction();
-        if (move != null)
+        if (move != null && move.IsActive)
+        {
             while (move.IsActive) yield return null;
+        }
 
-        yield return new WaitForSeconds(0.05f);
+        yield return new WaitForFixedUpdate();
+        yield return new WaitForEndOfFrame();
 
-        // Re-check — another trigger or a second Stay call may have already
-        // handed off this unit.
-        if (unit.GetCurrentRoomGrid() == hallway.RoomGrid ||
-            EntryTransitionInProgress ||
-            locked)
+        var roomGrid = hallway.RoomGrid;
+        if (roomGrid == null || !roomGrid.IsInitialized())
         {
             cooling = false;
             yield break;
         }
 
-        var roomGrid     = hallway.RoomGrid;
-        var floorTilemap = roomGrid.GetFloorTilemap();
-
-        if (floorTilemap == null)
+        Vector3? bestWorld = FindNearestWalkableWorldPos(roomGrid, roomGrid.GetFloorTilemap(), transform.position);
+        if (bestWorld == null)
         {
-            Debug.LogError($"[HallwayWalkTrigger] No floor tilemap on {hallway.name}!");
             cooling = false;
             yield break;
         }
 
-        GridPosition? bestGP =
-            FindNearestWalkableToWorld(roomGrid, floorTilemap, transform.position)
-            ?? FindAnyWalkable(roomGrid, floorTilemap);
+        GridPosition gridPos = roomGrid.GetGridPosition(bestWorld.Value);
 
-        if (bestGP == null)
+        if (move != null)
         {
-            Debug.LogError($"[HallwayWalkTrigger] No walkable cell in {hallway.name}!");
-            cooling = false;
-            yield break;
+            move.ForceSyncGridPosition(roomGrid, gridPos);
+        }
+        else
+        {
+            unit.PlaceInRoom(roomGrid, gridPos);
         }
 
-        // ── Switch to hallway ──────────────────────────────────────────────
         ApplyHallwayCameraBounds();
-
         RoomManager.Instance?.SetInHallway();
+        
+        unit.transform.position = new Vector3(bestWorld.Value.x, bestWorld.Value.y, unit.transform.position.z);
 
-        // Place the unit on the hallway grid
-        unit.PlaceInRoom(roomGrid, bestGP.Value);
+        if (move != null) move.RefreshValidTargets();
 
-        Debug.Log($"[HallwayWalkTrigger] '{unit.name}' entered hallway " +
-                  $"'{hallway.name}' at {bestGP.Value}.");
+        Debug.Log($"[Hallway Hand-off] {unit.name} adopted by {hallway.name} at {gridPos}");
 
-        // Hold cooling long enough to ignore repeated Stay callbacks that fire
-        // while the unit is still physically overlapping the trigger collider.
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(0.2f); 
         cooling = false;
     }
 
-    // ── Hallway camera bounds ──────────────────────────────────────────────
+    private static Vector3? FindNearestWalkableWorldPos(RoomGrid roomGrid, Tilemap floorTilemap, Vector3 targetWorld)
+    {
+        if (floorTilemap == null) return null;
+        Vector3? best = null;
+        float bestDist = float.MaxValue;
 
-    /// <summary>
-    /// Computes bounds from the hallway's floor tilemap and applies them to
-    /// the camera. This gives the hallway the same feel as a room — the player
-    /// can pan and zoom but the camera stays around the corridor.
-    /// </summary>
+        foreach (var cell in floorTilemap.cellBounds.allPositionsWithin)
+        {
+            if (!floorTilemap.HasTile(cell)) continue;
+            Vector3 worldCentre = floorTilemap.GetCellCenterWorld(cell);
+            GridPosition gp = roomGrid.GetGridPosition(worldCentre);
+            if (!roomGrid.IsWalkableIgnoreOccupancy(gp)) continue;
+
+            float dist = Vector3.Distance(worldCentre, targetWorld);
+            if (dist < bestDist) { bestDist = dist; best = worldCentre; }
+        }
+        return best;
+    }
+
     private void ApplyHallwayCameraBounds()
     {
         var cam = CameraController2D.Instance;
         if (cam == null || hallway == null) return;
-
+        
         var floor = hallway.FloorTilemap;
-        if (floor == null) { cam.ClearRoomBounds(); return; }
+        if (floor == null) return;
+        
+        var cb = floor.cellBounds;
+        Vector3 worldMin = floor.GetCellCenterWorld(new Vector3Int(cb.xMin, cb.yMin, 0));
+        Vector3 worldMax = floor.GetCellCenterWorld(new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
+        
+        Vector3 center = (worldMin + worldMax) * 0.5f;
+        float width = Mathf.Abs(worldMax.x - worldMin.x);
+        float height = Mathf.Abs(worldMax.y - worldMin.y);
 
-        // localBounds is in tilemap local space; convert to world space
-        var lb     = floor.localBounds;
-        var center = floor.transform.TransformPoint(lb.center);
-        var size   = new Vector3(
-            lb.size.x + 4f,   // add a few units of padding on each axis
-            lb.size.y + 4f,
-            1f);
+        float horizontalPadding = 16f; 
+        float verticalPadding = 16f;
+        float minCameraWidth = 15f;  // Prevents zooming in too far in narrow halls
+        float minCameraHeight = 10f;
 
-        cam.SetRoomBounds(new Bounds(center, size));
-    }
+        float finalWidth = Mathf.Max(width + horizontalPadding, minCameraWidth);
+        float finalHeight = Mathf.Max(height + verticalPadding, minCameraHeight);
 
-    // ── Tile search helpers ────────────────────────────────────────────────
-
-    private static GridPosition? FindNearestWalkableToWorld(
-        RoomGrid roomGrid, Tilemap floorTilemap, Vector3 targetWorld)
-    {
-        GridPosition? best     = null;
-        float         bestDist = float.MaxValue;
-
-        foreach (var cell in floorTilemap.cellBounds.allPositionsWithin)
-        {
-            if (!floorTilemap.HasTile(cell)) continue;
-            var   gp   = new GridPosition(cell.x, cell.y);
-            if (!roomGrid.IsWalkableIgnoreOccupancy(gp)) continue;
-            float dist = Vector3.Distance(floorTilemap.GetCellCenterWorld(cell), targetWorld);
-            if (dist < bestDist) { bestDist = dist; best = gp; }
-        }
-
-        return best;
-    }
-
-    private static GridPosition? FindAnyWalkable(RoomGrid roomGrid, Tilemap floorTilemap)
-    {
-        foreach (var cell in floorTilemap.cellBounds.allPositionsWithin)
-        {
-            if (!floorTilemap.HasTile(cell)) continue;
-            var gp = new GridPosition(cell.x, cell.y);
-            if (roomGrid.IsWalkableIgnoreOccupancy(gp)) return gp;
-        }
-        return null;
+        // Apply the smoother, larger bounds
+        Bounds hallwayBounds = new Bounds(center, new Vector3(finalWidth, finalHeight, 10f));
+        cam.SetRoomBounds(hallwayBounds);
     }
 }

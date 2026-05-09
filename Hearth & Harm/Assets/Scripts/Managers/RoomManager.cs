@@ -17,8 +17,6 @@ public class RoomManager : MonoBehaviour
         Instance = this;
     }
 
-    // ── Room entry ─────────────────────────────────────────────────────────
-
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
         currentRoom = room;
@@ -33,27 +31,13 @@ public class RoomManager : MonoBehaviour
         }
     }
 
-    // ── Hallway entry ──────────────────────────────────────────────────────
-
-
     public void SetInHallway()
     {
-        if (CurrentRoomHasEnemies())
-        {
-            Debug.LogWarning("[RoomManager] SetInHallway blocked — enemies still alive.");
-            return;
-        }
-
-        inHallway = true;
-        // Don't clear currentRoom — GetCurrentRoom() still returns the last room
-        // so systems like TilemapHighlighter keep working.
+        currentRoom = null; 
+        inHallway = true;   
         OnRoomChanged?.Invoke(null);
-        OnAnyRoomChanged?.Invoke(null);
-
-        Debug.Log("[RoomManager] In hallway.");
+        Debug.Log("<color=cyan>[RoomManager] State Switched: In Hallway</color>");
     }
-
-    // ── Clear ──────────────────────────────────────────────────────────────
 
     public void ClearCurrentRoom()
     {
@@ -63,8 +47,6 @@ public class RoomManager : MonoBehaviour
         OnAnyRoomChanged?.Invoke(null);
         CameraController2D.Instance?.ClearRoomBounds();
     }
-
-    // ── Accessors ──────────────────────────────────────────────────────────
 
     public LevelGenerator.PlacedRoom GetCurrentRoom()     => currentRoom;
     public RoomGrid                  GetCurrentRoomGrid() => currentRoom?.roomGrid;
@@ -76,8 +58,6 @@ public class RoomManager : MonoBehaviour
         if (EnemyManager.Instance == null) return false;
         return EnemyManager.Instance.GetEnemiesInRoom(currentRoom.roomGrid).Count > 0;
     }
-
-    // ── Camera helper ──────────────────────────────────────────────────────
 
     private static void ApplyRoomCamera(LevelGenerator.PlacedRoom room)
     {

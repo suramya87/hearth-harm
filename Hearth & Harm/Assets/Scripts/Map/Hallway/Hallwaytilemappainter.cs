@@ -3,104 +3,382 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 
 /// <summary>
-/// Procedurally paints hallway tiles into a HallwayGrid.
+/// Procedurally paints hallway tiles into a HallwayGrid with full
+/// directional wall support.
 ///
-/// SUPPORTED SHAPES
-///   Straight  — doors perfectly aligned, single corridor segment.
-///   L-bend    — one 90° turn (offset on one axis only).
-///   S-bend    — two 90° turns (offset on both axes, or large offset).
+/// WALL ASSIGNMENT RULES
+///   Straight segments:
+///     Horizontal corridor (East/West travel):
+///       • Cells one above the floor strip → WallTop    (north-facing wall)
+///       • Cells one below the floor strip → WallBottom (south-facing wall)
+///       • Leftmost column, one beyond end → CapLeft
+///       • Rightmost column, one beyond end→ CapRight
+///     Vertical corridor (North/South travel):
+///       • Cells one right of floor strip  → WallRight  (east-facing wall)
+///       • Cells one left  of floor strip  → WallLeft   (west-facing wall)
+///       • Top row, one beyond end         → CapTop
+///       • Bottom row, one beyond end      → CapBottom
 ///
-/// TILE SLOTS (assign in Inspector on LevelGenerator)
-///   FloorTile        — fills walkable corridor interior
-///   WallSideTile     — straight wall edge (N/S sides of H corridor, E/W of V corridor)
-///   CornerConvexTile — outer corner where two wall segments meet (convex, 90° exterior)
-///   CornerConcaveTile— inner corner where corridor bends (concave, 270° exterior)
-///                      If null, WallSideTile is used as fallback.
+///   Junctions (where two perpendicular segments meet):
+///     Four outer corners → Convex_NE / NW / SE / SW
+///     One inner corner   → Concave_NE / NW / SE / SW (determined by bend direction)
+///     Exposed straight edges inherit the correct directional wall tile.
 ///
-/// TRIM TILES:
-///   The `trimTiles` parameter (default 1) causes the painter to stop that many
-///   cells short of each room mouth. This prevents hallway floor tiles from
-///   landing on or overlapping the room's SpawnPoint tiles, which are the
-///   canonical entry cells. With trimTiles = 1 there is always a one-tile gap
-///   between the last hallway floor cell and the room's threshold.
-///
-/// COORDINATE SYSTEM
-///   All painting uses world integer tile coords via Tilemap.WorldToCell, so the
-///   hallway can live anywhere in world space regardless of room positions.
+/// FALLBACK
+///   Every directional slot falls back through the HallwayTileSet accessor
+///   chain to WallSideTile so the painter works with just one tile assigned.
 /// </summary>
 public static class HallwayTilemapPainter
 {
     // ── Public entry point ─────────────────────────────────────────────────
 
-    /// <param name="hallway">HallwayGrid to paint into (Floor + Walls tilemaps).</param>
-    /// <param name="exitWorld">World position of room A's exit connection point.</param>
-    /// <param name="entryWorld">World position of room B's entry connection point.</param>
-    /// <param name="exitWidth">Mouth width of room A's door in tiles.</param>
-    /// <param name="entryWidth">Mouth width of room B's door in tiles.</param>
-    /// <param name="dirAtoB">Cardinal direction from room A toward room B.</param>
-    /// <param name="tiles">Tile assets to use.</param>
-    /// <param name="trimTiles">
-    ///   How many tiles to leave unpainted at each room mouth so hallway floor
-    ///   tiles never overwrite the room's SpawnPoint tiles. Default is 1.
-    /// </param>
     public static void Paint(
-        HallwayGrid              hallway,
-        Vector3                  exitWorld,
-        Vector3                  entryWorld,
-        int                      exitWidth,
-        int                      entryWidth,
+        HallwayGrid hallway,
+        Vector3 exitWorld,
+        Vector3 entryWorld,
+        int exitWidth,
+        int entryWidth,
         LevelGenerator.Direction dirAtoB,
-        HallwayTileSet           tiles,
-        int                      trimTiles = 1)
+        HallwayTileSet tiles,
+        int trimTiles = 1)
     {
         if (tiles == null || tiles.FloorTile == null)
         {
-            Debug.LogError("[HallwayTilemapPainter] No floor tile assigned — aborting.");
+            Debug.LogError("[HallwayTilemapPainter] No FloorTile assigned — aborting.");
             return;
         }
 
         Tilemap floor = hallway.FloorTilemap;
         Tilemap walls = hallway.WallsTilemap;
 
-        // Convert world mouth centres to integer tile coords
         Vector3Int exitCell  = floor.WorldToCell(exitWorld);
         Vector3Int entryCell = floor.WorldToCell(entryWorld);
 
-        // Clamp trim so we never trim more than the corridor allows
-        int clampedTrim = Mathf.Max(0, trimTiles);
+        // Reverting to the original trim. 
+        // If trimTiles is 1, the hallway starts exactly on the threshold of the room.
+        int trim = Mathf.Max(0, trimTiles);
 
-        // Offset the start/end cells inward by trimTiles along the primary axis
-        // so hallway floor tiles stop before the room threshold.
-        Vector3Int exitCellTrimmed  = TrimCell(exitCell,  dirAtoB,                 clampedTrim);
-        Vector3Int entryCellTrimmed = TrimCell(entryCell, Opposite(dirAtoB), clampedTrim);
+        Vector3Int exitTrimmed  = TrimCell(exitCell,  dirAtoB,           trim);
+        Vector3Int entryTrimmed = TrimCell(entryCell, Opposite(dirAtoB), trim);
 
-        // Build the centreline path (list of tile coords, mouth-to-mouth)
         List<Segment> segments = BuildSegments(
-            exitCellTrimmed, entryCellTrimmed, dirAtoB, exitWidth, entryWidth);
+            exitTrimmed, entryTrimmed, dirAtoB, exitWidth, entryWidth);
 
-        // Paint each segment
         foreach (var seg in segments)
             PaintSegment(floor, walls, seg, tiles);
 
-        // Paint junctions between adjacent segments (corners)
         for (int i = 0; i < segments.Count - 1; i++)
             PaintJunction(floor, walls, segments[i], segments[i + 1], tiles);
+
+        // We leave PaintEndCap out. 
+        // This allows the floor tiles to meet the room floor tiles without a wall blocking them.
     }
 
-    // ── Trim helper ────────────────────────────────────────────────────────
+    // ── Width helpers ──────────────────────────────────────────────────────
+
+    private static (int min, int max) FloorOffsets(int width)
+    {
+        int half = width / 2;
+        int min  = -half;
+        int max  = (width % 2 == 0) ? half - 1 : half;
+        return (min, max);
+    }
+
+    // ── Segment definition ─────────────────────────────────────────────────
+
+    private struct Segment
+    {
+        public Vector3Int Start;
+        public Vector3Int End;
+        public int        Width;
+        public bool       Horizontal;
+    }
+
+    // ── Path building ──────────────────────────────────────────────────────
+
+    private static List<Segment> BuildSegments(
+        Vector3Int               exitCell,
+        Vector3Int               entryCell,
+        LevelGenerator.Direction dirAtoB,
+        int                      exitWidth,
+        int                      entryWidth)
+    {
+        bool primaryH = dirAtoB == LevelGenerator.Direction.East
+                     || dirAtoB == LevelGenerator.Direction.West;
+
+        int dx = entryCell.x - exitCell.x;
+        int dy = entryCell.y - exitCell.y;
+        int bendWidth = Mathf.Min(exitWidth, entryWidth);
+
+        bool aligned = primaryH ? (dy == 0) : (dx == 0);
+
+        if (aligned)
+        {
+            return new List<Segment> { new() {
+                Start = exitCell, End = entryCell,
+                Width = exitWidth, Horizontal = primaryH
+            }};
+        }
+
+        var segs = new List<Segment>();
+
+        if (primaryH)
+        {
+            int turnX   = exitCell.x + dx / 2;
+            var corner1 = new Vector3Int(turnX, exitCell.y,  0);
+            var corner2 = new Vector3Int(turnX, entryCell.y, 0);
+            segs.Add(new Segment { Start = exitCell,  End = corner1,   Width = exitWidth,  Horizontal = true  });
+            segs.Add(new Segment { Start = corner1,   End = corner2,   Width = bendWidth,  Horizontal = false });
+            segs.Add(new Segment { Start = corner2,   End = entryCell, Width = entryWidth, Horizontal = true  });
+        }
+        else
+        {
+            int turnY   = exitCell.y + dy / 2;
+            var corner1 = new Vector3Int(exitCell.x,  turnY, 0);
+            var corner2 = new Vector3Int(entryCell.x, turnY, 0);
+            segs.Add(new Segment { Start = exitCell,  End = corner1,   Width = exitWidth,  Horizontal = false });
+            segs.Add(new Segment { Start = corner1,   End = corner2,   Width = bendWidth,  Horizontal = true  });
+            segs.Add(new Segment { Start = corner2,   End = entryCell, Width = entryWidth, Horizontal = false });
+        }
+
+        return segs;
+    }
+
+    // ── Segment painting ───────────────────────────────────────────────────
+
+    private static void PaintSegment(
+        Tilemap floor, Tilemap walls, Segment seg, HallwayTileSet tiles)
+    {
+        var (pMin, pMax) = FloorOffsets(seg.Width);
+
+        if (seg.Horizontal)
+        {
+            int xMin = Mathf.Min(seg.Start.x, seg.End.x);
+            int xMax = Mathf.Max(seg.Start.x, seg.End.x);
+            int cy   = seg.Start.y;
+
+            for (int x = xMin; x <= xMax; x++)
+            {
+                // Floor strip - Always paints the full length
+                for (int p = pMin; p <= pMax; p++)
+                    SetFloor(floor, new Vector3Int(x, cy + p, 0), PickFloor(tiles, x, cy + p));
+
+                // Walls - Only paint if NOT at the very start or very end of the segment
+                if (x > xMin && x < xMax)
+                {
+                    SetWall(walls, floor, new Vector3Int(x, cy + pMax + 1, 0), tiles.GetWallTop());
+                    SetWall(walls, floor, new Vector3Int(x, cy + pMin - 1, 0), tiles.GetWallBottom());
+                }
+            }
+        }
+        else
+        {
+            int yMin = Mathf.Min(seg.Start.y, seg.End.y);
+            int yMax = Mathf.Max(seg.Start.y, seg.End.y);
+            int cx   = seg.Start.x;
+
+            for (int y = yMin; y <= yMax; y++)
+            {
+                // Floor strip - Always paints the full length
+                for (int p = pMin; p <= pMax; p++)
+                    SetFloor(floor, new Vector3Int(cx + p, y, 0), PickFloor(tiles, cx + p, y));
+
+                // Walls - Only paint if NOT at the very start or very end of the segment
+                if (y > yMin && y < yMax)
+                {
+                    SetWall(walls, floor, new Vector3Int(cx + pMax + 1, y, 0), tiles.GetWallRight());
+                    SetWall(walls, floor, new Vector3Int(cx + pMin - 1, y, 0), tiles.GetWallLeft());
+                }
+            }
+        }
+    }
+
+    // ── End cap painting ───────────────────────────────────────────────────
 
     /// <summary>
-    /// Moves a cell `amount` steps in `direction` — i.e. away from the room mouth
-    /// and into the hallway body, shrinking the painted area.
+    /// Paints cap tiles across the open end of the first or last segment.
+    /// Caps close off the corridor mouth visually.
+    /// isStart=true  → paint at seg.Start (exit mouth)
+    /// isStart=false → paint at seg.End   (entry mouth)
     /// </summary>
+    private static void PaintEndCap(
+        Tilemap walls, Tilemap floor, Segment seg, bool isStart, HallwayTileSet tiles)
+    {
+        var (pMin, pMax) = FloorOffsets(seg.Width);
+        Vector3Int pivot = isStart ? seg.Start : seg.End;
+
+        if (seg.Horizontal)
+        {
+            // Cap tile goes one cell to the LEFT of start, or one cell to the RIGHT of end
+            int capX = isStart ? pivot.x - 1 : pivot.x + 1;
+            TileBase capTile = isStart ? tiles.GetCapLeft() : tiles.GetCapRight();
+
+            for (int p = pMin; p <= pMax; p++)
+                SetWall(walls, floor, new Vector3Int(capX, pivot.y + p, 0), capTile);
+
+            // Corner convex tiles at cap edges
+            SetWall(walls, floor, new Vector3Int(capX, pivot.y + pMax + 1, 0),
+                isStart ? tiles.GetConvex_NW() : tiles.GetConvex_NE());
+            SetWall(walls, floor, new Vector3Int(capX, pivot.y + pMin - 1, 0),
+                isStart ? tiles.GetConvex_SW() : tiles.GetConvex_SE());
+        }
+        else
+        {
+            // Cap tile goes one cell BELOW start, or one cell ABOVE end
+            int capY = isStart ? pivot.y - 1 : pivot.y + 1;
+            TileBase capTile = isStart ? tiles.GetCapBottom() : tiles.GetCapTop();
+
+            for (int p = pMin; p <= pMax; p++)
+                SetWall(walls, floor, new Vector3Int(pivot.x + p, capY, 0), capTile);
+
+            SetWall(walls, floor, new Vector3Int(pivot.x + pMax + 1, capY, 0),
+                isStart ? tiles.GetConvex_SE() : tiles.GetConvex_NE());
+            SetWall(walls, floor, new Vector3Int(pivot.x + pMin - 1, capY, 0),
+                isStart ? tiles.GetConvex_SW() : tiles.GetConvex_NW());
+        }
+    }
+
+    // ── Junction painting ──────────────────────────────────────────────────
+
+    private static void PaintJunction(
+        Tilemap floor, Tilemap walls,
+        Segment segA, Segment segB,
+        HallwayTileSet tiles)
+    {
+        Vector3Int pivot = segA.End;
+
+        var (aMin, aMax) = FloorOffsets(segA.Width);
+        var (bMin, bMax) = FloorOffsets(segB.Width);
+
+        int xMin, xMax, yMin, yMax;
+
+        if (segA.Horizontal)
+        {
+            xMin = pivot.x + aMin;
+            xMax = pivot.x + aMax;
+            yMin = pivot.y + bMin;
+            yMax = pivot.y + bMax;
+        }
+        else
+        {
+            xMin = pivot.x + bMin;
+            xMax = pivot.x + bMax;
+            yMin = pivot.y + aMin;
+            yMax = pivot.y + aMax;
+        }
+
+        // Fill junction floor
+        for (int x = xMin; x <= xMax; x++)
+        for (int y = yMin; y <= yMax; y++)
+            SetFloor(floor, new Vector3Int(x, y, 0), PickFloor(tiles, x, y));
+
+        // ── Four outer convex corners ──────────────────────────────────────
+        SetWall(walls, floor, new Vector3Int(xMin - 1, yMax + 1, 0), tiles.GetConvex_NW());
+        SetWall(walls, floor, new Vector3Int(xMax + 1, yMax + 1, 0), tiles.GetConvex_NE());
+        SetWall(walls, floor, new Vector3Int(xMin - 1, yMin - 1, 0), tiles.GetConvex_SW());
+        SetWall(walls, floor, new Vector3Int(xMax + 1, yMin - 1, 0), tiles.GetConvex_SE());
+
+        // ── Straight wall edges around the junction box ────────────────────
+        for (int x = xMin; x <= xMax; x++)
+        {
+            SetWall(walls, floor, new Vector3Int(x, yMax + 1, 0), tiles.GetWallTop());
+            SetWall(walls, floor, new Vector3Int(x, yMin - 1, 0), tiles.GetWallBottom());
+        }
+        for (int y = yMin; y <= yMax; y++)
+        {
+            SetWall(walls, floor, new Vector3Int(xMin - 1, y, 0), tiles.GetWallLeft());
+            SetWall(walls, floor, new Vector3Int(xMax + 1, y, 0), tiles.GetWallRight());
+        }
+
+        // ── Inner concave corner ───────────────────────────────────────────
+        // The single corner that faces INTO the bend — only present when the
+        // two segments are perpendicular.
+        if (segA.Horizontal != segB.Horizontal)
+        {
+            // Determine which quadrant the concave corner occupies.
+            // It is always on the "back" side of segA's travel direction
+            // and the "back" side of segB's travel direction.
+            bool aGoesRight = segA.End.x >= segA.Start.x;
+            bool bGoesUp    = segB.End.y >= segB.Start.y;
+            bool aGoesUp    = segA.End.y >= segA.Start.y;
+            bool bGoesRight = segB.End.x >= segB.Start.x;
+
+            int icx, icy;
+            TileBase concaveTile;
+
+            if (segA.Horizontal)
+            {
+                // segA is H → segB is V
+                // Concave corner is behind segA (left if going right, right if going left)
+                // and behind segB (below if going up, above if going down)
+                icx = aGoesRight ? xMin - 1 : xMax + 1;
+                icy = bGoesUp    ? yMin - 1 : yMax + 1;
+
+                // Which quadrant?
+                bool isNorth = icy > yMax;
+                bool isEast  = icx > xMax;
+                concaveTile = (isNorth, isEast) switch
+                {
+                    (true,  true)  => tiles.GetConcave_NE(),
+                    (true,  false) => tiles.GetConcave_NW(),
+                    (false, true)  => tiles.GetConcave_SE(),
+                    (false, false) => tiles.GetConcave_SW(),
+                };
+            }
+            else
+            {
+                // segA is V → segB is H
+                icx = bGoesRight ? xMin - 1 : xMax + 1;
+                icy = aGoesUp    ? yMin - 1 : yMax + 1;
+
+                bool isNorth = icy > yMax;
+                bool isEast  = icx > xMax;
+                concaveTile = (isNorth, isEast) switch
+                {
+                    (true,  true)  => tiles.GetConcave_NE(),
+                    (true,  false) => tiles.GetConcave_NW(),
+                    (false, true)  => tiles.GetConcave_SE(),
+                    (false, false) => tiles.GetConcave_SW(),
+                };
+            }
+
+            SetWall(walls, floor, new Vector3Int(icx, icy, 0), concaveTile);
+        }
+    }
+
+    // ── PCG floor tile selection ───────────────────────────────────────────
+
+    private static TileBase PickFloor(HallwayTileSet tiles, int wx, int wy)
+    {
+        if ((tiles.FloorVariants == null || tiles.FloorVariants.Length == 0) &&
+            (tiles.AccentTiles   == null || tiles.AccentTiles.Length   == 0))
+            return tiles.FloorTile;
+
+        float noise = Mathf.PerlinNoise(wx * 0.37f + 0.5f, wy * 0.37f + 0.5f);
+
+        if (tiles.AccentTiles != null && tiles.AccentTiles.Length > 0
+            && noise > tiles.AccentThreshold)
+        {
+            int idx = Mathf.Abs(wx * 7 + wy * 13) % tiles.AccentTiles.Length;
+            if (tiles.AccentTiles[idx] != null) return tiles.AccentTiles[idx];
+        }
+
+        if (tiles.FloorVariants != null && tiles.FloorVariants.Length > 0)
+        {
+            int idx = Mathf.Abs(wx * 3 + wy * 5) % tiles.FloorVariants.Length;
+            if (tiles.FloorVariants[idx] != null) return tiles.FloorVariants[idx];
+        }
+
+        return tiles.FloorTile;
+    }
+
+    // ── Trim helpers ───────────────────────────────────────────────────────
+
     private static Vector3Int TrimCell(
-        Vector3Int               cell,
-        LevelGenerator.Direction direction,
-        int                      amount)
+        Vector3Int cell, LevelGenerator.Direction dir, int amount)
     {
         if (amount <= 0) return cell;
-        Vector3Int step = DirectionToStep(direction);
-        return cell + step * amount;
+        return cell + DirectionToStep(dir) * amount;
     }
 
     private static Vector3Int DirectionToStep(LevelGenerator.Direction d) => d switch
@@ -121,262 +399,21 @@ public static class HallwayTilemapPainter
         _                              => LevelGenerator.Direction.North
     };
 
-    // ── Segment definition ─────────────────────────────────────────────────
-
-    /// <summary>One rectangular corridor run.</summary>
-    private struct Segment
-    {
-        public Vector3Int Start;      // tile coord of corridor centre at start
-        public Vector3Int End;        // tile coord of corridor centre at end
-        public int        Width;      // corridor width in tiles (perpendicular to travel)
-        public bool       Horizontal; // true = East/West travel, false = North/South
-    }
-
-    // ── Path building ──────────────────────────────────────────────────────
-
-    private static List<Segment> BuildSegments(
-        Vector3Int               exitCell,
-        Vector3Int               entryCell,
-        LevelGenerator.Direction dirAtoB,
-        int                      exitWidth,
-        int                      entryWidth)
-    {
-        bool primaryHorizontal = dirAtoB == LevelGenerator.Direction.East
-                              || dirAtoB == LevelGenerator.Direction.West;
-
-        int dx = entryCell.x - exitCell.x;
-        int dy = entryCell.y - exitCell.y;
-
-        int midWidth = Mathf.Max(1, (exitWidth + entryWidth + 1) / 2);
-
-        bool aligned = primaryHorizontal ? (dy == 0) : (dx == 0);
-
-        if (aligned)
-        {
-            // ── Straight ───────────────────────────────────────────────────
-            return new List<Segment>
-            {
-                new() {
-                    Start      = exitCell,
-                    End        = entryCell,
-                    Width      = midWidth,
-                    Horizontal = primaryHorizontal
-                }
-            };
-        }
-
-        var segs = new List<Segment>();
-
-        if (primaryHorizontal)
-        {
-            int midX = entryCell.x;
-            Vector3Int corner1 = new(midX, exitCell.y, exitCell.z);
-
-            segs.Add(new Segment {
-                Start = exitCell, End = corner1,
-                Width = exitWidth, Horizontal = true
-            });
-
-            bool useS = Mathf.Abs(dy) > exitWidth * 2;
-
-            if (!useS)
-            {
-                segs.Add(new Segment {
-                    Start = corner1, End = entryCell,
-                    Width = midWidth, Horizontal = false
-                });
-            }
-            else
-            {
-                int halfY    = exitCell.y + dy / 2;
-                Vector3Int c2 = new(midX,        halfY,      exitCell.z);
-                Vector3Int c3 = new(entryCell.x, halfY,      exitCell.z);
-
-                segs.Add(new Segment {
-                    Start = corner1, End = c2,
-                    Width = midWidth, Horizontal = false
-                });
-                segs.Add(new Segment {
-                    Start = c2, End = c3,
-                    Width = midWidth, Horizontal = true
-                });
-                segs.Add(new Segment {
-                    Start = c3, End = entryCell,
-                    Width = entryWidth, Horizontal = false
-                });
-            }
-        }
-        else
-        {
-            int midY = entryCell.y;
-            Vector3Int corner1 = new(exitCell.x, midY, exitCell.z);
-
-            segs.Add(new Segment {
-                Start = exitCell, End = corner1,
-                Width = exitWidth, Horizontal = false
-            });
-
-            bool useS = Mathf.Abs(dx) > exitWidth * 2;
-
-            if (!useS)
-            {
-                segs.Add(new Segment {
-                    Start = corner1, End = entryCell,
-                    Width = midWidth, Horizontal = true
-                });
-            }
-            else
-            {
-                int halfX    = exitCell.x + dx / 2;
-                Vector3Int c2 = new(halfX,      midY,       exitCell.z);
-                Vector3Int c3 = new(halfX,      entryCell.y, exitCell.z);
-
-                segs.Add(new Segment {
-                    Start = corner1, End = c2,
-                    Width = midWidth, Horizontal = true
-                });
-                segs.Add(new Segment {
-                    Start = c2, End = c3,
-                    Width = midWidth, Horizontal = false
-                });
-                segs.Add(new Segment {
-                    Start = c3, End = entryCell,
-                    Width = entryWidth, Horizontal = true
-                });
-            }
-        }
-
-        return segs;
-    }
-
-    // ── Segment painting ───────────────────────────────────────────────────
-
-    private static void PaintSegment(
-        Tilemap floor, Tilemap walls,
-        Segment seg, HallwayTileSet tiles)
-    {
-        int half = seg.Width / 2;
-
-        Vector3Int start = seg.Start;
-        Vector3Int end   = seg.End;
-
-        if (seg.Horizontal)
-        {
-            int xMin = Mathf.Min(start.x, end.x);
-            int xMax = Mathf.Max(start.x, end.x);
-
-            for (int x = xMin; x <= xMax; x++)
-            {
-                for (int y = start.y - half; y <= start.y + half; y++)
-                    SetFloor(floor, new Vector3Int(x, y, 0), tiles.FloorTile);
-
-                if (tiles.WallSideTile != null)
-                {
-                    SetWall(walls, new Vector3Int(x, start.y + half + 1, 0), tiles.WallSideTile);
-                    SetWall(walls, new Vector3Int(x, start.y - half - 1, 0), tiles.WallSideTile);
-                }
-            }
-        }
-        else
-        {
-            int yMin = Mathf.Min(start.y, end.y);
-            int yMax = Mathf.Max(start.y, end.y);
-
-            for (int y = yMin; y <= yMax; y++)
-            {
-                for (int x = start.x - half; x <= start.x + half; x++)
-                    SetFloor(floor, new Vector3Int(x, y, 0), tiles.FloorTile);
-
-                if (tiles.WallSideTile != null)
-                {
-                    SetWall(walls, new Vector3Int(start.x + half + 1, y, 0), tiles.WallSideTile);
-                    SetWall(walls, new Vector3Int(start.x - half - 1, y, 0), tiles.WallSideTile);
-                }
-            }
-        }
-    }
-
-    // ── Junction / corner painting ─────────────────────────────────────────
-
-    private static void PaintJunction(
-        Tilemap floor, Tilemap walls,
-        Segment segA, Segment segB,
-        HallwayTileSet tiles)
-    {
-        Vector3Int pivot = segA.End;
-
-        int halfA = segA.Width / 2;
-        int halfB = segB.Width / 2;
-
-        int xMin = Mathf.Min(pivot.x - halfA, pivot.x - halfB);
-        int xMax = Mathf.Max(pivot.x + halfA, pivot.x + halfB);
-        int yMin = Mathf.Min(pivot.y - halfA, pivot.y - halfB);
-        int yMax = Mathf.Max(pivot.y + halfA, pivot.y + halfB);
-
-        for (int x = xMin; x <= xMax; x++)
-        for (int y = yMin; y <= yMax; y++)
-            SetFloor(floor, new Vector3Int(x, y, 0), tiles.FloorTile);
-
-        TileBase convex  = tiles.CornerConvexTile  ?? tiles.WallSideTile;
-        TileBase concave = tiles.CornerConcaveTile ?? tiles.WallSideTile;
-
-        if (convex != null)
-        {
-            SetWall(walls, new Vector3Int(xMin - 1, yMin - 1, 0), convex);
-            SetWall(walls, new Vector3Int(xMax + 1, yMin - 1, 0), convex);
-            SetWall(walls, new Vector3Int(xMin - 1, yMax + 1, 0), convex);
-            SetWall(walls, new Vector3Int(xMax + 1, yMax + 1, 0), convex);
-        }
-
-        if (concave != null && segA.Horizontal != segB.Horizontal)
-        {
-            bool aGoesRight = segA.End.x > segA.Start.x;
-            bool bGoesUp    = segB.End.y > segB.Start.y;
-
-            if (segA.Horizontal)
-            {
-                int cx = aGoesRight ? xMax + 1 : xMin - 1;
-                int cy = bGoesUp    ? yMin - 1 : yMax + 1;
-                SetWall(walls, new Vector3Int(cx, cy, 0), concave);
-            }
-            else
-            {
-                int cx = bGoesUp    ? xMax + 1 : xMin - 1;
-                int cy = aGoesRight ? yMin - 1 : yMax + 1;
-                SetWall(walls, new Vector3Int(cx, cy, 0), concave);
-            }
-        }
-
-        if (tiles.WallSideTile != null)
-        {
-            for (int x = xMin; x <= xMax; x++)
-            {
-                TrySetWall(walls, floor, new Vector3Int(x, yMin - 1, 0), tiles.WallSideTile);
-                TrySetWall(walls, floor, new Vector3Int(x, yMax + 1, 0), tiles.WallSideTile);
-            }
-            for (int y = yMin; y <= yMax; y++)
-            {
-                TrySetWall(walls, floor, new Vector3Int(xMin - 1, y, 0), tiles.WallSideTile);
-                TrySetWall(walls, floor, new Vector3Int(xMax + 1, y, 0), tiles.WallSideTile);
-            }
-        }
-    }
-
-    // ── Tile helpers ───────────────────────────────────────────────────────
+    // ── Tile placement helpers ─────────────────────────────────────────────
 
     private static void SetFloor(Tilemap floor, Vector3Int cell, TileBase tile)
     {
         if (tile != null) floor.SetTile(cell, tile);
     }
 
-    private static void SetWall(Tilemap walls, Vector3Int cell, TileBase tile)
-    {
-        if (tile != null) walls.SetTile(cell, tile);
-    }
-
-    private static void TrySetWall(Tilemap walls, Tilemap floor, Vector3Int cell, TileBase tile)
+    /// <summary>
+    /// Sets a wall tile only if the cell is not already a floor tile.
+    /// Prevents walls from overwriting corridor floor in junction overlap zones.
+    /// </summary>
+    private static void SetWall(Tilemap walls, Tilemap floor, Vector3Int cell, TileBase tile)
     {
         if (tile == null) return;
-        if (!floor.HasTile(cell)) walls.SetTile(cell, tile);
+        if (floor.HasTile(cell)) return; // never overwrite floor with a wall
+        walls.SetTile(cell, tile);
     }
 }

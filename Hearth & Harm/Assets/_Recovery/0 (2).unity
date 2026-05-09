@@ -6549,7 +6549,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30fe39cae9ce1dd45b93bcc3057d1e7f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  spawnTables: []
+  spawnTables:
+  - {fileID: 11400000, guid: abfb13e501666d242bb151bbe38a4667, type: 2}
+  - {fileID: 11400000, guid: 25f94ee721b71064ba297df61eff1ed8, type: 2}
+  - {fileID: 11400000, guid: ca8eb0b85d4f206468eb11c0854c0df3, type: 2}
   legacyEntries: []
   borderPadding: 2
   spawnOnLevelReady: 1
@@ -6580,7 +6583,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 844300057
+  GlobalObjectIdHash: 1629824122
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -8858,8 +8861,14 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
+  - prefab: {fileID: 5114301450661476021, guid: 85758c160dcf29e4c83d7df38ad8c7bc, type: 3}
     roomType: 2
+    spawnWeight: 1
+    width: 0
+    height: 0
+    cellSize: 0
+  - prefab: {fileID: 4968128638377832015, guid: 2b4e251f8b96d814390b0141b5e20b40, type: 3}
+    roomType: 1
     spawnWeight: 1
     width: 0
     height: 0
@@ -8870,14 +8879,14 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 85758c160dcf29e4c83d7df38ad8c7bc, type: 3}
-    roomType: 2
+  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
+    roomType: 4
     spawnWeight: 1
     width: 0
     height: 0
     cellSize: 0
-  - prefab: {fileID: 4968128638377832015, guid: 2b4e251f8b96d814390b0141b5e20b40, type: 3}
-    roomType: 1
+  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
+    roomType: 3
     spawnWeight: 1
     width: 0
     height: 0
@@ -8921,7 +8930,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2436167234
+  GlobalObjectIdHash: 1856669156
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -13418,7 +13427,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2036778657
+  GlobalObjectIdHash: 2175318886
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -13942,7 +13951,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1748013196
 MonoBehaviour:
   m_ObjectHideFlags: 0
