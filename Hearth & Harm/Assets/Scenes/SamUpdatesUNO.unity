@@ -6549,7 +6549,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30fe39cae9ce1dd45b93bcc3057d1e7f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  spawnTables: []
+  spawnTables:
+  - {fileID: 11400000, guid: abfb13e501666d242bb151bbe38a4667, type: 2}
+  - {fileID: 11400000, guid: 25f94ee721b71064ba297df61eff1ed8, type: 2}
+  - {fileID: 11400000, guid: ca8eb0b85d4f206468eb11c0854c0df3, type: 2}
   legacyEntries: []
   borderPadding: 2
   spawnOnLevelReady: 1
