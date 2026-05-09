@@ -8870,7 +8870,7 @@ MonoBehaviour:
     cellSize: 0
   hallwayTileSet: {fileID: 11400000, guid: 21108b0b5853d2d438107043f6c2f208, type: 2}
   hallwayCellSize: 1
-  defaultHallwayWidth: 3
+  defaultHallwayWidth: 4
   minRooms: 8
   maxRooms: 10
   specialRoomChance: 0.3
@@ -14258,9 +14258,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 0}
   totalText: {fileID: 499148570}
-  pendingDiceContainer: {fileID: 0}
-  pendingDieUIPrefab: {fileID: 0}
-  pendingDiceScale: 1
+  pendingDiceContainer: {fileID: 194432176}
+  pendingDieUIPrefab: {fileID: 5509033123964935239, guid: 407f1a662388908428bff00cbe2c2420, type: 3}
+  pendingDiceScale: 0.11
   dimOverlay: {fileID: 1522755864}
   diceRenderImage: {fileID: 1309866762}
   physicsRoller: {fileID: 380531568}
