@@ -18,10 +18,14 @@ public class GridCostVisualizer : MonoBehaviour
 
     public void ShowCost(GridPosition pos, int cost)
     {
-        if (activeTexts.ContainsKey(pos))
-            return;
+        if (activeTexts.ContainsKey(pos)) return;
 
-        RoomGrid room = RoomManager.Instance.GetCurrentRoomGrid();
+        var unit = FindLocalUnit();
+        var room = unit?.GetCurrentRoomGrid()
+                ?? RoomManager.Instance?.GetCurrentRoomGrid();
+
+        if (room == null) return;
+
         Vector3 world = room.GetWorldPosition(pos);
 
         GameObject obj = Instantiate(
@@ -42,5 +46,18 @@ public class GridCostVisualizer : MonoBehaviour
             Destroy(text.gameObject);
 
         activeTexts.Clear();
+    }
+
+    private static Unit FindLocalUnit()
+    {
+        if (!GameManager.IsMultiplayer)
+            return FindAnyObjectByType<Unit>();
+
+        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
+            if (netObj != null && netObj.IsOwner) return u;
+        }
+        return null;
     }
 }
