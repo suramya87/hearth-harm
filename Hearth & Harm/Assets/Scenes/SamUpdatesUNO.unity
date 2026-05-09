@@ -5668,63 +5668,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 684426492}
   m_CullTransparentMesh: 1
---- !u!1001 &684972320
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -68.3
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: -7.241975
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4760888930585276593, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9021031492681216058, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
-      propertyPath: m_Name
-      value: Hallway
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 435cb29a8663c9e4f8246d1aa90eee09, type: 3}
 --- !u!1 &706064740
 GameObject:
   m_ObjectHideFlags: 0
@@ -8925,9 +8868,9 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  hallwayHorizontalPrefab: {fileID: 2217066784230207157, guid: 44016d9ddc31b5d43b663dcd368bf660, type: 3}
-  hallwayVerticalPrefab: {fileID: 2255239054199406656, guid: 82952192468681d489dd4ffa4b5a89dd, type: 3}
-  hallwaySinglePrefab: {fileID: 0}
+  hallwayTileSet: {fileID: 11400000, guid: 21108b0b5853d2d438107043f6c2f208, type: 2}
+  hallwayCellSize: 1
+  defaultHallwayWidth: 3
   minRooms: 8
   maxRooms: 10
   specialRoomChance: 0.3
@@ -11256,6 +11199,7 @@ MonoBehaviour:
   orthoMin: 3
   orthoMax: 8
   snapSmoothness: 10
+  hallwayFollowSpeed: 10
   followEnemyTurns: 1
   lockCameraDuringEnemyTurns: 1
   recenterOnPlayerTurn: 1
@@ -11425,14 +11369,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b42323f0afed1934f8693c926174027b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthTargetUI
-  fireMax: {fileID: 0}
-  fireHigh: {fileID: 0}
-  fireMedium: {fileID: 0}
-  fireLow: {fileID: 0}
-  hoverOverlay: {fileID: 0}
-  healthText: {fileID: 0}
-  damageFlashUI: {fileID: 0}
-  flashDuration: 0.25
+  healthBarRoot: {fileID: 0}
+  slider: {fileID: 0}
+  hideDelay: 2
+  animSpeed: 5
 --- !u!1 &1480930650
 GameObject:
   m_ObjectHideFlags: 0
@@ -14318,9 +14258,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DiceBoxUI
   resultsText: {fileID: 0}
   totalText: {fileID: 499148570}
-  pendingDiceContainer: {fileID: 194432176}
-  pendingDieUIPrefab: {fileID: 5509033123964935239, guid: 407f1a662388908428bff00cbe2c2420, type: 3}
-  pendingDiceScale: 0.11
+  pendingDiceContainer: {fileID: 0}
+  pendingDieUIPrefab: {fileID: 0}
+  pendingDiceScale: 1
   dimOverlay: {fileID: 1522755864}
   diceRenderImage: {fileID: 1309866762}
   physicsRoller: {fileID: 380531568}
@@ -16336,7 +16276,7 @@ MonoBehaviour:
   unitLayerMask:
     serializedVersion: 2
     m_Bits: 128
-  diceBoxUI: {fileID: 1792522405}
+  diceBoxUI: {fileID: 0}
 --- !u!4 &2097609747
 Transform:
   m_ObjectHideFlags: 0
@@ -16461,14 +16401,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b42323f0afed1934f8693c926174027b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthTargetUI
-  fireMax: {fileID: 340459814}
-  fireHigh: {fileID: 1429315923}
-  fireMedium: {fileID: 390331390}
-  fireLow: {fileID: 2044922128}
-  hoverOverlay: {fileID: 1295089986}
-  healthText: {fileID: 1729182691}
-  damageFlashUI: {fileID: 1971396918}
-  flashDuration: 0.25
+  healthBarRoot: {fileID: 0}
+  slider: {fileID: 0}
+  hideDelay: 2
+  animSpeed: 5
 --- !u!1 &2111032863
 GameObject:
   m_ObjectHideFlags: 0
@@ -16801,5 +16737,4 @@ SceneRoots:
   - {fileID: 1163725320}
   - {fileID: 1617025422}
   - {fileID: 818118548}
-  - {fileID: 684972320}
   - {fileID: 491675905}

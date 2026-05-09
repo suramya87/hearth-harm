@@ -2,14 +2,13 @@ using UnityEngine;
 
 /// <summary>
 /// Marks connection points and door strips on a room prefab.
-/// Unchanged from 3D version except for the RoomType enum being co-located here.
 /// </summary>
 public class RoomConnector : MonoBehaviour
 {
     [System.Serializable]
     public class ConnectionPoint
     {
-        public Transform                 transform;
+        public Transform                transform;
         public LevelGenerator.Direction  direction;
         public bool                      isConnected;
     }
@@ -31,13 +30,20 @@ public class RoomConnector : MonoBehaviour
     public void SetDoorOpen(LevelGenerator.Direction dir, bool open)
     {
         var strip = GetStrip(dir);
-        if (strip != null) strip.SetActive(!open);
+        if (strip != null) 
+            strip.SetActive(!open);
     }
 
     public void CloseAllDoors()
     {
         foreach (LevelGenerator.Direction d in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             SetDoorOpen(d, false);
+    }
+
+    public void OpenAllDoors()
+    {
+        foreach (LevelGenerator.Direction d in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+            SetDoorOpen(d, true);
     }
 
     public ConnectionPoint GetConnectionPoint(LevelGenerator.Direction dir) => dir switch

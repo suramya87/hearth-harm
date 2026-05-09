@@ -95,6 +95,10 @@ public class UnitActionSystem : MonoBehaviour
 
     private void Update()
     {
+
+        if (selectedAction is MoveAction move) {
+        move.HandleActionInput();
+    }
         if (selectedUnit == null)
         {
             TrySelectOwnedUnit();

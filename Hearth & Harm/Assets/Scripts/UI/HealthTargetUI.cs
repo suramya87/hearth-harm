@@ -1,65 +1,96 @@
 using System.Collections;
-using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
-public class HealthTargetUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+
+public class HealthTargetUI : MonoBehaviour
 {
-    [Header("Fire States")]
-    [SerializeField] private GameObject fireMax, fireHigh, fireMedium, fireLow;
-    [Header("UI")]
-    [SerializeField] private GameObject      hoverOverlay;
-    [SerializeField] private TextMeshProUGUI healthText;
-    [Header("Damage Flash")]
-    [SerializeField] private GameObject damageFlashUI;
-    [SerializeField] private float      flashDuration = 0.25f;
+    [SerializeField] private GameObject healthBarRoot;
+    [SerializeField] private UnityEngine.UI.Slider slider;
+    [SerializeField] private float hideDelay = 2f;
+    [SerializeField] private float animSpeed = 5f;
 
-    private HealthComponent target;
-    private int lastHealth = -1, tier = -1;
+    private Coroutine hideCoroutine;
+    private float targetFill;
+    private HealthComponent currentTarget; // Track the current unit
 
-    private void OnEnable()  { if (target) Bind(target); }
-    private void OnDisable() { Unbind(); }
+    private void Awake()
+    {
+        if (healthBarRoot != null) healthBarRoot.SetActive(false);
+    }
 
     public void SetTarget(HealthComponent hc)
+        {
+            // Unsubscribe from previous target if exists
+            ClearTarget();
+
+            if (hc != null)
+            {
+                currentTarget = hc;
+                
+                // Subscribe to the event defined in your HealthComponent
+                currentTarget.OnHealthChanged += OnChanged;
+
+                // FIX: Access the public Properties CurrentHealth and MaxHealth
+                OnChanged(currentTarget.CurrentHealth, currentTarget.MaxHealth);
+            }
+        }
+
+    public void ClearTarget()
     {
-        if (hc == target) return;
-        Unbind(); target = hc;
-        if (target != null) { gameObject.SetActive(true); Bind(target); }
+        if (currentTarget != null)
+        {
+            currentTarget.OnHealthChanged -= OnChanged;
+            currentTarget = null;
+        }
+
+        if (healthBarRoot != null) healthBarRoot.SetActive(false);
     }
 
-    public void ClearTarget() { Unbind(); target = null; gameObject.SetActive(false); }
-
-    private void Bind(HealthComponent hc)
+    private void OnDestroy()
     {
-        hc.OnHealthChanged += OnChanged;
-        OnChanged(hc.CurrentHealth, hc.MaxHealth);
+        ClearTarget(); // Cleanup on destroy
     }
 
-    private void Unbind()
+    // ── Public callback — called by HealthComponent.OnHealthChanged ────────
+
+    public void OnChanged(int curr, int max)
     {
-        if (target != null) target.OnHealthChanged -= OnChanged;
+        // Don't start coroutines on inactive or destroyed objects
+        if (!gameObject.activeInHierarchy) return;
+
+        targetFill = max > 0 ? (float)curr / max : 0f;
+
+        if (healthBarRoot != null) healthBarRoot.SetActive(true);
+
+        // Cancel any pending hide so the bar stays visible during combat
+        if (hideCoroutine != null) StopCoroutine(hideCoroutine);
+
+        StartCoroutine(AnimateBar());
+        hideCoroutine = StartCoroutine(HideAfterDelay());
     }
 
-    private void OnChanged(int cur, int max)
+    // ── Coroutines ─────────────────────────────────────────────────────────
+
+    private IEnumerator AnimateBar()
     {
-        if (cur < lastHealth && damageFlashUI) StartCoroutine(Flash());
-        lastHealth = cur;
-        if (healthText) healthText.text = cur.ToString();
-        int t = cur > max * 0.75f ? 3 : cur > max * 0.5f ? 2 : cur > max * 0.25f ? 1 : 0;
-        if (t == tier) return; tier = t;
-        if (fireMax)    fireMax.SetActive(t==3);
-        if (fireHigh)   fireHigh.SetActive(t==2);
-        if (fireMedium) fireMedium.SetActive(t==1);
-        if (fireLow)    fireLow.SetActive(t==0);
+        if (slider == null) yield break;
+
+        while (!Mathf.Approximately(slider.value, targetFill))
+        {
+            // Stop if deactivated mid-animation (e.g. enemy dies)
+            if (!gameObject.activeInHierarchy) yield break;
+
+            slider.value = Mathf.MoveTowards(slider.value, targetFill, animSpeed * Time.deltaTime);
+            yield return null;
+        }
+        slider.value = targetFill;
     }
 
-    private IEnumerator Flash()
+    private IEnumerator HideAfterDelay()
     {
-        damageFlashUI.SetActive(true);
-        yield return new WaitForSeconds(flashDuration);
-        damageFlashUI.SetActive(false);
-    }
+        yield return new WaitForSeconds(hideDelay);
 
-    public void OnPointerEnter(PointerEventData _) { if (hoverOverlay) hoverOverlay.SetActive(true); }
-    public void OnPointerExit(PointerEventData _)  { if (hoverOverlay) hoverOverlay.SetActive(false); }
+        if (gameObject.activeInHierarchy && healthBarRoot != null)
+            healthBarRoot.SetActive(false);
+    }
 }

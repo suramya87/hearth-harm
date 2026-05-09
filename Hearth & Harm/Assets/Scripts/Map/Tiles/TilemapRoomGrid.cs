@@ -27,9 +27,6 @@ public class TilemapRoomGrid : MonoBehaviour
     private readonly Dictionary<Vector3Int, TilemapCell> cells = new();
     private bool initialized;
 
-    // ── Init ───────────────────────────────────────────────────────────────
-
-    /// <summary>Called by RoomTilemapSetup once tilemaps are resolved.</summary>
     public void Initialize(Tilemap walls, Tilemap floor)
     {
         wallsTilemap   = walls;
@@ -42,20 +39,23 @@ public class TilemapRoomGrid : MonoBehaviour
             return;
         }
 
+        primaryTilemap.CompressBounds();
+
         cells.Clear();
         foreach (Vector3Int pos in primaryTilemap.cellBounds.allPositionsWithin)
-            cells[pos] = new TilemapCell();
+        {
+            if (primaryTilemap.HasTile(pos))
+            {
+                cells[pos] = new TilemapCell();
+            }
+        }
 
         initialized = true;
-        Debug.Log($"[TilemapRoomGrid] {gameObject.name} ready. " +
-                  $"Bounds: {primaryTilemap.cellBounds}");
+        Debug.Log($"[TilemapRoomGrid] {gameObject.name} ready. Bounds: {primaryTilemap.cellBounds}");
     }
 
     public bool IsInitialized => initialized;
 
-    // ── Coordinate helpers ─────────────────────────────────────────────────
-
-    /// <summary>Grid position → world centre of that cell (Y = room transform Y).</summary>
     public Vector3 GetWorldPosition(GridPosition gp)
     {
         if (primaryTilemap == null) return Vector3.zero;
@@ -86,11 +86,8 @@ public class TilemapRoomGrid : MonoBehaviour
         return primaryTilemap.HasTile(primaryTilemap.WorldToCell(worldPos));
     }
 
-    // ── Walkability ────────────────────────────────────────────────────────
-
     public bool IsWall(GridPosition gp) =>
         wallsTilemap != null && wallsTilemap.HasTile(new Vector3Int(gp.x, gp.y, 0));
-
 
     public bool IsWalkable(GridPosition gp) =>
         IsValidGridPosition(gp) && !IsWall(gp) && !IsOccupied(gp);
@@ -104,14 +101,10 @@ public class TilemapRoomGrid : MonoBehaviour
         return c != null && c.IsOccupied();
     }
 
-    // ── Unit occupancy ─────────────────────────────────────────────────────
-
     public void AddUnit(GridPosition gp, Unit u)           => GetOrCreate(gp).AddUnit(u);
     public void RemoveUnit(GridPosition gp, Unit u)        => GetCell(gp)?.RemoveUnit(u);
     public List<Unit> GetUnitsAt(GridPosition gp)          => GetCell(gp)?.GetUnits() ?? new();
     public bool HasAnyUnit(GridPosition gp)                => GetCell(gp)?.HasUnit() ?? false;
-
-    // ── Enemy occupancy ────────────────────────────────────────────────────
 
     public void AddEnemy(GridPosition gp, EnemyUnit e)      => GetOrCreate(gp).AddEnemy(e);
     public void RemoveEnemy(GridPosition gp, EnemyUnit e)   => GetCell(gp)?.RemoveEnemy(e);
@@ -124,17 +117,11 @@ public class TilemapRoomGrid : MonoBehaviour
         return list != null && list.Count > 0 ? list[0] : null;
     }
 
-    // ── Size helpers ───────────────────────────────────────────────────────
-
-    public int GetWidth()  => primaryTilemap?.cellBounds.size.x ?? 0;
-    public int GetHeight() => primaryTilemap?.cellBounds.size.y ?? 0;
-
-    // ── Tilemap accessors ──────────────────────────────────────────────────
+    public int GetWidth()  => primaryTilemap != null ? primaryTilemap.cellBounds.size.x : 0;
+    public int GetHeight() => primaryTilemap != null ? primaryTilemap.cellBounds.size.y : 0;
 
     public Tilemap GetFloorTilemap() => floorTilemap;
     public Tilemap GetWallsTilemap() => wallsTilemap;
-
-    // ── Private helpers ────────────────────────────────────────────────────
 
     private TilemapCell GetCell(GridPosition gp)
     {

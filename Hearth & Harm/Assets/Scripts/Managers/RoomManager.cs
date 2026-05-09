@@ -13,6 +13,7 @@ public class RoomManager : MonoBehaviour
     public static RoomManager Instance { get; private set; }
 
     private LevelGenerator.PlacedRoom currentRoom;
+    private bool inHallway;
 
     /// <summary>Fired when the local player moves to a new room.</summary>
     public event Action<LevelGenerator.PlacedRoom> OnRoomChanged;
@@ -31,35 +32,56 @@ public class RoomManager : MonoBehaviour
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
         currentRoom = room;
+        inHallway   = false;
         OnRoomChanged?.Invoke(room);
         OnAnyRoomChanged?.Invoke(room);
-        UpdateCamera(room);
-        Debug.Log($"[Highlighter] RoomManager={RoomManager.Instance != null} " +
-          $"currentRoom={RoomManager.Instance?.GetCurrentRoom() != null} " +
-          $"roomGrid={RoomManager.Instance?.GetCurrentRoom()?.roomGrid != null} " +
-          $"tilemap={RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap() != null}");
+
+        if (room != null)
+        {
+            ApplyRoomCamera(room);
+            Debug.Log($"[RoomManager] Entered: {room.roomInstance?.name ?? "unknown"}");
+        }
+    }
+
+    public void SetInHallway()
+    {
+        currentRoom = null; 
+        inHallway = true;   
+        OnRoomChanged?.Invoke(null);
+        Debug.Log("<color=cyan>[RoomManager] State Switched: In Hallway</color>");
     }
 
     public void ClearCurrentRoom()
     {
         currentRoom = null;
-        Debug.Log("[RoomManager] Room cleared.");
+        inHallway   = false;
+        OnRoomChanged?.Invoke(null);
+        OnAnyRoomChanged?.Invoke(null);
+        CameraController2D.Instance?.ClearRoomBounds();
     }
-
-    // ── Getters ────────────────────────────────────────────────────────────
 
     public LevelGenerator.PlacedRoom GetCurrentRoom()     => currentRoom;
     public RoomGrid                  GetCurrentRoomGrid() => currentRoom?.roomGrid;
+    public bool                      IsInHallway()        => inHallway;
 
-    // ── Camera ─────────────────────────────────────────────────────────────
+    public bool CurrentRoomHasEnemies()
+    {
+        if (currentRoom?.roomGrid == null) return false;
+        if (EnemyManager.Instance == null) return false;
+        return EnemyManager.Instance.GetEnemiesInRoom(currentRoom.roomGrid).Count > 0;
+    }
 
-    private static void UpdateCamera(LevelGenerator.PlacedRoom room)
+    private static void ApplyRoomCamera(LevelGenerator.PlacedRoom room)
     {
         var cam = CameraController2D.Instance;
         if (cam == null || room?.roomInstance == null) return;
 
         var bounds = room.roomInstance.GetComponentInChildren<CameraRoomBounds>();
-        if (bounds != null) cam.SetRoomBounds(bounds.GetBounds());
+        if (bounds != null)
+            cam.SetRoomBounds(bounds.GetBounds());
+        else
+            cam.ClearRoomBounds();
+
         cam.SnapToTarget();
     }
 }
