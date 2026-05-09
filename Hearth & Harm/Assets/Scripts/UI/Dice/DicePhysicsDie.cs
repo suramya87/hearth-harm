@@ -51,22 +51,35 @@ public class DicePhysicsDie : MonoBehaviour
             return 1;
         }
 
-        Face bestFace = faces[0];
-        float bestDot = -999f;
+        Face bestFace = null;
+        float highestY = float.NegativeInfinity;
+
+        string debug = $"[DicePhysicsDie] {name} face heights:\n";
 
         foreach (Face face in faces)
         {
             if (face == null || face.faceTransform == null)
                 continue;
 
-            float dot = Vector3.Dot(face.faceTransform.up, Vector3.up);
+            float y = face.faceTransform.position.y;
 
-            if (dot > bestDot)
+            debug += $"Value {face.value} | Transform {face.faceTransform.name} | Y {y:F3}\n";
+
+            if (y > highestY)
             {
-                bestDot = dot;
+                highestY = y;
                 bestFace = face;
             }
         }
+
+        if (bestFace == null)
+        {
+            Debug.LogWarning($"{name} has no valid face transforms.");
+            return 1;
+        }
+
+        debug += $"WINNER: {bestFace.value}";
+        Debug.Log(debug);
 
         return bestFace.value;
     }

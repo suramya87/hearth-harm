@@ -20,6 +20,10 @@ MonoBehaviour:
   kiteRange: 2
   alwaysChases: 1
   turnsBeforeFirstAction: 0
-  _summary: 'HP:25  Move:3  Range:0
+  _summary: 'HP:25  Move:3  Range:1
 
-    Attack:Bite  Kite:True(2)'
+    Attack:Bite  Kite:True(2)
+
+    Coins:6-10'
+  minCoinsDropped: 6
+  maxCoinsDropped: 10

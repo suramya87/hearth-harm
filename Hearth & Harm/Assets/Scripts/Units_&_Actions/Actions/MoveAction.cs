@@ -25,14 +25,12 @@ public class MoveAction : BaseAction
     {
         if (Input.GetMouseButtonDown(0))
         {
-            // 1. Check for UI blocking
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             {
                 Debug.Log("<color=yellow>[MoveAction Input] Click ignored: Pointer is over UI.</color>");
                 return;
             }
 
-            // 2. Get World Position
             Vector3 mouseWorldPosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
             var room = unit.GetCurrentRoomGrid();
             
@@ -43,8 +41,6 @@ public class MoveAction : BaseAction
             }
 
             GridPosition targetGP = room.GetGridPosition(mouseWorldPosition);
-
-            // 3. Log the specifics of the click
             bool isValid = IsValidTarget(targetGP);
             string color = isValid ? "lime" : "red";
 
@@ -56,14 +52,12 @@ public class MoveAction : BaseAction
             }
             else
             {
-                // Detailed reason for failure
                 if (!room.IsValidGridPosition(targetGP)) Debug.Log(" -> Reason: Outside Grid Bounds.");
                 else if (room.IsWall(targetGP)) Debug.Log(" -> Reason: It's a Wall.");
                 else if (GetMoveCost(targetGP) > MoveDistance) Debug.Log(" -> Reason: Too far / No Path.");
             }
         }
     }
-
 
     public void RefreshValidTargets()
     {
@@ -88,6 +82,8 @@ public class MoveAction : BaseAction
         newGrid.AddUnitAtGridPosition(newPos, unit);
     }
 
+    // --- MOVEMENT LOGIC (Merged) ---
+
     public void Move(GridPosition target, Action onComplete)
     {
         var room = unit.GetCurrentRoomGrid();
@@ -106,6 +102,7 @@ public class MoveAction : BaseAction
         var usedPath = path.GetRange(0, steps);
         var finalPos = usedPath[^1];
 
+        // Update grid occupancy immediately
         room.RemoveUnitAtGridPosition(startPos, unit);
         room.AddUnitAtGridPosition(finalPos, unit);
 
@@ -113,13 +110,13 @@ public class MoveAction : BaseAction
             playerStats.currentStamina = Mathf.Max(0, playerStats.currentStamina - steps);
 
         var waypoints = new List<Vector3>();
-        foreach (var gp in usedPath)
-            waypoints.Add(room.GetWorldPosition(gp));
+        foreach (var gp in usedPath) waypoints.Add(room.GetWorldPosition(gp));
 
         SetFacingToward(usedPath[0]);
         unitAnimator?.SetMoving(true);
 
         isActive = true;
+        // Pass the starting room grid to the coroutine to prevent rubber-banding during room transitions
         StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, room, onComplete));
     }
 
@@ -139,9 +136,19 @@ public class MoveAction : BaseAction
         unitAnimator?.SetMoving(false);
         isActive = false;
 
+        // MULTIPLAYER SYNC & PLACEMENT
         if (unit.GetCurrentRoomGrid() == startingGrid)
         {
-            unit.PlaceInRoom(startingGrid, finalGP);
+            if (GameManager.IsMultiplayer)
+            {
+                var bridge = unit.GetComponent<NetworkedPlayerBridge>();
+                if (bridge != null && bridge.IsOwner)
+                    bridge.SyncGridPosition(startingGrid, finalGP);
+            }
+            else
+            {
+                unit.PlaceInRoom(startingGrid, finalGP);
+            }
         }
 
         onComplete?.Invoke();
@@ -152,10 +159,19 @@ public class MoveAction : BaseAction
         var current = unit.GetGridPosition();
         int dx = next.x - current.x;
         int dy = next.y - current.y;
-        unitAnimator?.SetFacing(new Vector2Int(dx == 0 ? 0 : (int)Mathf.Sign(dx), dy == 0 ? 0 : (int)Mathf.Sign(dy)));
+        
+        var dir = new Vector2Int(
+            dx == 0 ? 0 : (int)Mathf.Sign(dx),
+            dy == 0 ? 0 : (int)Mathf.Sign(dy)
+        );
+
+        unitAnimator?.SetFacing(dir);
     }
 
+    // --- VALIDATION HELPERS ---
+
     public bool IsValidTarget(GridPosition gp) => GetValidTargets().Contains(gp);
+    public bool isValidActionGridPosition(GridPosition gp) => IsValidTarget(gp);
     public List<GridPosition> GetValidActionGridPositionList() => GetValidTargets();
 
     public int GetMoveCost(GridPosition target)
@@ -163,7 +179,7 @@ public class MoveAction : BaseAction
         var room = unit?.GetCurrentRoomGrid();
         if (room == null) return -1;
         var path = new Pathfinder(room).FindPath(unit.GetGridPosition(), target);
-        return path == null ? -1 : path.Count;
+        return (path == null || path.Count == 0) ? -1 : path.Count;
     }
 
     private List<GridPosition> GetValidTargets()

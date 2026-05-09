@@ -12561,13 +12561,14 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  hallwayTileSet: {fileID: 11400000, guid: 21108b0b5853d2d438107043f6c2f208, type: 2}
-  hallwayCellSize: 1
+  hallwayHorizontalPrefab: {fileID: 2217066784230207157, guid: 44016d9ddc31b5d43b663dcd368bf660, type: 3}
+  hallwayVerticalPrefab: {fileID: 2255239054199406656, guid: 82952192468681d489dd4ffa4b5a89dd, type: 3}
+  hallwaySinglePrefab: {fileID: 0}
   minRooms: 7
   maxRooms: 10
   specialRoomChance: 0.3
   spawnBossRoom: 0
-  roomSpacing: 14
+  roomSpacing: 16
   playerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
   - {fileID: 9198468102176965729, guid: c4dacc9f8fc86614cbe719d0f2ce20a3, type: 3}

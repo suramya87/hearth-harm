@@ -1,6 +1,10 @@
 using System;
 using UnityEngine;
 
+/// <summary>
+/// Tracks which room the local player is currently in.
+/// Fires events so camera, highlighter, enemy lock etc. can react.
+/// </summary>
 public class RoomManager : MonoBehaviour
 {
     public static RoomManager Instance { get; private set; }
@@ -8,7 +12,10 @@ public class RoomManager : MonoBehaviour
     private LevelGenerator.PlacedRoom currentRoom;
     private bool inHallway;
 
+    /// <summary>Fired when the local player moves to a new room.</summary>
     public event Action<LevelGenerator.PlacedRoom> OnRoomChanged;
+
+    /// <summary>Static version — any subscriber can listen without a RoomManager reference.</summary>
     public static event Action<LevelGenerator.PlacedRoom> OnAnyRoomChanged;
 
     private void Awake()
@@ -16,6 +23,8 @@ public class RoomManager : MonoBehaviour
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
     }
+
+    // ── Set / Clear ────────────────────────────────────────────────────────
 
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
@@ -36,6 +45,7 @@ public class RoomManager : MonoBehaviour
         currentRoom = null; 
         inHallway = true;   
         OnRoomChanged?.Invoke(null);
+        OnAnyRoomChanged?.Invoke(null); // Keep static event in sync
         Debug.Log("<color=cyan>[RoomManager] State Switched: In Hallway</color>");
     }
 
@@ -46,11 +56,14 @@ public class RoomManager : MonoBehaviour
         OnRoomChanged?.Invoke(null);
         OnAnyRoomChanged?.Invoke(null);
         CameraController2D.Instance?.ClearRoomBounds();
+        Debug.Log("[RoomManager] Room cleared.");
     }
 
+    // ── Getters ────────────────────────────────────────────────────────────
+
     public LevelGenerator.PlacedRoom GetCurrentRoom()     => currentRoom;
-    public RoomGrid                  GetCurrentRoomGrid() => currentRoom?.roomGrid;
-    public bool                      IsInHallway()        => inHallway;
+    public RoomGrid                   GetCurrentRoomGrid() => currentRoom?.roomGrid;
+    public bool                       IsInHallway()        => inHallway;
 
     public bool CurrentRoomHasEnemies()
     {

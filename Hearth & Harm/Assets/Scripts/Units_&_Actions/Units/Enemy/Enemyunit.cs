@@ -9,31 +9,31 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     [SerializeField] private EnemyStats stats;
 
     [Header("Debug")]
-    [SerializeField] private bool       showDebugLogs;
+    [SerializeField] private bool showDebugLogs;
     [SerializeField] private GameObject selectedVisual;
 
-    private GridPosition     gridPosition;
-    private RoomGrid         currentRoomGrid;
-    private HealthComponent  health;
-    private bool             initialized;
-    private int              turnsWaited;
+    private GridPosition gridPosition;
+    private RoomGrid currentRoomGrid;
+    private HealthComponent health;
+    private bool initialized;
+    private int turnsWaited;
 
     public event Action<EnemyUnit> OnEnemyDied;
 
     // ── Properties ─────────────────────────────────────────────────────────
-    public EnemyStats      Stats           => stats;
-    public HealthComponent Health          => health;
-    public GridPosition    GridPosition    => gridPosition;
-    public RoomGrid        CurrentRoomGrid => currentRoomGrid;
-    public bool            IsInitialized   => initialized;
-    public bool            IsDead          => health != null && health.IsDead;
+    public EnemyStats Stats => stats;
+    public HealthComponent Health => health;
+    public GridPosition GridPosition => gridPosition;
+    public RoomGrid CurrentRoomGrid => currentRoomGrid;
+    public bool IsInitialized => initialized;
+    public bool IsDead => health != null && health.IsDead;
 
     // ── IHasHealth ─────────────────────────────────────────────────────────
     public int GetMaxHealth() => stats != null ? stats.maxHealth : 100;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
-    private void Awake()  => health = GetComponent<HealthComponent>();
+    private void Awake() => health = GetComponent<HealthComponent>();
 
     private void Start()
     {
@@ -57,7 +57,7 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, this);
 
         currentRoomGrid = room;
-        gridPosition    = pos;
+        gridPosition = pos;
 
         var world = room.GetWorldPosition(pos);
         transform.position = new Vector3(world.x, world.y, transform.position.z);
@@ -112,6 +112,16 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
 
     private void HandleDeath()
     {
+
+        if (stats != null && CurrencyManager.Instance != null)
+        {
+            int coinsDropped = stats.RollCoinDrop();
+            CurrencyManager.Instance.AddCoins(coinsDropped);
+
+            if (showDebugLogs)
+                Debug.Log($"[EnemyUnit] {stats.enemyName} dropped {coinsDropped} coins.");
+        }
+
         if (showDebugLogs) Debug.Log($"[EnemyUnit] {stats?.enemyName} died.");
 
         if (currentRoomGrid != null && initialized)

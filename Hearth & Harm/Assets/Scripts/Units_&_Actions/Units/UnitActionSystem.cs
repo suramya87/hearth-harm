@@ -10,6 +10,9 @@ public class UnitActionSystem : MonoBehaviour
     [Header("Selection — layer that contains unit colliders")]
     [SerializeField] private LayerMask unitLayerMask;
 
+    [Header("Dice UI")]
+    [SerializeField] private DiceBoxUI diceBoxUI;
+
     public event EventHandler       OnSelectedUnitChange;
     public event EventHandler       OnSelectedActionChange;
     public event EventHandler<bool> OnBusyChanged;
@@ -26,6 +29,9 @@ public class UnitActionSystem : MonoBehaviour
     {
         if (Instance != null) { Destroy(gameObject); return; }
         Instance = this;
+
+        if (diceBoxUI == null)
+            diceBoxUI = FindFirstObjectByType<DiceBoxUI>();
     }
 
     private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
@@ -158,10 +164,35 @@ public class UnitActionSystem : MonoBehaviour
         OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetSelectedAction(BaseAction action)
+    public void SetSelectedAction(BaseAction action, bool clearDiceForMove)
     {
         selectedAction = action;
+
+        if (diceBoxUI != null)
+        {
+            if (selectedAction is CombatAction combatAction &&
+                combatAction.ActionData != null &&
+                combatAction.ActionData.useDiceDamage)
+            {
+                diceBoxUI.ShowPendingDice(combatAction.ActionData);
+            }
+            else if (selectedAction is MoveAction)
+            {
+                if (clearDiceForMove)
+                    diceBoxUI.Clear();
+            }
+            else
+            {
+                diceBoxUI.Clear();
+            }
+        }
+
         OnSelectedActionChange?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetSelectedAction(BaseAction action)
+    {
+        SetSelectedAction(action, true);
     }
 
     // ── Room reconciliation ────────────────────────────────────────────────

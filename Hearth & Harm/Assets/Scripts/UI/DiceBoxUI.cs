@@ -5,13 +5,21 @@ using TMPro;
 using UnityEngine;
 
 /// <summary>
-/// Handles dice roll UI presentation and receives final results from the physics dice roller.
+/// Handles dice UI:
+/// - pending dice preview when an action is selected
+/// - physical dice roll presentation when an action is executed
+/// - final roll result display
 /// </summary>
 public class DiceBoxUI : MonoBehaviour
 {
     [Header("UI Text")]
     [SerializeField] private TextMeshProUGUI resultsText;
     [SerializeField] private TextMeshProUGUI totalText;
+
+    [Header("Pending Dice Preview")]
+    [SerializeField] private Transform pendingDiceContainer;
+    [SerializeField] private GameObject pendingDieUIPrefab;
+    [SerializeField] private float pendingDiceScale = 1f;
 
     [Header("UI Visibility")]
     [SerializeField] private GameObject dimOverlay;
@@ -22,9 +30,10 @@ public class DiceBoxUI : MonoBehaviour
 
     [Header("Timing")]
     [SerializeField] private float resultHoldTime = 0.35f;
-    [SerializeField] private bool hideDiceAfterRoll = false;
 
     private readonly List<int> rolls = new();
+    private readonly List<GameObject> pendingDiceObjects = new();
+
     private int bonus;
 
     private void Awake()
@@ -35,7 +44,31 @@ public class DiceBoxUI : MonoBehaviour
         if (physicsRoller != null)
             physicsRoller.SetStageVisible(false);
 
+        ClearPendingDice();
         Refresh();
+    }
+
+    public void ShowPendingDice(CombatActionData actionData)
+    {
+        Clear();
+
+        if (actionData == null || !actionData.useDiceDamage || actionData.diceCount <= 0)
+            return;
+
+        bonus = actionData.flatBonus;
+
+        if (resultsText != null)
+            resultsText.text = $"{actionData.diceCount}d{(int)actionData.dieType}";
+
+        if (totalText != null)
+        {
+            totalText.text = actionData.flatBonus != 0
+                ? $"Bonus: {actionData.flatBonus:+#;-#;0}"
+                : "Ready";
+        }
+
+        for (int i = 0; i < actionData.diceCount; i++)
+            SpawnDiceIconUnknown();
     }
 
     public IEnumerator PlayPhysicsD6Roll(int diceCount, int flatBonus, Action<int> onComplete)
@@ -48,6 +81,7 @@ public class DiceBoxUI : MonoBehaviour
         }
 
         ClearResultsOnly();
+        ClearPendingDice();
 
         bonus = flatBonus;
 
@@ -65,20 +99,25 @@ public class DiceBoxUI : MonoBehaviour
             physicsResults = results;
         });
 
-        rolls.Clear();
+        SetDiceRenderVisible(false);
+        physicsRoller.SetStageVisible(false);
 
-        if (physicsResults != null)
-            rolls.AddRange(physicsResults);
+        ShowResolvedDice(physicsResults, flatBonus);
 
-        Refresh();
+        if (pendingDiceContainer != null)
+            pendingDiceContainer.gameObject.SetActive(true);
+
+        if (resultsText != null)
+            resultsText.gameObject.SetActive(true);
+
+        if (totalText != null)
+            totalText.gameObject.SetActive(true);
 
         int total = GetTotal();
 
         yield return new WaitForSeconds(resultHoldTime);
 
         SetDim(false);
-        SetDiceRenderVisible(false);
-        physicsRoller.SetStageVisible(false);
 
         onComplete?.Invoke(total);
     }
@@ -86,6 +125,7 @@ public class DiceBoxUI : MonoBehaviour
     public void ShowRoll(List<int> results, int flatBonus = 0)
     {
         ClearResultsOnly();
+        ClearPendingDice();
 
         if (results != null)
             rolls.AddRange(results);
@@ -98,12 +138,16 @@ public class DiceBoxUI : MonoBehaviour
     public void Clear()
     {
         ClearResultsOnly();
+        ClearPendingDice();
 
         SetDim(false);
         SetDiceRenderVisible(false);
 
         if (physicsRoller != null)
+        {
             physicsRoller.ClearDice();
+            physicsRoller.SetStageVisible(false);
+        }
 
         Refresh();
     }
@@ -115,6 +159,67 @@ public class DiceBoxUI : MonoBehaviour
         Refresh();
     }
 
+    private void ClearPendingDice()
+    {
+        foreach (GameObject pendingDie in pendingDiceObjects)
+        {
+            if (pendingDie != null)
+                Destroy(pendingDie);
+        }
+
+        pendingDiceObjects.Clear();
+    }
+
+    private void SpawnDiceIconUnknown()
+    {
+        if (pendingDiceContainer == null || pendingDieUIPrefab == null)
+            return;
+
+        GameObject icon = Instantiate(pendingDieUIPrefab, pendingDiceContainer);
+
+        icon.transform.localScale = Vector3.one * pendingDiceScale;
+
+        pendingDiceObjects.Add(icon);
+
+        DiceResultIconUI iconUI = icon.GetComponent<DiceResultIconUI>();
+
+        if (iconUI != null)
+            iconUI.SetUnknown();
+    }
+
+    private void SpawnDiceIconValue(int value)
+    {
+        if (pendingDiceContainer == null || pendingDieUIPrefab == null)
+            return;
+
+        GameObject icon = Instantiate(pendingDieUIPrefab, pendingDiceContainer);
+
+        icon.transform.localScale = Vector3.one * pendingDiceScale;
+
+        pendingDiceObjects.Add(icon);
+
+        DiceResultIconUI iconUI = icon.GetComponent<DiceResultIconUI>();
+
+        if (iconUI != null)
+            iconUI.SetValue(value);
+    }
+
+    private void ShowResolvedDice(List<int> results, int flatBonus)
+    {
+        ClearPendingDice();
+
+        rolls.Clear();
+
+        if (results != null)
+            rolls.AddRange(results);
+
+        bonus = flatBonus;
+
+        foreach (int roll in rolls)
+            SpawnDiceIconValue(roll);
+
+        Refresh();
+    }
     private void Refresh()
     {
         if (rolls.Count == 0)
