@@ -27,7 +27,7 @@ public class EnemyStats : ScriptableObject
     /// <summary>Attack range in tiles. Falls back to 1 (melee) when no attackData.</summary>
     public int attackRange => attackData != null ? attackData.maxRange : 1;
 
-#if UNITY_EDITOR
+// #if UNITY_EDITOR
     [Header("Summary (read-only)")]
     [SerializeField, TextArea(2, 3)] private string _summary;
     private void OnValidate()
@@ -52,5 +52,5 @@ public class EnemyStats : ScriptableObject
 
         return Random.Range(min, max + 1);
     }
-#endif
+// #endif
 }

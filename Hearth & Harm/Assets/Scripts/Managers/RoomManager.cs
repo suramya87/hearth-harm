@@ -4,6 +4,9 @@ using UnityEngine;
 /// <summary>
 /// Tracks which room the local player is currently in.
 /// Fires events so camera, highlighter, enemy lock etc. can react.
+///
+/// NO LevelGrid dependency — use RoomManager.Instance.GetCurrentRoomGrid()
+/// wherever old code called LevelGrid.Instance.
 /// </summary>
 public class RoomManager : MonoBehaviour
 {
@@ -45,7 +48,6 @@ public class RoomManager : MonoBehaviour
         currentRoom = null; 
         inHallway = true;   
         OnRoomChanged?.Invoke(null);
-        OnAnyRoomChanged?.Invoke(null); // Keep static event in sync
         Debug.Log("<color=cyan>[RoomManager] State Switched: In Hallway</color>");
     }
 
@@ -56,14 +58,11 @@ public class RoomManager : MonoBehaviour
         OnRoomChanged?.Invoke(null);
         OnAnyRoomChanged?.Invoke(null);
         CameraController2D.Instance?.ClearRoomBounds();
-        Debug.Log("[RoomManager] Room cleared.");
     }
 
-    // ── Getters ────────────────────────────────────────────────────────────
-
     public LevelGenerator.PlacedRoom GetCurrentRoom()     => currentRoom;
-    public RoomGrid                   GetCurrentRoomGrid() => currentRoom?.roomGrid;
-    public bool                       IsInHallway()        => inHallway;
+    public RoomGrid                  GetCurrentRoomGrid() => currentRoom?.roomGrid;
+    public bool                      IsInHallway()        => inHallway;
 
     public bool CurrentRoomHasEnemies()
     {

@@ -17,9 +17,9 @@ public class MoveAction : BaseAction
 
     public override string GetActionName() => "Move";
 
-
     /// <summary>
     /// Call this from UnitActionSystem.cs to handle clicks specifically for moving.
+    /// Includes the debugging and UI blocking logic from the PCGTDST branch.
     /// </summary>
     public void HandleActionInput()
     {
@@ -82,8 +82,6 @@ public class MoveAction : BaseAction
         newGrid.AddUnitAtGridPosition(newPos, unit);
     }
 
-    // --- MOVEMENT LOGIC (Merged) ---
-
     public void Move(GridPosition target, Action onComplete)
     {
         var room = unit.GetCurrentRoomGrid();
@@ -116,7 +114,7 @@ public class MoveAction : BaseAction
         unitAnimator?.SetMoving(true);
 
         isActive = true;
-        // Pass the starting room grid to the coroutine to prevent rubber-banding during room transitions
+        // PCGTDST logic: Pass room reference to ensure we don't snap back to wrong room if we transition mid-move
         StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, room, onComplete));
     }
 
@@ -136,7 +134,8 @@ public class MoveAction : BaseAction
         unitAnimator?.SetMoving(false);
         isActive = false;
 
-        // MULTIPLAYER SYNC & PLACEMENT
+        // MULTIPLAYER & ROOM PLACEMENT SYNC
+        // Ensure we only place the unit if the room hasn't changed via a trigger during the walk
         if (unit.GetCurrentRoomGrid() == startingGrid)
         {
             if (GameManager.IsMultiplayer)
@@ -159,7 +158,7 @@ public class MoveAction : BaseAction
         var current = unit.GetGridPosition();
         int dx = next.x - current.x;
         int dy = next.y - current.y;
-        
+
         var dir = new Vector2Int(
             dx == 0 ? 0 : (int)Mathf.Sign(dx),
             dy == 0 ? 0 : (int)Mathf.Sign(dy)
@@ -167,8 +166,6 @@ public class MoveAction : BaseAction
 
         unitAnimator?.SetFacing(dir);
     }
-
-    // --- VALIDATION HELPERS ---
 
     public bool IsValidTarget(GridPosition gp) => GetValidTargets().Contains(gp);
     public bool isValidActionGridPosition(GridPosition gp) => IsValidTarget(gp);

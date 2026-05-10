@@ -1720,7 +1720,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &227153199
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4969,7 +4969,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &576196295
 RectTransform:
   m_ObjectHideFlags: 0
@@ -6513,7 +6513,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &735230216
 RectTransform:
   m_ObjectHideFlags: 0
@@ -9034,7 +9034,7 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
+  - prefab: {fileID: 5114301450661476021, guid: 85758c160dcf29e4c83d7df38ad8c7bc, type: 3}
     roomType: 2
     spawnWeight: 1
     width: 0
@@ -9046,7 +9046,7 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 85758c160dcf29e4c83d7df38ad8c7bc, type: 3}
+  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
     roomType: 2
     spawnWeight: 1
     width: 0
@@ -10286,7 +10286,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1337655833
 RectTransform:
   m_ObjectHideFlags: 0
@@ -16681,7 +16681,7 @@ MonoBehaviour:
   unitLayerMask:
     serializedVersion: 2
     m_Bits: 128
-  diceBoxUI: {fileID: 1792522405}
+  diceBoxUI: {fileID: 0}
 --- !u!4 &2097609747
 Transform:
   m_ObjectHideFlags: 0

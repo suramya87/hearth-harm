@@ -2,7 +2,20 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-
+/// <summary>
+/// Paints move/range/AoE highlights onto the active floor tilemap.
+///
+/// KEY FIXES vs original:
+///   1. RefreshTilemap() and Update() both resolve the active tilemap from
+///      unit.GetCurrentRoomGrid() first — this means the highlighter
+///      automatically follows the unit into hallways without any extra
+///      event wiring.
+///   2. OnRoomChanged handles a null room gracefully (happens when the
+///      player is in transit through a hallway and RoomManager has no
+///      current room set).
+///   3. activeGrid is resolved from the unit's current grid so mouse→tile
+///      conversion works correctly on hallway tiles too.
+/// </summary>
 public class TilemapHighlighter : MonoBehaviour
 {
     public static TilemapHighlighter Instance { get; private set; }
@@ -11,10 +24,10 @@ public class TilemapHighlighter : MonoBehaviour
     [SerializeField] private TileBase solidWhiteTile;
 
     [Header("Default colors")]
-    [SerializeField] private Color moveColor  = new(0.2f, 0.6f, 1f,  1f);
-    [SerializeField] private Color rangeColor = new(1f,  0.85f, 0f,  1f);
+    [SerializeField] private Color moveColor  = new(0.2f, 0.6f, 1f,   1f);
+    [SerializeField] private Color rangeColor = new(1f,  0.85f, 0f,   1f);
     [SerializeField] private Color aoeColor   = new(1f,  0.15f, 0.15f, 1f);
-    [SerializeField] private Color hoverColor = new(1f,  1f,   1f,  0.4f);
+    [SerializeField] private Color hoverColor = new(1f,  1f,   1f,   0.4f);
 
     private Tilemap                          paintedTilemap;
     private Dictionary<Vector3Int, TileBase> originalTiles = new();
@@ -41,14 +54,37 @@ public class TilemapHighlighter : MonoBehaviour
         ResetAll();
     }
 
-    private void OnLevelReady()    => RefreshTilemap();
-    private void OnRoomChanged(LevelGenerator.PlacedRoom _) => RefreshTilemap();
+    private void OnLevelReady()                              => RefreshTilemap();
+
+    /// <summary>
+    /// Called when RoomManager's current room changes — including when it is
+    /// set to null while the player is in a hallway. We still call
+    /// RefreshTilemap() so the unit-grid fallback path runs.
+    /// </summary>
+    private void OnRoomChanged(LevelGenerator.PlacedRoom room) => RefreshTilemap();
+
+    // ── Tilemap resolution ─────────────────────────────────────────────────
 
     private void RefreshTilemap()
     {
         ResetAll();
-        var grid = RoomManager.Instance?.GetCurrentRoom()?.roomGrid;
-        paintedTilemap = grid?.GetFloorTilemap();
+
+        // Primary: use whatever grid the unit is registered in right now.
+        // This covers both normal rooms and hallways transparently.
+        var unit = FindLocalUnit();
+        if (unit != null)
+        {
+            var unitGrid = unit.GetCurrentRoomGrid();
+            if (unitGrid != null)
+            {
+                paintedTilemap = unitGrid.GetFloorTilemap();
+                if (paintedTilemap != null) return;
+            }
+        }
+
+        // Fallback: RoomManager's current room (covers the brief window
+        // before the unit is registered in a grid)
+        paintedTilemap = RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap();
 
         if (paintedTilemap == null && GameManager.IsMultiplayer)
             TryFindLocalPlayerRoom();
@@ -74,10 +110,15 @@ public class TilemapHighlighter : MonoBehaviour
         }
     }
 
+    // ── Update loop ────────────────────────────────────────────────────────
+
     private void Update()
     {
-        var room    = RoomManager.Instance?.GetCurrentRoomGrid();
-        var tilemap = room?.GetFloorTilemap();
+        // Resolve tilemap from unit grid every frame so hallway transit is seamless.
+        var unit     = FindLocalUnit();
+        var unitGrid = unit?.GetCurrentRoomGrid();
+        var tilemap  = unitGrid?.GetFloorTilemap()
+                    ?? RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap();
 
         if (tilemap != paintedTilemap)
         {
@@ -88,22 +129,24 @@ public class TilemapHighlighter : MonoBehaviour
         if (paintedTilemap == null) return;
 
         ResetAll();
-        if (GridCostVisualizer.Instance != null)
-            GridCostVisualizer.Instance.ClearAll();
-
+        GridCostVisualizer.Instance?.ClearAll();
 
         if (!IsPlayerPhaseNow()) return;
 
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
 
+        // Use the unit's current grid for all mouse → grid position conversions.
+        // This is correct in rooms AND in hallways.
+        var activeGrid = unitGrid ?? RoomManager.Instance?.GetCurrentRoomGrid();
+
         if (action is MoveAction move)
         {
             Paint(move.GetValidActionGridPositionList(), moveColor);
 
-            if (room != null)
+            if (activeGrid != null)
             {
-                var mouseGP = room.GetGridPosition(MouseWorld2D.GetPosition());
+                var mouseGP = activeGrid.GetGridPosition(MouseWorld2D.GetPosition());
                 if (move.IsValidTarget(mouseGP))
                 {
                     int cost = move.GetMoveCost(mouseGP);
@@ -119,34 +162,45 @@ public class TilemapHighlighter : MonoBehaviour
 
             Paint(combat.GetValidActionGridPositionList(), rc);
 
-            if (room != null)
+            if (activeGrid != null)
             {
-                var mouseGP = room.GetGridPosition(MouseWorld2D.GetPosition());
+                var mouseGP = activeGrid.GetGridPosition(MouseWorld2D.GetPosition());
                 Paint(combat.GetPreviewPositions(mouseGP), ac);
             }
         }
 
-        // Hover
-        if (room != null)
+        // Hover highlight
+        if (activeGrid != null)
         {
-            var gp = room.GetGridPosition(MouseWorld2D.GetPosition());
-            if (room.IsValidGridPosition(gp))
+            var gp = activeGrid.GetGridPosition(MouseWorld2D.GetPosition());
+            if (activeGrid.IsValidGridPosition(gp))
                 PaintCell(new Vector3Int(gp.x, gp.y, 0), hoverColor);
         }
     }
 
     // ── Turn-phase helper ──────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns true when it's the player's turn in EITHER the SP or MP system.
-    /// In single-player TurnSystem drives things; in multiplayer NetworkedTurnSystem does.
-    /// </summary>
     private static bool IsPlayerPhaseNow()
     {
         if (GameManager.IsMultiplayer)
             return NetworkedTurnSystem.Instance == null || NetworkedTurnSystem.Instance.IsPlayerPhase;
 
         return TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
+    }
+
+    // ── Local unit helper ──────────────────────────────────────────────────
+
+    private static Unit FindLocalUnit()
+    {
+        if (!GameManager.IsMultiplayer)
+            return FindAnyObjectByType<Unit>();
+
+        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
+            if (netObj != null && netObj.IsOwner) return u;
+        }
+        return null;
     }
 
     // ── Paint helpers ──────────────────────────────────────────────────────
