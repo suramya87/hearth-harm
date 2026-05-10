@@ -107,7 +107,10 @@ public class CombatAction : BaseAction
 
         if (diceBox != null && actionData.useDiceDamage)
         {
-            yield return diceBox.PlayPhysicsD6Roll(actionData.diceCount, actionData.flatBonus, (result) =>
+            int strengthBonus = playerStats != null ? playerStats.strength : 0;
+            int totalFlatBonus = actionData.flatBonus + strengthBonus;
+
+            yield return diceBox.PlayPhysicsD6Roll(actionData.diceCount, totalFlatBonus, (result) =>
             {
                 finalDamage = Mathf.Max(1, Mathf.RoundToInt(result * actionData.damageMultiplier));
                 diceFinished = true;
@@ -293,10 +296,16 @@ public class CombatAction : BaseAction
 
     private int CalculateDamage(List<int> rolls)
     {
-        int total = actionData.flatBonus;
+        int strengthBonus = playerStats != null ? playerStats.strength : 0;
+        int total = actionData.useDiceDamage
+            ? actionData.flatBonus + strengthBonus
+            : actionData.baseDamage + strengthBonus;
 
-        foreach (int r in rolls)
-            total += r;
+        if (actionData.useDiceDamage)
+        {
+            foreach (int r in rolls)
+                total += r;
+        }
 
         return Mathf.Max(1, Mathf.RoundToInt(total * actionData.damageMultiplier));
     }
