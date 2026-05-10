@@ -1,4 +1,5 @@
 using UnityEngine;
+using System;
 
 /// <summary>
 /// Loads class stats from ClassStatsDatabase.
@@ -33,6 +34,8 @@ public class PlayerStats : MonoBehaviour, IHasHealth
 
     private HealthComponent health;
 
+    // --- Lifecycle ---
+
     private void Awake()
     {
         health = GetComponent<HealthComponent>();
@@ -42,23 +45,14 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         {
             health.InitializeHealth(maxHealth);
             currentHealth = health.CurrentHealth;
-            health.OnHealthChanged += OnHealthChanged;
+            health.OnHealthChanged += (cur, max) => currentHealth = cur;
         }
-    }
-
-    private void OnDestroy()
-    {
-        if (health != null)
-            health.OnHealthChanged -= OnHealthChanged;
     }
 
     private void OnEnable() => RoomManager.OnAnyRoomChanged += OnRoomChanged;
     private void OnDisable() => RoomManager.OnAnyRoomChanged -= OnRoomChanged;
 
-    private void OnHealthChanged(int current, int max)
-    {
-        currentHealth = current;
-    }
+    // --- Room Transition ---
 
     private void OnRoomChanged(LevelGenerator.PlacedRoom _)
     {
@@ -66,6 +60,8 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         TurnSystem.Instance?.ForcePlayerTurn();
         Debug.Log("[PlayerStats] Room entered → stamina refilled, player turn forced.");
     }
+
+    // --- Stats Loading ---
 
     private void ApplyClassStats()
     {
@@ -76,9 +72,9 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         }
 
         ClassStats stats = classStatsDatabase.Get(playerClass);
-        if (stats == null)
-            return;
+        if (stats == null) return;
 
+        // Apply Core Stats
         strength = stats.strength;
         constitution = stats.constitution;
         dexterity = stats.dexterity;
@@ -87,52 +83,54 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         charisma = stats.charisma;
         luck = stats.luck;
 
+        // Calculate Derived Stats
         maxHealth = Mathf.Max(1, stats.baseMaxHealth + constitution);
-        maxStamina = Mathf.Max(1, 10 + dexterity * 2);
+        maxStamina = Mathf.Max(1, 10 + (dexterity * 2));
+        
         currentHealth = maxHealth;
         currentStamina = maxStamina;
     }
 
+    // --- IHasHealth Implementation ---
     public int GetMaxHealth() => maxHealth;
+
+    // --- Stamina Logic ---
 
     public int GetCurrentStaminaPoints() => currentStamina;
 
-    public void SetCurrentStaminaPoints_BROKEN_FIND_CALLER(int value)
+    // This is the method Unit.cs was looking for!
+    public void SetCurrentStaminaPoints(int value)
     {
-        int before = currentStamina;
         currentStamina = Mathf.Clamp(value, 0, maxStamina);
-
-        Debug.LogWarning(
-            $"[PlayerStats] SetCurrentStaminaPoints called: {before} → {currentStamina}\n" +
-            $"{System.Environment.StackTrace}",
-            this
-        );
     }
 
     public int GetMaxStaminaPoints() => maxStamina;
 
-    public int GetPopularityBonusPercent()
+    public void SpendStamina(int amount)
     {
-        return charisma;
+        if (amount <= 0) return;
+        currentStamina = Mathf.Clamp(currentStamina - amount, 0, maxStamina);
     }
 
+    public void RefillStaminaToMax() => currentStamina = maxStamina;
+
+    /// <summary>
+    /// Recovers stamina using a dice roll based on Dexterity.
+    /// Used for "End Turn" or "Rest" mechanics.
+    /// </summary>
     public int RollStaminaRecovery()
     {
         int diceCount = Mathf.Max(1, Mathf.CeilToInt(dexterity / 2f));
-
         int rolledRecovery = 0;
 
         for (int i = 0; i < diceCount; i++)
-            rolledRecovery += Random.Range(1, 7);
+            rolledRecovery += UnityEngine.Random.Range(1, 7);
 
         int before = currentStamina;
-        int after = Mathf.Clamp(before + rolledRecovery, 0, maxStamina);
+        currentStamina = Mathf.Clamp(currentStamina + rolledRecovery, 0, maxStamina);
+        int actualRecovered = currentStamina - before;
 
-        currentStamina = after;
-
-        int actualRecovered = after - before;
-
-        if (actualRecovered > 0)
+        if (actualRecovered > 0 && staminaNumberPrefab != null)
         {
             StaminaNumber.Spawn(
                 staminaNumberPrefab,
@@ -141,32 +139,6 @@ public class PlayerStats : MonoBehaviour, IHasHealth
             );
         }
 
-        Debug.Log(
-            $"[PlayerStats] Stamina recovery: {diceCount}d6 rolled {rolledRecovery}, " +
-            $"before {before}, recovered {actualRecovered}, current {currentStamina}/{maxStamina}"
-        );
-
         return actualRecovered;
-    }
-
-    public void SpendStamina(int amount)
-    {
-        if (amount <= 0) return;
-        currentStamina = Mathf.Clamp(currentStamina - amount, 0, maxStamina);
-    }
-
-    public void RefillStaminaToMax()
-    {
-        currentStamina = maxStamina;
-    }
-
-    public int RecoverStamina(int amount)
-    {
-        if (amount <= 0) return 0;
-
-        int before = currentStamina;
-        currentStamina = Mathf.Clamp(currentStamina + amount, 0, maxStamina);
-
-        return currentStamina - before;
     }
 }

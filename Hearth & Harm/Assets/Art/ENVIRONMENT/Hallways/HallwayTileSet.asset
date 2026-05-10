@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d2bca3557726cd429e2aee98b6f2536, type: 3}
+  m_Name: HallwayTileSet
+  m_EditorClassIdentifier: Assembly-CSharp::HallwayTileSet
+  FloorTile: {fileID: 11400000, guid: 74f81714805e4c34aa44ba1d61d0209e, type: 2}
+  FloorVariants:
+  - {fileID: 11400000, guid: 9dd8147430d958546aff373402f6d1ba, type: 2}
+  - {fileID: 11400000, guid: 31ed429a2120407438a7a4c751a95ab3, type: 2}
+  - {fileID: 11400000, guid: 58f07217cd7ce424a95c79f022073580, type: 2}
+  - {fileID: 11400000, guid: 378e3ce38f79acc49ae9c82383e68516, type: 2}
+  - {fileID: 11400000, guid: b3418ed695e38ce44a95cb2f9e339743, type: 2}
+  - {fileID: 11400000, guid: 9f782cdc2969bcb469b0524c40cca1fd, type: 2}
+  - {fileID: 11400000, guid: 62a40d25b01381a4bb63b67fb9cf5a52, type: 2}
+  AccentTiles: []
+  AccentThreshold: 1
+  WallSideTile: {fileID: 11400000, guid: 5e3f33036ed0b804980b8535ca8038fa, type: 2}
+  WallTop: {fileID: 11400000, guid: 2ad4dc057acfdc548b40633faeb9d891, type: 2}
+  WallBottom: {fileID: 11400000, guid: c0b90f97a56b2a54daccc23a76f31122, type: 2}
+  WallLeft: {fileID: 11400000, guid: 9e402ac1d7706f3408f245e164f45877, type: 2}
+  WallRight: {fileID: 11400000, guid: 998d26acab2267b49ba05eaf15feae9d, type: 2}
+  CapTop: {fileID: 11400000, guid: 1e4a3589501423b4ba66cdc7dd0fa9ea, type: 2}
+  CapBottom: {fileID: 11400000, guid: 1e4a3589501423b4ba66cdc7dd0fa9ea, type: 2}
+  CapLeft: {fileID: 11400000, guid: 1e4a3589501423b4ba66cdc7dd0fa9ea, type: 2}
+  CapRight: {fileID: 11400000, guid: 1e4a3589501423b4ba66cdc7dd0fa9ea, type: 2}
+  CornerConvex_NE: {fileID: 11400000, guid: bae16fbce902ad04aaf24d59abf0f31d, type: 2}
+  CornerConvex_NW: {fileID: 11400000, guid: def14cdc90e615049be2c1c74fba4fc1, type: 2}
+  CornerConvex_SE: {fileID: 11400000, guid: b811a2500a438e84abdac29da34e315c, type: 2}
+  CornerConvex_SW: {fileID: 11400000, guid: 63d56fc7a613f574a85efee9ee9258da, type: 2}
+  CornerConcave_NE: {fileID: 11400000, guid: 747349f909b2fbd46bfe8395463b0ce8, type: 2}
+  CornerConcave_NW: {fileID: 11400000, guid: 320267e844a326b4c89257df1393668d, type: 2}
+  CornerConcave_SE: {fileID: 11400000, guid: 2344a874d5da93b4993969bd09513264, type: 2}
+  CornerConcave_SW: {fileID: 11400000, guid: ce05ab08e605dd844b5a3b1bf35580a1, type: 2}

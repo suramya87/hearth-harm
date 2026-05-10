@@ -1528,6 +1528,7 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 194432175}
+  serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.30587354, y: 0.4351005, z: 0.6077919}
@@ -6753,7 +6754,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1019813009
+  GlobalObjectIdHash: 1629824122
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -9049,9 +9050,21 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  hallwayHorizontalPrefab: {fileID: 2217066784230207157, guid: 44016d9ddc31b5d43b663dcd368bf660, type: 3}
-  hallwayVerticalPrefab: {fileID: 2255239054199406656, guid: 82952192468681d489dd4ffa4b5a89dd, type: 3}
-  hallwaySinglePrefab: {fileID: 0}
+  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
+    roomType: 4
+    spawnWeight: 1
+    width: 0
+    height: 0
+    cellSize: 0
+  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
+    roomType: 3
+    spawnWeight: 1
+    width: 0
+    height: 0
+    cellSize: 0
+  hallwayTileSet: {fileID: 11400000, guid: 21108b0b5853d2d438107043f6c2f208, type: 2}
+  hallwayCellSize: 1
+  defaultHallwayWidth: 4
   minRooms: 8
   maxRooms: 10
   specialRoomChance: 0.3
@@ -9088,7 +9101,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2456793969
+  GlobalObjectIdHash: 1856669156
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -11381,6 +11394,7 @@ MonoBehaviour:
   orthoMin: 3
   orthoMax: 8
   snapSmoothness: 10
+  hallwayFollowSpeed: 10
   followEnemyTurns: 1
   lockCameraDuringEnemyTurns: 1
   recenterOnPlayerTurn: 1
@@ -13863,7 +13877,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 164588989
+  GlobalObjectIdHash: 2175318886
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -14387,7 +14401,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1748013196
 MonoBehaviour:
   m_ObjectHideFlags: 0
