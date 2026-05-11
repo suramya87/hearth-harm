@@ -10,6 +10,10 @@ using UnityEngine;
 /// instead of FindAnyObjectByType<Unit>() which could return any player
 /// (including remote ones) causing IsOwner to be false and the transition
 /// to silently do nothing.
+///
+/// DOOR STATE FIX: RestoreDoorState() is called on every Initialize() so
+/// that doors which were closed at generation time (e.g. boss-to-end) remain
+/// closed when the player re-enters the room instead of resetting to open.
 /// </summary>
 public class RoomDoor : MonoBehaviour
 {
@@ -30,12 +34,30 @@ public class RoomDoor : MonoBehaviour
 
     public void Initialize(LevelGenerator.PlacedRoom owner)
     {
-        ownerRoom     = owner;
-        gen           = FindAnyObjectByType<LevelGenerator>();
-        doorDir       = DetermineDirection(owner);
+        ownerRoom = owner;
+        doorDir = DetermineDirection(owner);
+        gen = FindAnyObjectByType<LevelGenerator>();
+
+        // 1. Check the Generator's logical connections first
         connectedRoom = gen?.GetConnectedRoom(owner, doorDir);
-        ready         = connectedRoom != null;
+
+        // 2. If there is no logical connection in this direction, 
+        // this "door" is actually just a wall. Disable the script and stop.
+        if (connectedRoom == null)
+        {
+            if (owner.connector != null)
+                owner.connector.SetDoorOpen(doorDir, false); // Ensure it's closed
+            
+            this.enabled = false; // Kill this script instance for this specific wall
+            return; 
+        }
+
+        // 3. If we got here, it's a real hallway. Now check the saved state.
+        ready = true;
+        RestoreDoorState(owner);
     }
+
+
 
     private void OnMouseDown()
     {
@@ -49,9 +71,6 @@ public class RoomDoor : MonoBehaviour
 
         var player = FindLocalUnit();
         if (player == null) return;
-        if (!PlayerIsInThisRoom(player)) return;
-
-        // Only act if the player is actually in this room
         if (!PlayerIsInThisRoom(player)) return;
 
         var entryDir = gen.GetOppositeDirection(doorDir);
@@ -85,7 +104,6 @@ public class RoomDoor : MonoBehaviour
     /// <summary>
     /// In multiplayer: returns the Unit whose NetworkObject.IsOwner == true.
     /// In single-player: returns the first Unit found.
-    /// This prevents the door from acting on a remote player's unit.
     /// </summary>
     private Unit FindLocalUnit()
     {
@@ -109,9 +127,9 @@ public class RoomDoor : MonoBehaviour
     {
         var currentRoom = player.GetCurrentRoomGrid();
         if (currentRoom == null || ownerRoom?.roomGrid == null) return false;
-        
+
         // Compare by name since client/host may have different object references
-        // for the same logical room
+        // for the same logical room.
         return currentRoom.gameObject.name == ownerRoom.roomGrid.gameObject.name;
     }
 

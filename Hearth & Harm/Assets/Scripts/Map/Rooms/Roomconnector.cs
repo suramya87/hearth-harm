@@ -27,11 +27,21 @@ public class RoomConnector : MonoBehaviour
 
     // ── API ────────────────────────────────────────────────────────────────
 
+    private HashSet<LevelGenerator.Direction> deadEnds = new();
+
+    public void PermanentClose(LevelGenerator.Direction dir)
+    {
+        deadEnds.Add(dir);
+        SetDoorOpen(dir, false);
+    }
+
+    // Update the original method to respect the lock
     public void SetDoorOpen(LevelGenerator.Direction dir, bool open)
     {
+        if (deadEnds.Contains(dir) && open) return; // Block the open command
+
         var strip = GetStrip(dir);
-        if (strip != null) 
-            strip.SetActive(!open);
+        if (strip != null) strip.SetActive(!open);
     }
 
     public void CloseAllDoors()

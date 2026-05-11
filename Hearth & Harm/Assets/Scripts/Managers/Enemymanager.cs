@@ -58,6 +58,7 @@ public class EnemyManager : MonoBehaviour
         if (room != null && GetEnemiesInRoom(room).Count == 0)
         {
             Debug.Log($"[EnemyManager] Room cleared: {room.gameObject.name}");
+            room.MarkCleared(); // Persist cleared state so enemies never re-spawn here
             OnRoomCleared?.Invoke(room);
         }
     }
@@ -77,9 +78,9 @@ public class EnemyManager : MonoBehaviour
 
     // ── Queries ────────────────────────────────────────────────────────────
 
-    public int                GetEnemyCount()          => active.Count;
-    public List<EnemyUnit>    GetAllEnemies()           => new(active);
-    public List<EnemyUnit>    GetEnemiesInRoom(RoomGrid room)
+    public int             GetEnemyCount() => active.Count;
+    public List<EnemyUnit> GetAllEnemies() => new(active);
+    public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
     {
         var result = new List<EnemyUnit>();
         foreach (var e in active)
@@ -88,6 +89,7 @@ public class EnemyManager : MonoBehaviour
     }
 
     // ── Turn execution ─────────────────────────────────────────────────────
+
     private void BuildQueueForCurrentRoom()
     {
         RoomGrid room = RoomManager.Instance?.GetCurrentRoomGrid();
@@ -95,6 +97,7 @@ public class EnemyManager : MonoBehaviour
 
         EnemyTurnQueue.Instance.BuildQueue(room, GetEnemiesInRoom(room));
     }
+
     public void RunEnemyTurns()
     {
         if (running) return;
@@ -117,7 +120,7 @@ public class EnemyManager : MonoBehaviour
         {
             if (enemy == null || enemy.IsDead) continue;
 
-            var ai = enemy.GetComponent<EnemyAI>();
+            var ai     = enemy.GetComponent<EnemyAI>();
             var ranged = enemy.GetComponent<RangedEnemyAI>();
             if (ai == null && ranged == null) continue;
 
@@ -131,7 +134,7 @@ public class EnemyManager : MonoBehaviour
 
             bool done = false;
             if (ranged != null) ranged.TakeTurn(() => done = true);
-            else ai.TakeTurn(() => done = true);
+            else                ai.TakeTurn(() => done = true);
 
             yield return new WaitUntil(() => done);
 
