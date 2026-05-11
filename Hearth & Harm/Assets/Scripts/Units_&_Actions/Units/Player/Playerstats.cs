@@ -141,4 +141,44 @@ public class PlayerStats : MonoBehaviour, IHasHealth
 
         return actualRecovered;
     }
+
+    public void IncreaseStat(PlayerStatType statType, int amount = 1)
+    {
+        switch (statType)
+        {
+            case PlayerStatType.Strength: strength += amount; break;
+            case PlayerStatType.Constitution: constitution += amount; break;
+            case PlayerStatType.Dexterity: dexterity += amount; break;
+            case PlayerStatType.Intelligence: intelligence += amount; break;
+            case PlayerStatType.Perception: perception += amount; break;
+            case PlayerStatType.Charisma: charisma += amount; break;
+            case PlayerStatType.Luck: luck += amount; break;
+        }
+
+        RecalculateDerivedStats();
+
+        Debug.Log($"[PlayerStats] Increased {statType} by {amount}");
+    }
+
+    private void RecalculateDerivedStats()
+    {
+        int oldMaxHealth = maxHealth;
+
+        ClassStats baseStats = classStatsDatabase != null
+            ? classStatsDatabase.Get(playerClass)
+            : null;
+
+        if (baseStats == null)
+            return;
+
+        maxHealth = Mathf.Max(1, baseStats.baseMaxHealth + constitution);
+        maxStamina = Mathf.Max(1, 10 + dexterity * 2);
+
+        int healthDifference = maxHealth - oldMaxHealth;
+        currentHealth = Mathf.Clamp(currentHealth + healthDifference, 1, maxHealth);
+        currentStamina = Mathf.Clamp(currentStamina, 0, maxStamina);
+
+        if (health != null)
+            health.InitializeHealth(maxHealth);
+    }
 }
