@@ -360,38 +360,44 @@ public class LevelGenerator : MonoBehaviour
     {
         foreach (PlacedRoom room in placedRooms)
         {
-            if (room.connector == null) continue;
-            room.connector.CloseAllDoors();
+            if (room.connector == null || room.roomGrid == null) continue;
 
-            bool isBoss = room.prefabData.roomType == RoomType.Boss;
+            // Start by assuming every side is a solid wall
+            room.connector.CloseAllDoors();
 
             foreach (Direction dir in Enum.GetValues(typeof(Direction)))
             {
-                if (!connections.TryGetValue((room, dir), out PlacedRoom neighbour)) continue;
-
-                if (isBoss && neighbour.prefabData.roomType == RoomType.End)
+                // If there is NO connection in this direction, it's a permanent wall
+                if (!connections.TryGetValue((room, dir), out PlacedRoom neighbour))
                 {
+                    room.roomGrid.SetDoorState(dir, false);
+                    continue;
+                }
+
+                // Check if this is a Boss -> End Room connection
+                bool isBossExit = (room.prefabData.roomType == RoomType.Boss && 
+                                neighbour.prefabData.roomType == RoomType.End);
+
+                if (isBossExit)
+                {
+                    // Logic: It's a door, but it starts CLOSED
+                    room.roomGrid.SetDoorState(dir, false);
+                    
                     var strip = GetStripObject(room.connector, dir);
                     if (strip != null)
                     {
-                        var brd = strip.GetComponent<BossRoomDoor>()
-                               ?? strip.AddComponent<BossRoomDoor>();
+                        var brd = strip.GetComponent<BossRoomDoor>() ?? strip.AddComponent<BossRoomDoor>();
                         brd.Initialize(room.roomGrid);
                     }
-
-                    // Boss door to End room starts closed; RoomGrid records this.
-                    // Note: room.roomGrid is assigned in InitRoomGrids which runs after
-                    // ConfigureDoors, so we defer state recording to RecordDoorStates().
                 }
                 else
                 {
+                    // Logic: Normal hallway, starts OPEN
+                    room.roomGrid.SetDoorState(dir, true);
                     room.connector.SetDoorOpen(dir, true);
                 }
             }
         }
-
-        // Door state is recorded into RoomGrid after InitRoomGrids() assigns roomGrid refs.
-        // RecordDoorStates() is therefore called at the end of GenerateLevel's setup chain.
     }
 
     /// <summary>
@@ -407,23 +413,19 @@ private void RecordDoorStates()
 
         foreach (Direction dir in Enum.GetValues(typeof(Direction)))
         {
-            // 1. Is there actually a hallway here?
             bool hasConnection = connections.ContainsKey((room, dir));
 
             if (!hasConnection)
             {
-                // NO HALLWAY: Save as CLOSED (false) and turn the visual wall ON
                 room.roomGrid.SetDoorState(dir, false);
                 room.connector.SetDoorOpen(dir, false);
             }
             else
             {
-                // HALLWAY EXISTS: Check for special locks (Boss -> End)
                 PlacedRoom neighbour = connections[(room, dir)];
                 bool isBossExit = (room.prefabData.roomType == RoomType.Boss && 
                                    neighbour.prefabData.roomType == RoomType.End);
                 
-                // Save state: normal hallways are open (true), boss exit is closed (false)
                 room.roomGrid.SetDoorState(dir, !isBossExit);
                 room.connector.SetDoorOpen(dir, !isBossExit);
             }

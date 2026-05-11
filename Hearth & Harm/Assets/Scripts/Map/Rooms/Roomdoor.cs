@@ -35,26 +35,31 @@ public class RoomDoor : MonoBehaviour
     public void Initialize(LevelGenerator.PlacedRoom owner)
     {
         ownerRoom = owner;
-        doorDir = DetermineDirection(owner);
         gen = FindAnyObjectByType<LevelGenerator>();
+        doorDir = DetermineDirection(owner);
 
-        // 1. Check the Generator's logical connections first
+        // 1. Check logical connection
         connectedRoom = gen?.GetConnectedRoom(owner, doorDir);
-
-        // 2. If there is no logical connection in this direction, 
-        // this "door" is actually just a wall. Disable the script and stop.
-        if (connectedRoom == null)
+        
+        // 2. Consult the RoomGrid memory
+        // If the grid says this isn't an open door, we visually close the strip.
+        if (owner.roomGrid != null)
         {
-            if (owner.connector != null)
-                owner.connector.SetDoorOpen(doorDir, false); // Ensure it's closed
+            bool isDoorOpen = owner.roomGrid.GetDoorState(doorDir);
             
-            this.enabled = false; // Kill this script instance for this specific wall
-            return; 
+            // Apply the saved visual state
+            if (owner.connector != null)
+                owner.connector.SetDoorOpen(doorDir, isDoorOpen);
+
+            // If there's no connection OR the door is a wall, disable interaction
+            if (connectedRoom == null)
+            {
+                this.enabled = false;
+                return;
+            }
         }
 
-        // 3. If we got here, it's a real hallway. Now check the saved state.
-        ready = true;
-        RestoreDoorState(owner);
+        ready = connectedRoom != null;
     }
 
 

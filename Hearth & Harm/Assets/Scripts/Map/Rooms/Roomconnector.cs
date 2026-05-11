@@ -1,4 +1,6 @@
 using UnityEngine;
+using System.Collections.Generic; // Added this to fix the HashSet error
+using System.Linq;                // Optional, but good practice if using Enums as lists
 
 /// <summary>
 /// Marks connection points and door strips on a room prefab.
@@ -8,9 +10,9 @@ public class RoomConnector : MonoBehaviour
     [System.Serializable]
     public class ConnectionPoint
     {
-        public Transform                transform;
-        public LevelGenerator.Direction  direction;
-        public bool                      isConnected;
+        public Transform transform;
+        public LevelGenerator.Direction direction;
+        public bool isConnected;
     }
 
     [Header("Connection Points")]
@@ -27,7 +29,8 @@ public class RoomConnector : MonoBehaviour
 
     // ── API ────────────────────────────────────────────────────────────────
 
-    private HashSet<LevelGenerator.Direction> deadEnds = new();
+    // This HashSet tracks directions that are permanent walls (dead ends)
+    private HashSet<LevelGenerator.Direction> deadEnds = new HashSet<LevelGenerator.Direction>();
 
     public void PermanentClose(LevelGenerator.Direction dir)
     {
@@ -35,10 +38,10 @@ public class RoomConnector : MonoBehaviour
         SetDoorOpen(dir, false);
     }
 
-    // Update the original method to respect the lock
     public void SetDoorOpen(LevelGenerator.Direction dir, bool open)
     {
-        if (deadEnds.Contains(dir) && open) return; // Block the open command
+        // If the direction is a permanent dead end, block any logic trying to open it
+        if (deadEnds.Contains(dir) && open) return; 
 
         var strip = GetStrip(dir);
         if (strip != null) strip.SetActive(!open);

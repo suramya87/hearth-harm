@@ -22,21 +22,22 @@ public class RoomGrid : MonoBehaviour
 
     // ── Door state ─────────────────────────────────────────────────────────
 
-    // Stores which directions should have their door open.
-    // Populated once by LevelGenerator.ConfigureDoors() and read by
-    // RoomDoor.RestoreDoorState() every time the player enters the room.
-    private readonly Dictionary<LevelGenerator.Direction, bool> doorOpenState = new();
-
-    // Inside RoomGrid.cs
     private Dictionary<LevelGenerator.Direction, bool> doorStates = new();
 
-    public void SetDoorState(LevelGenerator.Direction dir, bool isOpen) {
-        doorStates[dir] = isOpen;
+    public void SetDoorState(LevelGenerator.Direction dir, bool isOpen) 
+    {
+        if (doorStates.ContainsKey(dir))
+            doorStates[dir] = isOpen;
+        else
+            doorStates.Add(dir, isOpen);
     }
 
-    public bool GetDoorState(LevelGenerator.Direction dir) {
-        if (doorStates.TryGetValue(dir, out bool isOpen)) return isOpen;
-        return false; // Default to closed (wall active) if not found
+    public bool GetDoorState(LevelGenerator.Direction dir) 
+    {
+        // If the direction isn't in the dictionary, it was never a door
+        if (doorStates.TryGetValue(dir, out bool isOpen)) 
+            return isOpen;
+        return false; 
     }
 
     // ── Init ───────────────────────────────────────────────────────────────

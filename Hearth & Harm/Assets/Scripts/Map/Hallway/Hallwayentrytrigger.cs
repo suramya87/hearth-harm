@@ -130,46 +130,55 @@ public class HallwayEntryTrigger : MonoBehaviour
     }
 
     private static bool LockRoomAndSpawnEnemies(
-            LevelGenerator.PlacedRoom room,
-            HallwayEntryTrigger       triggerForCallback)
+        LevelGenerator.PlacedRoom room,
+        HallwayEntryTrigger triggerForCallback)
+    {
+        if (room?.connector == null) return false;
+        
+        if (room.prefabData.roomType == LevelGenerator.RoomType.Start) return false;
+        
+        if (EnemyManager.Instance == null) return false;
+
+        bool alreadyHasEnemies = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
+
+        if (!alreadyHasEnemies)
         {
-            if (room?.connector == null) return false;
-            
-            if (room.prefabData.roomType == LevelGenerator.RoomType.Start) return false;
-            
-            if (EnemyManager.Instance == null) return false;
-
-            bool alreadyHasEnemies = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
-
-            if (!alreadyHasEnemies)
+            var spawner = FindAnyObjectByType<EnemySpawner>();
+            if (spawner != null)
             {
-                var spawner = FindAnyObjectByType<EnemySpawner>();
-                if (spawner != null)
-                {
-                    spawner.SpawnForRoom(room);
-                }
+                spawner.SpawnForRoom(room);
             }
-
-            int enemyCount = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count;
-            bool hasEnemies = enemyCount > 0;
-
-            if (hasEnemies)
-            {
-                room.connector.CloseAllDoors();
-                
-                EnemyManager.Instance.OnRoomCleared -= triggerForCallback.HandleRoomCleared;
-                EnemyManager.Instance.OnRoomCleared += triggerForCallback.HandleRoomCleared;
-                
-                Debug.Log($"[RoomLock] Room {room.roomGrid.name} locked with {enemyCount} enemies.");
-            }
-            else
-            {
-                room.connector.OpenAllDoors();
-                Debug.Log($"[RoomLock] Room {room.roomGrid.name} is empty. Doors remaining open.");
-            }
-
-            return hasEnemies;
         }
+
+        int enemyCount = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count;
+        bool hasEnemies = enemyCount > 0;
+
+        if (hasEnemies)
+        {
+            // Close everything to trap the player
+            room.connector.CloseAllDoors();
+            
+            EnemyManager.Instance.OnRoomCleared -= triggerForCallback.HandleRoomCleared;
+            EnemyManager.Instance.OnRoomCleared += triggerForCallback.HandleRoomCleared;
+            
+            Debug.Log($"[RoomLock] Room {room.roomGrid.name} locked with {enemyCount} enemies.");
+        }
+        else
+        {
+            // --- THE FIX IS HERE ---
+            // Instead of OpenAllDoors(), we sync with the RoomGrid's memory.
+            // This ensures dead ends stay closed and actual hallways stay open.
+            foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+            {
+                bool shouldBeOpen = room.roomGrid.GetDoorState(dir);
+                room.connector.SetDoorOpen(dir, shouldBeOpen);
+            }
+
+            Debug.Log($"[RoomLock] Room {room.roomGrid.name} is empty. Restoring saved door states.");
+        }
+
+        return hasEnemies;
+    }
 
         private void LockAllRoomExits(LevelGenerator.PlacedRoom room)
         {

@@ -144,9 +144,9 @@ public class HallwayWalkTrigger : MonoBehaviour
         float width = Mathf.Abs(worldMax.x - worldMin.x);
         float height = Mathf.Abs(worldMax.y - worldMin.y);
 
-        float horizontalPadding = 16f; 
+        float horizontalPadding = 64f; 
         float verticalPadding = 64f;
-        float minCameraWidth = 15f;  // Prevents zooming in too far in narrow halls
+        float minCameraWidth = 32f;  // Prevents zooming in too far in narrow halls
         float minCameraHeight = 10f;
 
         float finalWidth = Mathf.Max(width + horizontalPadding, minCameraWidth);
