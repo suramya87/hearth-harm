@@ -165,9 +165,6 @@ public class HallwayEntryTrigger : MonoBehaviour
         }
         else
         {
-            // --- THE FIX IS HERE ---
-            // Instead of OpenAllDoors(), we sync with the RoomGrid's memory.
-            // This ensures dead ends stay closed and actual hallways stay open.
             foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             {
                 bool shouldBeOpen = room.roomGrid.GetDoorState(dir);
@@ -211,7 +208,6 @@ public class HallwayEntryTrigger : MonoBehaviour
                     et.pairedWalkTrigger.DoorStripObject = strip;
                 }
 
-                // PHYSICALLY lock the trigger so the player can't walk back into the hallway
                 et.pairedWalkTrigger.SetLocked(true);
                 roomBorderTriggers.Add(et.pairedWalkTrigger);
             }
