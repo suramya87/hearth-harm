@@ -3,7 +3,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-
 public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Fire States")]
@@ -21,31 +20,78 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     private int             lastHealth = -1;
     private int             currentTier = -1;
 
-    private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
-    private void OnDisable() { LevelGenerator.OnLevelReady -= OnLevelReady; Unbind(); }
+    // FIX: track the bind coroutine separately so TriggerFlash can't kill it
+    private Coroutine bindCoroutine;
+    private Coroutine flashCoroutine;
 
-    private void OnLevelReady() { Unbind(); StartCoroutine(WaitAndBind()); }
+    private void OnEnable()
+    {
+        LevelGenerator.OnLevelReady += OnLevelReady;
+
+        // FIX: also try to bind immediately in case the level is already ready
+        // (e.g. UI enabled after level generation, or domain reload in editor)
+        TryBindImmediate();
+    }
+
+    private void OnDisable()
+    {
+        LevelGenerator.OnLevelReady -= OnLevelReady;
+        Unbind();
+    }
+
+    private void OnLevelReady()
+    {
+        Unbind();
+        if (bindCoroutine != null) StopCoroutine(bindCoroutine);
+        bindCoroutine = StartCoroutine(WaitAndBind());
+    }
+
+    // FIX: synchronous bind attempt — covers the case where the player already
+    // exists when this component enables (common after a scene reload or hot-reload).
+    private void TryBindImmediate()
+    {
+        // Prefer PlayerTarget singleton — no scene search needed
+        if (PlayerTarget.Instance != null)
+        {
+            var hc = PlayerTarget.Instance.GetComponent<HealthComponent>();
+            if (hc != null) { Bind(hc); return; }
+        }
+
+        // Fallback: if PlayerTarget isn't ready yet, start the polling coroutine
+        if (bound == null)
+        {
+            if (bindCoroutine != null) StopCoroutine(bindCoroutine);
+            bindCoroutine = StartCoroutine(WaitAndBind());
+        }
+    }
 
     private IEnumerator WaitAndBind()
     {
         float t = 0f;
         while (t < 10f)
         {
-            var unit = FindFirstObjectByType<Unit>();
-            if (unit != null)
+            // FIX: use PlayerTarget singleton instead of FindFirstObjectByType<Unit>
+            // This is O(1) and never finds the wrong object
+            if (PlayerTarget.Instance != null)
             {
-                var hc = unit.GetComponent<HealthComponent>();
-                if (hc != null) { Bind(hc); yield break; }
+                var hc = PlayerTarget.Instance.GetComponent<HealthComponent>();
+                if (hc != null) { Bind(hc); bindCoroutine = null; yield break; }
             }
             t += Time.deltaTime;
             yield return null;
         }
+        Debug.LogWarning("[HealthContainerUI] Could not find player HealthComponent after 10s.");
+        bindCoroutine = null;
     }
 
     private void Bind(HealthComponent hc)
     {
+        Unbind(); // safe to call even if bound == null
         bound = hc;
         bound.OnHealthChanged += OnHealthChanged;
+
+        // FIX: force a full refresh so the UI shows correct values immediately,
+        // even if InitializeHealth already fired before we subscribed
         OnHealthChanged(hc.CurrentHealth, hc.MaxHealth);
     }
 
@@ -53,12 +99,16 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     {
         if (bound != null) bound.OnHealthChanged -= OnHealthChanged;
         bound = null;
+        lastHealth = -1;
+        currentTier = -1;
     }
 
     private void OnHealthChanged(int cur, int max)
     {
-        if (cur < lastHealth) TriggerFlash();
+        bool tookDamage = lastHealth >= 0 && cur < lastHealth;
+        if (tookDamage) TriggerFlash();
         lastHealth = cur;
+
         if (healthText) healthText.text = cur.ToString();
         UpdateFire((float)cur / max);
     }
@@ -77,8 +127,9 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     private void TriggerFlash()
     {
         if (!damageFlashUI) return;
-        StopAllCoroutines();
-        StartCoroutine(Flash());
+        // FIX: stop only the flash coroutine, not ALL coroutines (which would kill WaitAndBind)
+        if (flashCoroutine != null) StopCoroutine(flashCoroutine);
+        flashCoroutine = StartCoroutine(Flash());
     }
 
     private IEnumerator Flash()
@@ -86,6 +137,7 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
         damageFlashUI.SetActive(true);
         yield return new WaitForSeconds(flashDuration);
         damageFlashUI.SetActive(false);
+        flashCoroutine = null;
     }
 
     public void OnPointerEnter(PointerEventData _) { if (hoverOverlay) hoverOverlay.SetActive(true); }

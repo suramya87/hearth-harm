@@ -62,6 +62,13 @@ public class EnemySpawner : MonoBehaviour
             return;
         }
 
+        // Don't re-spawn enemies in a room the player has already cleared.
+        if (room.roomGrid.HasBeenCleared)
+        {
+            Debug.Log($"[EnemySpawner] Skipping already-cleared room: {room.roomInstance.name}");
+            return;
+        }
+
         int level  = WaveManager.Instance?.CurrentLevel ?? 1;
         int budget = WaveManager.Instance?.GetTotalEnemyBudget() ?? 10;
 
@@ -75,8 +82,6 @@ public class EnemySpawner : MonoBehaviour
                 if (!table.IsActiveForLevel(level)) continue;
                 if (table.roomType != room.prefabData.roomType) continue;
 
-                // Scale the budget down proportionally by room count so the
-                // total across all rooms roughly matches the overall budget.
                 var gen = FindAnyObjectByType<LevelGenerator>();
                 int roomsOfType = gen != null
                     ? gen.GetAllRooms().FindAll(r => r.prefabData.roomType == table.roomType).Count

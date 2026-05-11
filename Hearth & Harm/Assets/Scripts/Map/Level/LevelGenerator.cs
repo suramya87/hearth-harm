@@ -360,33 +360,78 @@ public class LevelGenerator : MonoBehaviour
     {
         foreach (PlacedRoom room in placedRooms)
         {
-            if (room.connector == null) continue;
-            room.connector.CloseAllDoors();
+            if (room.connector == null || room.roomGrid == null) continue;
 
-            bool isBoss = room.prefabData.roomType == RoomType.Boss;
+            // Start by assuming every side is a solid wall
+            room.connector.CloseAllDoors();
 
             foreach (Direction dir in Enum.GetValues(typeof(Direction)))
             {
-                if (!connections.TryGetValue((room, dir), out PlacedRoom neighbour)) continue;
-
-                if (isBoss && neighbour.prefabData.roomType == RoomType.End)
+                // If there is NO connection in this direction, it's a permanent wall
+                if (!connections.TryGetValue((room, dir), out PlacedRoom neighbour))
                 {
+                    room.roomGrid.SetDoorState(dir, false);
+                    continue;
+                }
+
+                // Check if this is a Boss -> End Room connection
+                bool isBossExit = (room.prefabData.roomType == RoomType.Boss && 
+                                neighbour.prefabData.roomType == RoomType.End);
+
+                if (isBossExit)
+                {
+                    // Logic: It's a door, but it starts CLOSED
+                    room.roomGrid.SetDoorState(dir, false);
+                    
                     var strip = GetStripObject(room.connector, dir);
                     if (strip != null)
                     {
-                        var brd = strip.GetComponent<BossRoomDoor>()
-                               ?? strip.AddComponent<BossRoomDoor>();
+                        var brd = strip.GetComponent<BossRoomDoor>() ?? strip.AddComponent<BossRoomDoor>();
                         brd.Initialize(room.roomGrid);
                     }
                 }
                 else
                 {
+                    // Logic: Normal hallway, starts OPEN
+                    room.roomGrid.SetDoorState(dir, true);
                     room.connector.SetDoorOpen(dir, true);
                 }
             }
         }
     }
 
+    /// <summary>
+    /// Writes each door's open/closed decision into the room's RoomGrid so that
+    /// RoomDoor can restore the correct visual state on every subsequent room entry.
+    /// Must be called after InitRoomGrids() so that room.roomGrid is valid.
+    /// </summary>
+private void RecordDoorStates()
+{
+    foreach (PlacedRoom room in placedRooms)
+    {
+        if (room.roomGrid == null || room.connector == null) continue;
+
+        foreach (Direction dir in Enum.GetValues(typeof(Direction)))
+        {
+            bool hasConnection = connections.ContainsKey((room, dir));
+
+            if (!hasConnection)
+            {
+                room.roomGrid.SetDoorState(dir, false);
+                room.connector.SetDoorOpen(dir, false);
+            }
+            else
+            {
+                PlacedRoom neighbour = connections[(room, dir)];
+                bool isBossExit = (room.prefabData.roomType == RoomType.Boss && 
+                                   neighbour.prefabData.roomType == RoomType.End);
+                
+                room.roomGrid.SetDoorState(dir, !isBossExit);
+                room.connector.SetDoorOpen(dir, !isBossExit);
+            }
+        }
+    }
+}
     private void InitRoomGrids()
     {
         foreach (PlacedRoom room in placedRooms)
@@ -401,6 +446,9 @@ public class LevelGenerator : MonoBehaviour
                            ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
             spawnReader.Initialize();
         }
+
+        // Now that roomGrid refs are valid, persist door state into them.
+        RecordDoorStates();
     }
 
     private void InitDoors()
@@ -425,8 +473,6 @@ public class LevelGenerator : MonoBehaviour
             ? playerPrefabs[index] : playerPrefabs[0];
         if (prefab == null) { Debug.LogError("[LevelGenerator] Player prefab null!"); return; }
 
-        // Prefer a dedicated PlayerSpawnTile first, then fall back to a central
-        // floor tile that is NOT a SpawnPointTile (hallway-entry cell).
         GridPosition? sp = FindPlayerSpawnTile(start)
                         ?? FindCentralFloorTile(start.roomGrid);
 
@@ -443,7 +489,6 @@ public class LevelGenerator : MonoBehaviour
 
     /// <summary>
     /// Looks for a PlayerSpawnTile in any tilemap on the start room.
-    /// This is the preferred, explicit spawn location.
     /// </summary>
     private static GridPosition? FindPlayerSpawnTile(PlacedRoom room)
     {
@@ -460,17 +505,15 @@ public class LevelGenerator : MonoBehaviour
 
     /// <summary>
     /// Finds a walkable floor tile near the room's centre that is NOT a
-    /// SpawnPointTile (hallway-entry cell). Used as the fallback spawn when no
-    /// PlayerSpawnTile is present in the start room.
+    /// SpawnPointTile (hallway-entry cell). Used as the fallback spawn position.
     /// </summary>
     private static GridPosition? FindCentralFloorTile(RoomGrid roomGrid)
     {
         var tilemap = roomGrid.GetFloorTilemap();
         if (tilemap == null) return null;
 
-        // Build a set of all SpawnPointTile positions so we can exclude them
         var spawnCells = new HashSet<GridPosition>();
-        var root       = tilemap.transform.parent; // room root
+        var root       = tilemap.transform.parent;
         if (root != null)
         {
             foreach (Tilemap tm in root.GetComponentsInChildren<Tilemap>())
@@ -487,14 +530,13 @@ public class LevelGenerator : MonoBehaviour
         int cx     = (bounds.xMin + bounds.xMax) / 2;
         int cy     = (bounds.yMin + bounds.yMax) / 2;
 
-        // Spiral outward from centre looking for a walkable non-spawn tile
         for (int r = 0; r < Mathf.Max(bounds.size.x, bounds.size.y); r++)
         for (int x = cx - r; x <= cx + r; x++)
         for (int y = cy - r; y <= cy + r; y++)
         {
             if (Mathf.Abs(x - cx) != r && Mathf.Abs(y - cy) != r) continue;
             var gp = new GridPosition(x, y);
-            if (spawnCells.Contains(gp))    continue; // skip hallway-entry cells
+            if (spawnCells.Contains(gp))    continue;
             if (!roomGrid.IsWalkable(gp))   continue;
             return gp;
         }
