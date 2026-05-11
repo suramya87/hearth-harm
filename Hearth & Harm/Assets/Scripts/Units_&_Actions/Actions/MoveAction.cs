@@ -12,9 +12,18 @@ public class MoveAction : BaseAction
     public bool IsActive => isActive;
 
     private int MoveDistance => playerStats != null
-        ? Mathf.Max(0, playerStats.currentStamina)
-        : maxMoveDistance;
+    ? Mathf.Max(0, playerStats.currentStamina)
+    : maxMoveDistance;
 
+    private bool IsInCombatRoom()
+    {
+        RoomGrid room = unit != null ? unit.GetCurrentRoomGrid() : null;
+
+        if (room == null || EnemyManager.Instance == null)
+            return false;
+
+        return EnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
+    }
     public override string GetActionName() => "Move";
 
     /// <summary>
@@ -104,8 +113,8 @@ public class MoveAction : BaseAction
         room.RemoveUnitAtGridPosition(startPos, unit);
         room.AddUnitAtGridPosition(finalPos, unit);
 
-        if (playerStats != null)
-            playerStats.currentStamina = Mathf.Max(0, playerStats.currentStamina - steps);
+        if (playerStats != null && IsInCombatRoom())
+            playerStats.SpendStamina(steps);
 
         var waypoints = new List<Vector3>();
         foreach (var gp in usedPath) waypoints.Add(room.GetWorldPosition(gp));
