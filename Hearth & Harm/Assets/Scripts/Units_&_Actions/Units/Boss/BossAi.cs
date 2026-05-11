@@ -1,0 +1,227 @@
+using System;
+using System.Collections;
+using UnityEngine;
+
+[RequireComponent(typeof(BossUnit))]
+[RequireComponent(typeof(BossPhaseController))]
+public class BossAI : MonoBehaviour
+{
+    [SerializeField, Min(0f)] private float stepDelay        = 0.25f;
+    [SerializeField, Min(0f)] private float actionDelay      = 0.4f;
+    [SerializeField, Min(1)]  private int   invisCooldown    = 3;  // turns between invis uses
+    [SerializeField, Min(1)]  private int   rangedCooldown   = 1;  // turns between ranged shots
+
+    private BossUnit              boss;
+    private BossPhaseController   phase;
+    private BossDamageInterceptor interceptor;
+
+    private int turnCount        = 0;
+    private int invisCooldownLeft   = 0;
+    private int rangedCooldownLeft  = 0;
+
+    private void Awake()
+    {
+        boss        = GetComponent<BossUnit>();
+        phase       = GetComponent<BossPhaseController>();
+        interceptor = GetComponent<BossDamageInterceptor>();
+    }
+
+    private void Start()
+    {
+        // Give BossPhaseController its stats reference
+        phase.Initialize(boss.Stats);
+    }
+
+    // ── Entry point called by BossEnemyUnitShim (see bottom of file) ───────
+
+    public void TakeTurn(Action onComplete)
+    {
+        if (!boss.CanActThisTurn() || boss.IsDead) { onComplete?.Invoke(); return; }
+
+        var target = FindPlayer();
+        if (target == null) { onComplete?.Invoke(); return; }
+
+        StartCoroutine(TurnRoutine(target, onComplete));
+    }
+
+    // ── Main turn coroutine ────────────────────────────────────────────────
+
+    private IEnumerator TurnRoutine(Unit player, Action onComplete)
+    {
+        turnCount++;
+        var stats = boss.Stats;
+        var room  = boss.CurrentRoomGrid;
+
+        if (stats == null || room == null) { onComplete?.Invoke(); yield break; }
+
+        var myCenter  = boss.CenterGridPosition();
+        var playerPos = player.GetGridPosition();
+        int dist      = myCenter.ManhattanDistance(playerPos);
+
+        if (stats.kiteEnabled && dist < stats.kiteRange)
+        {
+            var flee = FindFleePosition(myCenter, playerPos, room, stats.moveRange);
+            if (flee.HasValue)
+            {
+                boss.MoveToPosition(flee.Value);
+                yield return new WaitForSeconds(stepDelay);
+                myCenter = boss.CenterGridPosition();
+                dist     = myCenter.ManhattanDistance(playerPos);
+            }
+        }
+        else if (dist > stats.attackRange)
+        {
+            var path  = new Pathfinder(room).FindPathToRange(myCenter, playerPos, stats.attackRange);
+            int steps = Mathf.Min(path.Count, stats.moveRange);
+
+            for (int i = 0; i < steps; i++)
+            {
+                if (boss.IsDead) { onComplete?.Invoke(); yield break; }
+                var next = path[i];
+
+                if (!CanMoveTo(next, room)) break;
+
+                boss.MoveToPosition(next);
+                yield return new WaitForSeconds(stepDelay);
+            }
+
+            myCenter = boss.CenterGridPosition();
+            dist     = myCenter.ManhattanDistance(playerPos);
+        }
+
+        yield return new WaitForSeconds(actionDelay);
+        if (boss.IsDead) { onComplete?.Invoke(); yield break; }
+
+
+        bool usedAbility = false;
+
+        if (phase.CurrentPhase == BossPhaseController.BossPhase.Enraged
+            && !phase.IsInvisible
+            && invisCooldownLeft <= 0)
+        {
+            phase.SetInvisible(true);
+            invisCooldownLeft = invisCooldown;
+            usedAbility       = true;
+            Debug.Log($"[BossAI] {stats.bossName} went invisible!");
+            yield return new WaitForSeconds(actionDelay);
+        }
+
+        if (invisCooldownLeft  > 0) invisCooldownLeft--;
+        if (rangedCooldownLeft > 0) rangedCooldownLeft--;
+
+        if (!usedAbility || phase.CurrentPhase != BossPhaseController.BossPhase.Enraged)
+        {
+            if (dist <= stats.attackRange && rangedCooldownLeft <= 0)
+            {
+                player = FindPlayer() ?? player;
+                PerformRangedAttack(player, stats);
+                rangedCooldownLeft = rangedCooldown;
+                yield return new WaitForSeconds(actionDelay);
+            }
+        }
+
+        if (!boss.IsDead && dist <= 1 && stats.cleaveAttackData != null)
+        {
+            player = FindPlayer() ?? player;
+            PerformCleave(player, stats);
+            yield return new WaitForSeconds(actionDelay);
+        }
+
+        phase.TickInvisibility();
+
+        onComplete?.Invoke();
+    }
+
+    // ── Attacks ────────────────────────────────────────────────────────────
+
+    private void PerformRangedAttack(Unit player, BossStats stats)
+    {
+        if (stats.rangedAttackData == null)
+        {
+            Debug.LogWarning($"[BossAI] {stats.bossName} has no rangedAttackData.");
+            return;
+        }
+
+        int dmg = stats.rangedAttackData.CalculateDamage();
+        AttackSpritePopup.Show(stats.rangedAttackData, player.transform.position);
+
+        DealDamageToPlayer(player, dmg);
+        Debug.Log($"[BossAI] {stats.bossName} ranged attack → {dmg} dmg");
+    }
+
+    private void PerformCleave(Unit player, BossStats stats)
+    {
+        if (stats.cleaveAttackData == null) return;
+
+        int dmg = stats.cleaveAttackData.CalculateDamage();
+        AttackSpritePopup.Show(stats.cleaveAttackData, player.transform.position);
+
+        DealDamageToPlayer(player, dmg);
+        Debug.Log($"[BossAI] {stats.bossName} cleave → {dmg} dmg");
+    }
+
+    // ── Damage routing ─────────────────────────────────────────────────────
+
+    private static void DealDamageToPlayer(Unit player, int dmg)
+    {
+        if (GameManager.IsMultiplayer)
+            NetworkedHealthBridge.TakeDamage(player.gameObject, dmg);
+        else
+            player.GetComponent<HealthComponent>()?.TakeDamage(dmg);
+    }
+
+    // ── Pathfinding helpers ────────────────────────────────────────────────
+
+    private bool CanMoveTo(GridPosition origin, RoomGrid room)
+    {
+        int size = boss.Stats != null ? 2 : 2; // always 2×2 for the boss
+        for (int dx = 0; dx < size; dx++)
+        for (int dy = 0; dy < size; dy++)
+        {
+            var cell = new GridPosition(origin.x + dx, origin.y + dy);
+            if (!room.IsWalkableIgnoreOccupancy(cell)) return false;
+
+            // Allow stepping through own cells
+            if (boss.OccupiedCells.Contains(cell)) continue;
+
+            // Block on enemies or players
+            if (room.HasAnyEnemyOnGridPosition(cell))  return false;
+            if (room.HasAnyUnitOnGridPosition(cell))    return false;
+        }
+        return true;
+    }
+
+    private GridPosition? FindFleePosition(GridPosition center, GridPosition player,
+                                            RoomGrid room, int moveRange)
+    {
+        GridPosition? best  = null;
+        int           bestD = center.ManhattanDistance(player);
+
+        for (int dx = -moveRange; dx <= moveRange; dx++)
+        for (int dy = -moveRange; dy <= moveRange; dy++)
+        {
+            if (Mathf.Abs(dx) + Mathf.Abs(dy) > moveRange) continue;
+            var candidate = new GridPosition(center.x + dx, center.y + dy);
+            if (!CanMoveTo(candidate, room)) continue;
+            int d = candidate.ManhattanDistance(player);
+            if (d > bestD) { bestD = d; best = candidate; }
+        }
+        return best;
+    }
+
+    // ── Player targeting ───────────────────────────────────────────────────
+
+    private Unit FindPlayer()
+    {
+        // MP uses NetworkedEnemyBridge, SP uses PlayerTarget singleton
+        if (GameManager.IsMultiplayer)
+            return NetworkedEnemyBridge.FindNearestPlayerInRoom(
+                boss.CurrentRoomGrid, boss.CenterGridPosition());
+
+        var pt = PlayerTarget.Instance;
+        return pt != null && boss.CurrentRoomGrid != null
+               && PlayerTarget.Instance.IsInRoom(boss.CurrentRoomGrid)
+               ? pt.GetUnit()
+               : null;
+    }
+}
