@@ -154,6 +154,7 @@ public class LevelGenerator : MonoBehaviour
             return false;
         }
 
+        // ── 1. Place start ────────────────────────────────────────────────────
         PlacedRoom start = PlaceRoom(RoomType.Start, Vector2Int.zero, Vector3.zero);
         if (start == null) return false;
 
@@ -161,16 +162,21 @@ public class LevelGenerator : MonoBehaviour
             WaveManager.Instance?.GetMinRooms() ?? minRooms,
             (WaveManager.Instance?.GetMaxRooms() ?? maxRooms) + 1);
 
+        // ── 2. Place normal / special rooms (never Boss or End here) ──────────
         var  queue        = new Queue<PlacedRoom>();
         int  placedMiddle = 0;
-        bool bossPlaced   = false;
 
         queue.Enqueue(start);
 
-        int        attempts   = 0;
-        PlacedRoom lastPlaced = start;
+        // Reserve 1 slot for boss + 1 for end if boss is enabled
+        int normalTarget = spawnBossRoom && GetRandomPrefab(RoomType.Boss) != null
+            ? Mathf.Max(0, targetNormalRooms - 1)   // leave one slot for boss
+            : targetNormalRooms;
 
-        while (queue.Count > 0 && attempts < 1000)
+        PlacedRoom lastNormal = start;
+        int attempts = 0;
+
+        while (queue.Count > 0 && placedMiddle < normalTarget && attempts < 1000)
         {
             attempts++;
             PlacedRoom current = queue.Dequeue();
@@ -180,66 +186,83 @@ public class LevelGenerator : MonoBehaviour
 
             foreach (Direction dir in dirs)
             {
-                int  middleNeeded  = targetNormalRooms - placedMiddle;
-                bool needBoss      = spawnBossRoom && !bossPlaced
-                                     && GetRandomPrefab(RoomType.Boss) != null;
-                int  reservedSlots = 1 + (needBoss ? 1 : 0);
+                if (placedMiddle >= normalTarget) break;
 
-                if (middleNeeded <= 0) break;
-
-                RoomType type;
-                if (needBoss && middleNeeded == reservedSlots)
-                    type = RoomType.Boss;
-                else if (Random.value < specialRoomChance)
-                    type = RoomType.Special;
-                else
-                    type = RoomType.Normal;
+                RoomType type = Random.value < specialRoomChance
+                    ? RoomType.Special
+                    : RoomType.Normal;
 
                 PlacedRoom newRoom = PlaceRoomInDirection(current, dir, type);
                 if (newRoom == null) continue;
 
                 Connect(current, newRoom, dir);
-                lastPlaced = newRoom;
+                lastNormal = newRoom;
                 placedMiddle++;
-                if (type == RoomType.Boss) bossPlaced = true;
-
                 queue.Enqueue(newRoom);
-                if (placedMiddle >= targetNormalRooms) break;
             }
-
-            if (placedMiddle >= targetNormalRooms) break;
         }
 
-        if (placedMiddle < targetNormalRooms)
-            Debug.LogWarning($"[LevelGenerator] Only placed {placedMiddle}/{targetNormalRooms} rooms.");
+        if (placedMiddle < normalTarget)
+            Debug.LogWarning($"[LevelGenerator] Only placed {placedMiddle}/{normalTarget} normal rooms.");
 
-        bool endPlaced = false;
-        var  candidates = new List<PlacedRoom>(placedRooms);
-        candidates.Remove(lastPlaced);
-        candidates.Insert(0, lastPlaced);
-
-        foreach (PlacedRoom candidate in candidates)
+        // ── 3. Place Boss room off the last placed normal room ────────────────
+        PlacedRoom bossRoom = null;
+        if (spawnBossRoom && GetRandomPrefab(RoomType.Boss) != null)
         {
-            if (candidate.prefabData.roomType == RoomType.End) continue;
-            var available = GetAvailableDirections(candidate);
-            if (available.Count == 0) continue;
+            bossRoom = TryPlaceRoomOnto(lastNormal, RoomType.Boss);
 
-            PlacedRoom endRoom = PlaceRoomInDirection(candidate, available[0], RoomType.End);
-            if (endRoom != null)
+            // Fallback: walk backwards through placed rooms until we find a free slot
+            if (bossRoom == null)
             {
-                Connect(candidate, endRoom, available[0]);
-                endPlaced = true;
-                break;
+                for (int i = placedRooms.Count - 1; i >= 0 && bossRoom == null; i--)
+                {
+                    if (placedRooms[i].prefabData.roomType == RoomType.Start) continue;
+                    bossRoom = TryPlaceRoomOnto(placedRooms[i], RoomType.Boss);
+                }
+            }
+
+            if (bossRoom == null)
+                Debug.LogWarning("[LevelGenerator] Could not place Boss room — level will have no boss.");
+        }
+
+        // ── 4. Place End room off the Boss (or last normal if no boss) ────────
+        PlacedRoom anchorForEnd = bossRoom ?? lastNormal;
+        PlacedRoom endRoom = TryPlaceRoomOnto(anchorForEnd, RoomType.End);
+
+        // Fallback: try every room except start
+        if (endRoom == null)
+        {
+            for (int i = placedRooms.Count - 1; i >= 0 && endRoom == null; i--)
+            {
+                if (placedRooms[i].prefabData.roomType == RoomType.Start) continue;
+                if (placedRooms[i] == bossRoom) continue; // already tried
+                endRoom = TryPlaceRoomOnto(placedRooms[i], RoomType.End);
             }
         }
 
-        if (!endPlaced)
+        if (endRoom == null)
         {
             Debug.LogError("[LevelGenerator] Could not place End room!");
             return false;
         }
 
         return true;
+    }
+
+    private PlacedRoom TryPlaceRoomOnto(PlacedRoom anchor, RoomType type)
+    {
+        var dirs = GetAvailableDirections(anchor);
+        Shuffle(dirs);
+
+        foreach (Direction dir in dirs)
+        {
+            PlacedRoom placed = PlaceRoomInDirection(anchor, dir, type);
+            if (placed == null) continue;
+
+            Connect(anchor, placed, dir);
+            return placed;
+        }
+        return null;
     }
 
     private PlacedRoom PlaceRoom(RoomType type, Vector2Int layoutPos, Vector3 worldPos)

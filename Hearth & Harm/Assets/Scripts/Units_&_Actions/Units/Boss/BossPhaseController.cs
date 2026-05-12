@@ -19,10 +19,11 @@ public class BossPhaseController : MonoBehaviour
 
     private readonly List<EnemyUnit> spawnedMinions = new();
 
-    private bool phaseTriggered = false;
-    private bool minionsDead    = false;
-    private bool invisActive    = false;
-    private int  invisTurnsLeft = 0;
+    private bool phaseTriggered      = false;
+    private bool minionsDead         = false;
+    private bool invisActive         = false;
+    private int  invisTurnsLeft      = 0;
+    private bool minionWaveDispatched = false; 
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -45,7 +46,6 @@ public class BossPhaseController : MonoBehaviour
         if (health != null) health.OnHealthChanged -= OnHealthChanged;
     }
 
-    // Called by BossAI.Awake so stats are ready before any damage lands
     public void Initialize(BossStats s)
     {
         stats = s;
@@ -56,7 +56,6 @@ public class BossPhaseController : MonoBehaviour
 
     private void OnHealthChanged(int current, int max)
     {
-        // Guard — if Initialize hasn't been called yet, skip
         if (stats == null)
         {
             Debug.LogWarning("[BossPhaseController] OnHealthChanged fired but stats is null — Initialize not called yet.");
@@ -101,6 +100,12 @@ public class BossPhaseController : MonoBehaviour
 
     public void SetInvisible(bool on)
     {
+        if (stats == null)
+        {
+            Debug.LogError("[BossPhaseController] SetInvisible called before Initialize!");
+            return;
+        }
+
         invisActive = on;
         boss.SetAlpha(on ? stats.invisAlpha : 1f);
 
@@ -133,9 +138,15 @@ public class BossPhaseController : MonoBehaviour
 
     private IEnumerator SpawnMinionWave()
     {
-        if (spawner == null || stats.minionPrefabs.Count == 0) yield break;
+        if (spawner == null || !stats.CanSpawnMinions)
+        {
+            minionWaveDispatched = true;
+            yield break;
+        }
 
-        yield return null;
+        yield return null; 
+
+        minionWaveDispatched = true; 
 
         var room = boss.CurrentRoomGrid;
         if (room == null) yield break;
@@ -170,6 +181,8 @@ public class BossPhaseController : MonoBehaviour
 
     private void CheckMinionStatus()
     {
+        if (!minionWaveDispatched) return;
+
         spawnedMinions.RemoveAll(m => m == null || m.IsDead);
         if (CurrentPhase == BossPhase.Enraged && spawnedMinions.Count == 0 && !minionsDead)
             EnterVulnerable();

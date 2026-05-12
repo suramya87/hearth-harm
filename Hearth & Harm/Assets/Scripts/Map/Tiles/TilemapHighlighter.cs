@@ -4,17 +4,6 @@ using UnityEngine.Tilemaps;
 
 /// <summary>
 /// Paints move/range/AoE highlights onto the active floor tilemap.
-///
-/// KEY FIXES vs original:
-///   1. RefreshTilemap() and Update() both resolve the active tilemap from
-///      unit.GetCurrentRoomGrid() first — this means the highlighter
-///      automatically follows the unit into hallways without any extra
-///      event wiring.
-///   2. OnRoomChanged handles a null room gracefully (happens when the
-///      player is in transit through a hallway and RoomManager has no
-///      current room set).
-///   3. activeGrid is resolved from the unit's current grid so mouse→tile
-///      conversion works correctly on hallway tiles too.
 /// </summary>
 public class TilemapHighlighter : MonoBehaviour
 {

@@ -23,7 +23,6 @@ public class BossUnit : MonoBehaviour, IHasHealth
     private RoomGrid              currentRoomGrid;
     private HealthComponent       health;
     private BossDamageInterceptor interceptor;
-    private SpriteRenderer[]      renderers;
     private bool                  initialized;
     private int                   turnsWaited;
 
@@ -48,7 +47,7 @@ public class BossUnit : MonoBehaviour, IHasHealth
     {
         health      = GetComponent<HealthComponent>();
         interceptor = GetComponent<BossDamageInterceptor>();
-        renderers   = GetComponentsInChildren<SpriteRenderer>();
+        // NOTE: renderers are NOT cached here — SetAlpha always fetches fresh
     }
 
     private void Start()
@@ -138,11 +137,11 @@ public class BossUnit : MonoBehaviour, IHasHealth
 
     public void SetAlpha(float alpha)
     {
-        // Refresh in case Awake ran before child renderers existed
-        if (renderers == null || renderers.Length == 0)
-            renderers = GetComponentsInChildren<SpriteRenderer>();
+        var allRenderers = GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
 
-        foreach (var sr in renderers)
+        Debug.Log($"[BossUnit] SetAlpha({alpha}) — found {allRenderers.Length} renderers");
+
+        foreach (var sr in allRenderers)
         {
             if (sr == null) continue;
             var c = sr.color;

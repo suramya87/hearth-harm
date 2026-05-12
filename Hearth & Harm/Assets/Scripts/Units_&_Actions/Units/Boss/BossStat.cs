@@ -27,11 +27,11 @@ public class BossStats : ScriptableObject
 
     [Header("Minion Spawning")]
     public List<GameObject> minionPrefabs        = new();
-    [Min(0)] public int     minionsPerWave        = 3;  // 0 = no spawning
-    [Min(0)] public int     maxConcurrentMinions  = 5;  // 0 = no spawning
+    [Min(0)] public int     minionsPerWave        = 3;  
+    [Min(0)] public int     maxConcurrentMinions  = 5;  
 
     [Header("Phase Damage Modifiers")]
-    [Range(0f, 3f)] public float increasedDamageMultiplier = 1.75f; // vulnerable phase
+    [Range(0f, 3f)] public float increasedDamageMultiplier = 1.75f; 
 
     [Header("Kiting")]
     public bool  kiteEnabled = false;
@@ -39,7 +39,6 @@ public class BossStats : ScriptableObject
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    /// <summary>True if the boss can spawn minions at all.</summary>
     public bool CanSpawnMinions =>
         minionPrefabs != null &&
         minionPrefabs.Count > 0 &&

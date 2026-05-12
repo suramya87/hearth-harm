@@ -26,7 +26,6 @@ public class BossAI : MonoBehaviour
         boss  = GetComponent<BossUnit>();
         phase = GetComponent<BossPhaseController>();
 
-        // Initialize here so phase system is ready before any damage lands
         if (boss.Stats != null)
             phase.Initialize(boss.Stats);
     }
@@ -55,7 +54,6 @@ public class BossAI : MonoBehaviour
     {
         turnCount++;
 
-        // Snapshot stats for this turn — intentional, won't reflect mid-turn stat swaps
         var stats = boss.Stats;
         var room  = boss.CurrentRoomGrid;
 
@@ -65,11 +63,7 @@ public class BossAI : MonoBehaviour
         var playerPos = player.GetGridPosition();
         int dist      = myCenter.ManhattanDistance(playerPos);
 
-        // ── 1. MOVE PHASE ──────────────────────────────────────────────────
-        // Invisible: always flee
-        // Visible + kite enabled + too close: flee
-        // Visible + too far: chase
-
+        // MOVE PHASE ──────────────────────────────────────────────────
         if (phase.IsInvisible)
         {
             var flee = FindFleePosition(myCenter, playerPos, room, stats.moveRange);
@@ -112,10 +106,7 @@ public class BossAI : MonoBehaviour
         yield return new WaitForSeconds(actionDelay);
         if (boss.IsDead) { onComplete?.Invoke(); yield break; }
 
-        // ── 2. ABILITY PHASE ───────────────────────────────────────────────
-        // Invisible: ranged attack only
-        // Visible: invis trigger → ranged → cleave
-        // Going invisible and attacking on the same turn is intentionally blocked
+        // ABILITY PHASE ───────────────────────────────────────────────
 
         if (phase.IsInvisible)
         {
@@ -131,7 +122,6 @@ public class BossAI : MonoBehaviour
         {
             bool wentInvis = false;
 
-            // Try to go invisible in Enraged phase
             if (phase.CurrentPhase == BossPhaseController.BossPhase.Enraged
                 && !phase.IsInvisible
                 && invisCooldownLeft <= 0)
@@ -142,7 +132,6 @@ public class BossAI : MonoBehaviour
                 yield return new WaitForSeconds(actionDelay);
             }
 
-            // Ranged attack — skipped if we just went invisible this turn
             if (!wentInvis && !boss.IsDead && dist <= stats.attackRange && rangedCooldownLeft <= 0)
             {
                 player = FindPlayer() ?? player;
@@ -151,7 +140,6 @@ public class BossAI : MonoBehaviour
                 yield return new WaitForSeconds(actionDelay);
             }
 
-            // Cleave if player is adjacent and visible
             if (!boss.IsDead && dist <= 1 && stats.cleaveAttackData != null)
             {
                 player = FindPlayer() ?? player;
@@ -160,7 +148,7 @@ public class BossAI : MonoBehaviour
             }
         }
 
-        // ── 3. END OF TURN ─────────────────────────────────────────────────
+        // END OF TURN ─────────────────────────────────────────────────
 
         if (invisCooldownLeft  > 0) invisCooldownLeft--;
         if (rangedCooldownLeft > 0) rangedCooldownLeft--;
