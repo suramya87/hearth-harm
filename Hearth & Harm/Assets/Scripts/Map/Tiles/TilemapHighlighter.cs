@@ -29,6 +29,12 @@ public class TilemapHighlighter : MonoBehaviour
     [SerializeField] private Color aoeColor   = new(1f,  0.15f, 0.15f, 1f);
     [SerializeField] private Color hoverColor = new(1f,  1f,   1f,   0.4f);
 
+    [Header("Enemy Preview")]
+    [SerializeField] private Color enemyMoveColor = new(1f, 0.25f, 0.25f, 0.65f);
+
+    private EnemyUnit previewEnemy;
+    private List<GridPosition> previewEnemyPositions;
+
     private Tilemap                          paintedTilemap;
     private Dictionary<Vector3Int, TileBase> originalTiles = new();
     private HashSet<Vector3Int>              painted        = new();
@@ -130,6 +136,12 @@ public class TilemapHighlighter : MonoBehaviour
 
         ResetAll();
         GridCostVisualizer.Instance?.ClearAll();
+
+        if (previewEnemy != null && previewEnemyPositions != null)
+        {
+            Paint(previewEnemyPositions, enemyMoveColor);
+            return;
+        }
 
         if (!IsPlayerPhaseNow()) return;
 
@@ -248,4 +260,58 @@ public class TilemapHighlighter : MonoBehaviour
     }
 
     public void HideAll() => ResetAll();
+
+    public void ShowEnemyMoveRange(EnemyUnit enemy)
+    {
+        previewEnemy = enemy;
+        previewEnemyPositions = BuildEnemyMoveRange(enemy);
+    }
+
+    public void ClearEnemyPreview()
+    {
+        previewEnemy = null;
+        previewEnemyPositions = null;
+    }
+
+    private List<GridPosition> BuildEnemyMoveRange(EnemyUnit enemy)
+    {
+        List<GridPosition> positions = new();
+
+        if (enemy == null || enemy.Stats == null || enemy.CurrentRoomGrid == null)
+            return positions;
+
+        RoomGrid room = enemy.CurrentRoomGrid;
+        GridPosition enemyPos = enemy.GridPosition;
+        int range = enemy.Stats.moveRange;
+
+        Pathfinder pf = new Pathfinder(room);
+
+        for (int dx = -range; dx <= range; dx++)
+            for (int dy = -range; dy <= range; dy++)
+            {
+                if (Mathf.Abs(dx) + Mathf.Abs(dy) > range)
+                    continue;
+
+                if (dx == 0 && dy == 0)
+                    continue;
+
+                GridPosition test = new GridPosition(enemyPos.x + dx, enemyPos.y + dy);
+
+                if (!room.IsValidGridPosition(test))
+                    continue;
+
+                if (!room.IsWalkableIgnoreOccupancy(test))
+                    continue;
+
+                if (room.HasAnyUnitOnGridPosition(test))
+                    continue;
+
+                List<GridPosition> path = pf.FindPath(enemyPos, test);
+
+                if (path != null && path.Count > 0 && path.Count <= range)
+                    positions.Add(test);
+            }
+
+        return positions;
+    }
 }

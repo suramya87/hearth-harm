@@ -14,6 +14,7 @@ public class EnemyHoverTarget : MonoBehaviour
 
     private void OnMouseEnter()
     {
+        TilemapHighlighter.Instance?.ShowEnemyMoveRange(enemyUnit);
         if (enemyUnit == null || enemyUnit.IsDead)
             return;
 
@@ -23,6 +24,7 @@ public class EnemyHoverTarget : MonoBehaviour
 
     private void OnMouseExit()
     {
+        TilemapHighlighter.Instance?.ClearEnemyPreview();
         if (enemyUnit == null)
             return;
 

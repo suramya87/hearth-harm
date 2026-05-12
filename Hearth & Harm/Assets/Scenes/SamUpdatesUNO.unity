@@ -4863,6 +4863,77 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 407720607}
   m_CullTransparentMesh: 1
+--- !u!1 &410450789
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 410450790}
+  - component: {fileID: 410450792}
+  - component: {fileID: 410450791}
+  m_Layer: 5
+  m_Name: EnemyHealthController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &410450790
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 410450789}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2098575476}
+  m_Father: {fileID: 1617025422}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &410450791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 410450789}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a1388868b5f2484db4cee5f02a74be7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyHealthContainerUI
+  fireMax: {fileID: 340459814}
+  fireHigh: {fileID: 1429315923}
+  fireMedium: {fileID: 390331390}
+  fireLow: {fileID: 2044922128}
+  hoverOverlay: {fileID: 1295089986}
+  healthText: {fileID: 1729182691}
+  root: {fileID: 2098575475}
+  hideDelay: 2
+--- !u!114 &410450792
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 410450789}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00c37a7708569ec4d8f4bd5f2ee94fbf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyHealthUI
+  healthUI: {fileID: 410450791}
 --- !u!1 &448167842
 GameObject:
   m_ObjectHideFlags: 0
@@ -18380,7 +18451,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 636925372}
-  - {fileID: 2098575476}
+  - {fileID: 410450790}
   - {fileID: 1126100740}
   - {fileID: 1450848183}
   - {fileID: 2111032864}
@@ -23377,10 +23448,8 @@ GameObject:
   - component: {fileID: 2098575476}
   - component: {fileID: 2098575480}
   - component: {fileID: 2098575479}
-  - component: {fileID: 2098575482}
-  - component: {fileID: 2098575481}
   m_Layer: 5
-  m_Name: EnemyHealth
+  m_Name: EnemyHealthVisual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -23394,7 +23463,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2098575475}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0.000022299466}
+  m_LocalPosition: {x: 0, y: 0, z: 0.000022299464}
   m_LocalScale: {x: 0.7033512, y: 1.1363988, z: 0.6266561}
   m_ConstrainProportionsScale: 1
   m_Children:
@@ -23405,11 +23474,11 @@ RectTransform:
   - {fileID: 2044922129}
   - {fileID: 1295089987}
   - {fileID: 1729182690}
-  m_Father: {fileID: 1617025422}
+  m_Father: {fileID: 410450790}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -59.299805, y: 272}
+  m_AnchoredPosition: {x: 850.70013, y: -218}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2098575479
@@ -23450,35 +23519,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2098575475}
   m_CullTransparentMesh: 1
---- !u!114 &2098575481
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2098575475}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 00c37a7708569ec4d8f4bd5f2ee94fbf, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyHealthUI
-  healthUI: {fileID: 2098575482}
---- !u!114 &2098575482
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2098575475}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b42323f0afed1934f8693c926174027b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HealthTargetUI
-  healthBarRoot: {fileID: 0}
-  slider: {fileID: 0}
-  hideDelay: 2
-  animSpeed: 5
 --- !u!1 &2111032863
 GameObject:
   m_ObjectHideFlags: 0
@@ -23726,6 +23766,7 @@ MonoBehaviour:
   rangeColor: {r: 1, g: 0.85, b: 0, a: 1}
   aoeColor: {r: 1, g: 0.15, b: 0.15, a: 1}
   hoverColor: {r: 1, g: 1, b: 1, a: 0.4}
+  enemyMoveColor: {r: 1, g: 0.25, b: 0.25, a: 0.65}
 --- !u!114 &2124875155
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -67,9 +67,11 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
             EnemyHealthUI.Instance?.SetTarget(health);
 
         CameraController2D.Instance?.SoftFocusOn(boundEnemy.transform);
+        TilemapHighlighter.Instance?.ShowEnemyMoveRange(boundEnemy);
     }
     public void OnPointerEnter(PointerEventData eventData)
     {
+        TilemapHighlighter.Instance?.ShowEnemyMoveRange(boundEnemy);
         if (boundEnemy == null) return;
 
         HealthComponent health = boundEnemy.GetComponent<HealthComponent>();
@@ -79,6 +81,7 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
 
     public void OnPointerExit(PointerEventData eventData)
     {
+        TilemapHighlighter.Instance?.ClearEnemyPreview();
         if (boundEnemy == null) return;
 
         EnemyHealthUI.Instance?.ClearTarget();
