@@ -11,7 +11,9 @@ public class SettingsPanelController : MonoBehaviour
     public GameObject audioPanel;
     public GameObject gameplayPanel;
     public GameObject controlsPanel;
-
+    [Header("External")]
+    public GameObject mainMenuRoot;
+    public GameObject settingsRoot;
     GameObject currentPanel;
 
     void OnEnable()
@@ -58,10 +60,16 @@ public class SettingsPanelController : MonoBehaviour
 
     public void Back()
     {
-        // If we're in a submenu, go back to main.
         if (currentPanel != null)
+        {
             ShowMain();
-        else
-            gameObject.SetActive(false); // optional: close settings entirely if already at main
+            return;
+        }
+
+        if (settingsRoot != null)
+            settingsRoot.SetActive(false);
+
+        if (mainMenuRoot != null)
+            mainMenuRoot.SetActive(true);
     }
 }
