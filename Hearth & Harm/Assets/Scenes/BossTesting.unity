@@ -8965,7 +8965,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 844300057
+  GlobalObjectIdHash: 1656386456
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -11964,20 +11964,8 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 85758c160dcf29e4c83d7df38ad8c7bc, type: 3}
-    roomType: 2
-    spawnWeight: 1
-    width: 0
-    height: 0
-    cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 46a048b74b8d759459815d6e64c97d2b, type: 3}
-    roomType: 2
-    spawnWeight: 1
-    width: 0
-    height: 0
-    cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 416319e4b3eec3a49863bd64d5307c6a, type: 3}
-    roomType: 2
+  - prefab: {fileID: 5114301450661476021, guid: 313d25a99c3d056489657604193db301, type: 3}
+    roomType: 4
     spawnWeight: 1
     width: 0
     height: 0
@@ -11988,8 +11976,8 @@ MonoBehaviour:
     width: 0
     height: 0
     cellSize: 0
-  - prefab: {fileID: 5114301450661476021, guid: 313d25a99c3d056489657604193db301, type: 3}
-    roomType: 4
+  - prefab: {fileID: 5114301450661476021, guid: 85758c160dcf29e4c83d7df38ad8c7bc, type: 3}
+    roomType: 2
     spawnWeight: 1
     width: 0
     height: 0
@@ -11997,10 +11985,10 @@ MonoBehaviour:
   hallwayTileSet: {fileID: 11400000, guid: 21108b0b5853d2d438107043f6c2f208, type: 2}
   hallwayCellSize: 1
   defaultHallwayWidth: 4
-  minRooms: 80
-  maxRooms: 100
-  specialRoomChance: 0.3
-  spawnBossRoom: 0
+  minRooms: 1
+  maxRooms: 5
+  specialRoomChance: 0
+  spawnBossRoom: 1
   roomSpacing: 16
   playerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
@@ -12033,7 +12021,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2436167234
+  GlobalObjectIdHash: 1954544209
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -17456,8 +17444,8 @@ MonoBehaviour:
   baseEnemyCount: 5
   enemiesPerLevel: 3
   maxEnemies: 40
-  baseMinRooms: 6
-  baseMaxRooms: 15
+  baseMinRooms: 1
+  baseMaxRooms: 2
   roomsPerLevel: 1
   maxRooms: 20
 --- !u!4 &1650586711
@@ -18461,7 +18449,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2036778657
+  GlobalObjectIdHash: 24831670
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1

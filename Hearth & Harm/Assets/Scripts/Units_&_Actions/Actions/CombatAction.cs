@@ -147,6 +147,10 @@ public class CombatAction : BaseAction
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
 
+        // Track already-hit enemies this attack to avoid multi-cell boss double hits
+        var hitEnemies = new HashSet<EnemyUnit>();
+        var hitUnits   = new HashSet<Unit>();
+
         foreach (var pos in positions)
         {
             if (!room.IsValidGridPosition(pos)) continue;
@@ -154,14 +158,21 @@ public class CombatAction : BaseAction
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
+                if (!hitEnemies.Add(enemy)) continue; // already hit this enemy
 
-                enemy.Health.TakeDamage(dmg);
+                var interceptor = enemy.GetComponent<BossDamageInterceptor>();
+                if (interceptor != null)
+                    interceptor.TakeDamage(dmg);
+                else
+                    enemy.Health.TakeDamage(dmg);
+
                 DamageNumber.Spawn(damageNumberPrefab, enemy.transform.position, dmg);
             }
 
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
+                if (!hitUnits.Add(target)) continue; // already hit this unit
 
                 target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
                 DamageNumber.Spawn(damageNumberPrefab, target.transform.position, dmg);
@@ -174,6 +185,9 @@ public class CombatAction : BaseAction
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
 
+        var hitEnemies = new HashSet<EnemyUnit>();
+        var hitUnits   = new HashSet<Unit>();
+
         foreach (var pos in positions)
         {
             if (!room.IsValidGridPosition(pos)) continue;
@@ -181,17 +195,24 @@ public class CombatAction : BaseAction
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
-                NetworkedHealthBridge.TakeDamage(enemy.gameObject, dmg);
+                if (!hitEnemies.Add(enemy)) continue;
+
+                var interceptor = enemy.GetComponent<BossDamageInterceptor>();
+                if (interceptor != null)
+                    interceptor.TakeDamage(dmg);
+                else
+                    NetworkedHealthBridge.TakeDamage(enemy.gameObject, dmg);
             }
 
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
+                if (!hitUnits.Add(target)) continue;
+
                 NetworkedHealthBridge.TakeDamage(target.gameObject, dmg);
             }
         }
     }
-    
 
     // ── Valid targets ──────────────────────────────────────────────────────
 

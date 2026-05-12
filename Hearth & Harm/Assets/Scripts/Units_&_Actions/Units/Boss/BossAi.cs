@@ -1,3 +1,6 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// BossAI.cs
+// ─────────────────────────────────────────────────────────────────────────────
 using System;
 using System.Collections;
 using UnityEngine;
@@ -6,33 +9,35 @@ using UnityEngine;
 [RequireComponent(typeof(BossPhaseController))]
 public class BossAI : MonoBehaviour
 {
-    [SerializeField, Min(0f)] private float stepDelay        = 0.25f;
-    [SerializeField, Min(0f)] private float actionDelay      = 0.4f;
-    [SerializeField, Min(1)]  private int   invisCooldown    = 3;  // turns between invis uses
-    [SerializeField, Min(1)]  private int   rangedCooldown   = 1;  // turns between ranged shots
+    [SerializeField, Min(0f)] private float stepDelay      = 0.25f;
+    [SerializeField, Min(0f)] private float actionDelay    = 0.4f;
+    [SerializeField, Min(1)]  private int   invisCooldown  = 3;
+    [SerializeField, Min(1)]  private int   rangedCooldown = 1;
 
-    private BossUnit              boss;
-    private BossPhaseController   phase;
-    private BossDamageInterceptor interceptor;
+    private BossUnit            boss;
+    private BossPhaseController phase;
 
-    private int turnCount        = 0;
-    private int invisCooldownLeft   = 0;
-    private int rangedCooldownLeft  = 0;
+    private int turnCount          = 0;
+    private int invisCooldownLeft  = 0;
+    private int rangedCooldownLeft = 0;
 
     private void Awake()
     {
-        boss        = GetComponent<BossUnit>();
-        phase       = GetComponent<BossPhaseController>();
-        interceptor = GetComponent<BossDamageInterceptor>();
+        boss  = GetComponent<BossUnit>();
+        phase = GetComponent<BossPhaseController>();
+
+        // Initialize here so phase system is ready before any damage lands
+        if (boss.Stats != null)
+            phase.Initialize(boss.Stats);
     }
 
     private void Start()
     {
-        // Give BossPhaseController its stats reference
-        phase.Initialize(boss.Stats);
+        if (boss.Stats == null)
+            Debug.LogError("[BossAI] BossStats is not assigned!", this);
     }
 
-    // ── Entry point called by BossEnemyUnitShim (see bottom of file) ───────
+    // ── Entry point called by EnemyManager ────────────────────────────────
 
     public void TakeTurn(Action onComplete)
     {
@@ -49,6 +54,8 @@ public class BossAI : MonoBehaviour
     private IEnumerator TurnRoutine(Unit player, Action onComplete)
     {
         turnCount++;
+
+        // Snapshot stats for this turn — intentional, won't reflect mid-turn stat swaps
         var stats = boss.Stats;
         var room  = boss.CurrentRoomGrid;
 
@@ -58,7 +65,23 @@ public class BossAI : MonoBehaviour
         var playerPos = player.GetGridPosition();
         int dist      = myCenter.ManhattanDistance(playerPos);
 
-        if (stats.kiteEnabled && dist < stats.kiteRange)
+        // ── 1. MOVE PHASE ──────────────────────────────────────────────────
+        // Invisible: always flee
+        // Visible + kite enabled + too close: flee
+        // Visible + too far: chase
+
+        if (phase.IsInvisible)
+        {
+            var flee = FindFleePosition(myCenter, playerPos, room, stats.moveRange);
+            if (flee.HasValue)
+            {
+                boss.MoveToPosition(flee.Value);
+                yield return new WaitForSeconds(stepDelay);
+                myCenter = boss.CenterGridPosition();
+                dist     = myCenter.ManhattanDistance(playerPos);
+            }
+        }
+        else if (stats.kiteEnabled && dist < stats.kiteRange)
         {
             var flee = FindFleePosition(myCenter, playerPos, room, stats.moveRange);
             if (flee.HasValue)
@@ -77,11 +100,8 @@ public class BossAI : MonoBehaviour
             for (int i = 0; i < steps; i++)
             {
                 if (boss.IsDead) { onComplete?.Invoke(); yield break; }
-                var next = path[i];
-
-                if (!CanMoveTo(next, room)) break;
-
-                boss.MoveToPosition(next);
+                if (!CanMoveTo(path[i], room)) break;
+                boss.MoveToPosition(path[i]);
                 yield return new WaitForSeconds(stepDelay);
             }
 
@@ -92,24 +112,12 @@ public class BossAI : MonoBehaviour
         yield return new WaitForSeconds(actionDelay);
         if (boss.IsDead) { onComplete?.Invoke(); yield break; }
 
+        // ── 2. ABILITY PHASE ───────────────────────────────────────────────
+        // Invisible: ranged attack only
+        // Visible: invis trigger → ranged → cleave
+        // Going invisible and attacking on the same turn is intentionally blocked
 
-        bool usedAbility = false;
-
-        if (phase.CurrentPhase == BossPhaseController.BossPhase.Enraged
-            && !phase.IsInvisible
-            && invisCooldownLeft <= 0)
-        {
-            phase.SetInvisible(true);
-            invisCooldownLeft = invisCooldown;
-            usedAbility       = true;
-            Debug.Log($"[BossAI] {stats.bossName} went invisible!");
-            yield return new WaitForSeconds(actionDelay);
-        }
-
-        if (invisCooldownLeft  > 0) invisCooldownLeft--;
-        if (rangedCooldownLeft > 0) rangedCooldownLeft--;
-
-        if (!usedAbility || phase.CurrentPhase != BossPhaseController.BossPhase.Enraged)
+        if (phase.IsInvisible)
         {
             if (dist <= stats.attackRange && rangedCooldownLeft <= 0)
             {
@@ -119,14 +127,43 @@ public class BossAI : MonoBehaviour
                 yield return new WaitForSeconds(actionDelay);
             }
         }
-
-        if (!boss.IsDead && dist <= 1 && stats.cleaveAttackData != null)
+        else
         {
-            player = FindPlayer() ?? player;
-            PerformCleave(player, stats);
-            yield return new WaitForSeconds(actionDelay);
+            bool wentInvis = false;
+
+            // Try to go invisible in Enraged phase
+            if (phase.CurrentPhase == BossPhaseController.BossPhase.Enraged
+                && !phase.IsInvisible
+                && invisCooldownLeft <= 0)
+            {
+                phase.SetInvisible(true);
+                invisCooldownLeft = invisCooldown;
+                wentInvis = true;
+                yield return new WaitForSeconds(actionDelay);
+            }
+
+            // Ranged attack — skipped if we just went invisible this turn
+            if (!wentInvis && !boss.IsDead && dist <= stats.attackRange && rangedCooldownLeft <= 0)
+            {
+                player = FindPlayer() ?? player;
+                PerformRangedAttack(player, stats);
+                rangedCooldownLeft = rangedCooldown;
+                yield return new WaitForSeconds(actionDelay);
+            }
+
+            // Cleave if player is adjacent and visible
+            if (!boss.IsDead && dist <= 1 && stats.cleaveAttackData != null)
+            {
+                player = FindPlayer() ?? player;
+                PerformCleave(player, stats);
+                yield return new WaitForSeconds(actionDelay);
+            }
         }
 
+        // ── 3. END OF TURN ─────────────────────────────────────────────────
+
+        if (invisCooldownLeft  > 0) invisCooldownLeft--;
+        if (rangedCooldownLeft > 0) rangedCooldownLeft--;
         phase.TickInvisibility();
 
         onComplete?.Invoke();
@@ -144,7 +181,6 @@ public class BossAI : MonoBehaviour
 
         int dmg = stats.rangedAttackData.CalculateDamage();
         AttackSpritePopup.Show(stats.rangedAttackData, player.transform.position);
-
         DealDamageToPlayer(player, dmg);
         Debug.Log($"[BossAI] {stats.bossName} ranged attack → {dmg} dmg");
     }
@@ -155,7 +191,6 @@ public class BossAI : MonoBehaviour
 
         int dmg = stats.cleaveAttackData.CalculateDamage();
         AttackSpritePopup.Show(stats.cleaveAttackData, player.transform.position);
-
         DealDamageToPlayer(player, dmg);
         Debug.Log($"[BossAI] {stats.bossName} cleave → {dmg} dmg");
     }
@@ -170,29 +205,28 @@ public class BossAI : MonoBehaviour
             player.GetComponent<HealthComponent>()?.TakeDamage(dmg);
     }
 
-    // ── Pathfinding helpers ────────────────────────────────────────────────
+    // ── Movement helpers ───────────────────────────────────────────────────
 
     private bool CanMoveTo(GridPosition origin, RoomGrid room)
     {
-        int size = boss.Stats != null ? 2 : 2; // always 2×2 for the boss
+        int size = boss.OccupiedCells.Count > 0
+            ? Mathf.RoundToInt(Mathf.Sqrt(boss.OccupiedCells.Count))
+            : 1;
+
         for (int dx = 0; dx < size; dx++)
         for (int dy = 0; dy < size; dy++)
         {
             var cell = new GridPosition(origin.x + dx, origin.y + dy);
             if (!room.IsWalkableIgnoreOccupancy(cell)) return false;
-
-            // Allow stepping through own cells
-            if (boss.OccupiedCells.Contains(cell)) continue;
-
-            // Block on enemies or players
+            if (boss.OccupiedCells.Contains(cell))     continue;
             if (room.HasAnyEnemyOnGridPosition(cell))  return false;
-            if (room.HasAnyUnitOnGridPosition(cell))    return false;
+            if (room.HasAnyUnitOnGridPosition(cell))   return false;
         }
         return true;
     }
 
     private GridPosition? FindFleePosition(GridPosition center, GridPosition player,
-                                            RoomGrid room, int moveRange)
+                                           RoomGrid room, int moveRange)
     {
         GridPosition? best  = null;
         int           bestD = center.ManhattanDistance(player);
@@ -213,15 +247,7 @@ public class BossAI : MonoBehaviour
 
     private Unit FindPlayer()
     {
-        // MP uses NetworkedEnemyBridge, SP uses PlayerTarget singleton
-        if (GameManager.IsMultiplayer)
-            return NetworkedEnemyBridge.FindNearestPlayerInRoom(
-                boss.CurrentRoomGrid, boss.CenterGridPosition());
-
-        var pt = PlayerTarget.Instance;
-        return pt != null && boss.CurrentRoomGrid != null
-               && PlayerTarget.Instance.IsInRoom(boss.CurrentRoomGrid)
-               ? pt.GetUnit()
-               : null;
+        return NetworkedEnemyBridge.FindNearestPlayerInRoom(
+            boss.CurrentRoomGrid, boss.CenterGridPosition());
     }
 }

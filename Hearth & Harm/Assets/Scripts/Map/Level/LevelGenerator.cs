@@ -113,6 +113,11 @@ public class LevelGenerator : MonoBehaviour
     public List<PlacedRoom>  GetAllRooms()    => placedRooms;
     public List<HallwayGrid> GetAllHallways() => spawnedHallways;
 
+    public PlacedRoom GetBossRoom()
+    {
+        return placedRooms?.Find(r => r.prefabData.roomType == RoomType.Boss);
+    }
+
     public PlacedRoom GetConnectedRoom(PlacedRoom room, Direction dir)
     {
         connections.TryGetValue((room, dir), out var r);

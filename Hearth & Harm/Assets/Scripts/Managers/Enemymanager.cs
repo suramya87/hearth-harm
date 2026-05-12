@@ -120,9 +120,12 @@ public class EnemyManager : MonoBehaviour
         {
             if (enemy == null || enemy.IsDead) continue;
 
+            // Check for boss first, then regular AI types
+            var bossAI = enemy.GetComponent<BossAI>();
             var ai     = enemy.GetComponent<EnemyAI>();
             var ranged = enemy.GetComponent<RangedEnemyAI>();
-            if (ai == null && ranged == null) continue;
+
+            if (bossAI == null && ai == null && ranged == null) continue;
 
             if (showDebugLogs)
                 Debug.Log($"[EnemyManager] Enemy turn started: {enemy.Stats?.enemyName ?? enemy.name}");
@@ -133,8 +136,11 @@ public class EnemyManager : MonoBehaviour
                 yield return new WaitForSeconds(delayBeforeEnemyTurn);
 
             bool done = false;
-            if (ranged != null) ranged.TakeTurn(() => done = true);
-            else                ai.TakeTurn(() => done = true);
+
+            // Priority: boss > ranged > melee
+            if (bossAI != null)       bossAI.TakeTurn(() => done = true);
+            else if (ranged != null)  ranged.TakeTurn(() => done = true);
+            else                      ai.TakeTurn(() => done = true);
 
             yield return new WaitUntil(() => done);
 

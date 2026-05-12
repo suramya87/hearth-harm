@@ -1,3 +1,6 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// BossUnit.cs
+// ─────────────────────────────────────────────────────────────────────────────
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -10,15 +13,13 @@ public class BossUnit : MonoBehaviour, IHasHealth
     [SerializeField] private BossStats bossStats;
 
     [Header("Footprint")]
-    [Tooltip("2x2 means the boss occupies (origin), (origin+1,0), (origin,+1), (origin+1,+1)")]
     [SerializeField] private int footprintSize = 2;
 
     [Header("Debug")]
-    [SerializeField] private bool showDebugLogs;
-    [SerializeField] private GameObject selectedVisual;
+    [SerializeField] private bool          showDebugLogs;
+    [SerializeField] private GameObject    selectedVisual;
 
-    // ── Internal state ─────────────────────────────────────────────────────
-    private GridPosition          gridPosition;      
+    private GridPosition          gridPosition;
     private RoomGrid              currentRoomGrid;
     private HealthComponent       health;
     private BossDamageInterceptor interceptor;
@@ -31,13 +32,13 @@ public class BossUnit : MonoBehaviour, IHasHealth
     public event Action<BossUnit> OnBossDied;
 
     // ── Properties ─────────────────────────────────────────────────────────
-    public BossStats      Stats            => bossStats;
-    public HealthComponent Health          => health;
-    public GridPosition   GridPosition     => gridPosition;
-    public RoomGrid       CurrentRoomGrid  => currentRoomGrid;
-    public bool           IsInitialized    => initialized;
-    public bool           IsDead           => health != null && health.IsDead;
-    public List<GridPosition> OccupiedCells => occupiedCells;
+    public BossStats           Stats           => bossStats;
+    public HealthComponent     Health          => health;
+    public GridPosition        GridPosition    => gridPosition;
+    public RoomGrid            CurrentRoomGrid => currentRoomGrid;
+    public bool                IsInitialized   => initialized;
+    public bool                IsDead          => health != null && health.IsDead;
+    public List<GridPosition>  OccupiedCells   => occupiedCells;
 
     public int GetMaxHealth() => bossStats != null ? bossStats.maxHealth : 300;
 
@@ -60,7 +61,8 @@ public class BossUnit : MonoBehaviour, IHasHealth
     {
         if (health != null) health.OnDeath -= HandleDeath;
         RemoveFromGrid();
-        EnemyManager.Instance?.UnregisterEnemy(GetComponent<EnemyUnit>());
+        var eu = GetComponent<EnemyUnit>();
+        if (eu != null) EnemyManager.Instance?.UnregisterEnemy(eu);
     }
 
     // ── Grid placement ─────────────────────────────────────────────────────
@@ -68,20 +70,21 @@ public class BossUnit : MonoBehaviour, IHasHealth
     public void PlaceOnGrid(RoomGrid room, GridPosition origin)
     {
         RemoveFromGrid();
-
         currentRoomGrid = room;
         gridPosition    = origin;
         occupiedCells.Clear();
 
+        var eu = GetComponent<EnemyUnit>();
         for (int dx = 0; dx < footprintSize; dx++)
         for (int dy = 0; dy < footprintSize; dy++)
         {
             var cell = new GridPosition(origin.x + dx, origin.y + dy);
             occupiedCells.Add(cell);
-            room.AddEnemyAtGridPosition(cell, GetComponent<EnemyUnit>());
+            if (eu != null) room.AddEnemyAtGridPosition(cell, eu);
         }
 
-        // World position: center of the 2×2 block
+        eu?.SyncRoomGrid(room);
+
         var originWorld = room.GetWorldPosition(origin);
         transform.position = new Vector3(
             originWorld.x + (footprintSize - 1) * 0.5f,
@@ -90,10 +93,9 @@ public class BossUnit : MonoBehaviour, IHasHealth
         );
 
         initialized = true;
-        if (showDebugLogs) Debug.Log($"[BossUnit] {bossStats?.bossName} placed at {origin} ({footprintSize}x{footprintSize})");
+        if (showDebugLogs)
+            Debug.Log($"[BossUnit] {bossStats?.bossName} placed at {origin} ({footprintSize}x{footprintSize})");
     }
-
-    // ── Movement ───────────────────────────────────────────────────────────
 
     public void MoveToPosition(GridPosition newOrigin)
     {
@@ -103,13 +105,16 @@ public class BossUnit : MonoBehaviour, IHasHealth
         gridPosition = newOrigin;
         occupiedCells.Clear();
 
+        var eu = GetComponent<EnemyUnit>();
         for (int dx = 0; dx < footprintSize; dx++)
         for (int dy = 0; dy < footprintSize; dy++)
         {
             var cell = new GridPosition(newOrigin.x + dx, newOrigin.y + dy);
             occupiedCells.Add(cell);
-            currentRoomGrid.AddEnemyAtGridPosition(cell, GetComponent<EnemyUnit>());
+            if (eu != null) currentRoomGrid.AddEnemyAtGridPosition(cell, eu);
         }
+
+        eu?.SyncRoomGrid(currentRoomGrid);
 
         var originWorld = currentRoomGrid.GetWorldPosition(newOrigin);
         transform.position = new Vector3(
@@ -133,8 +138,13 @@ public class BossUnit : MonoBehaviour, IHasHealth
 
     public void SetAlpha(float alpha)
     {
+        // Refresh in case Awake ran before child renderers existed
+        if (renderers == null || renderers.Length == 0)
+            renderers = GetComponentsInChildren<SpriteRenderer>();
+
         foreach (var sr in renderers)
         {
+            if (sr == null) continue;
             var c = sr.color;
             c.a = alpha;
             sr.color = c;
@@ -148,17 +158,20 @@ public class BossUnit : MonoBehaviour, IHasHealth
         if (selectedVisual) selectedVisual.SetActive(on);
     }
 
+    // ── Center position ────────────────────────────────────────────────────
+
+    public GridPosition CenterGridPosition() => new(
+        gridPosition.x + footprintSize / 2,
+        gridPosition.y + footprintSize / 2
+    );
+
     // ── Death ──────────────────────────────────────────────────────────────
 
     private void HandleDeath()
     {
         if (showDebugLogs) Debug.Log($"[BossUnit] {bossStats?.bossName} died.");
-
         RemoveFromGrid();
-
-
         OnBossDied?.Invoke(this);
-
         Destroy(gameObject, 0.75f);
     }
 
@@ -169,15 +182,7 @@ public class BossUnit : MonoBehaviour, IHasHealth
         if (currentRoomGrid == null || !initialized) return;
         var eu = GetComponent<EnemyUnit>();
         foreach (var cell in occupiedCells)
-            currentRoomGrid.RemoveEnemyAtGridPosition(cell, eu);
+            if (eu != null) currentRoomGrid.RemoveEnemyAtGridPosition(cell, eu);
         occupiedCells.Clear();
-    }
-
-    public GridPosition CenterGridPosition()
-    {
-        return new GridPosition(
-            gridPosition.x + footprintSize / 2,
-            gridPosition.y + footprintSize / 2
-        );
     }
 }

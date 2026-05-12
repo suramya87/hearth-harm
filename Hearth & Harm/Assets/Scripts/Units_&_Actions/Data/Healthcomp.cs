@@ -1,3 +1,6 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// HealthComponent.cs
+// ─────────────────────────────────────────────────────────────────────────────
 using System;
 using System.Collections;
 using UnityEngine;
@@ -25,21 +28,16 @@ public class HealthComponent : MonoBehaviour
     [SerializeField] private int _currentHealth;
     private int _lastKnownHealth;
 
-    // ── Events ─────────────────────────────────────────────────────────────
     public event Action<int, int> OnHealthChanged;
     public event Action OnDeath;
 
-    // ── Properties ─────────────────────────────────────────────────────────
     public int CurrentHealth => _currentHealth;
     public int MaxHealth => maxHealth;
     public bool IsDead => _currentHealth <= 0;
     public float HealthPercent => maxHealth > 0 ? (float)_currentHealth / maxHealth : 0f;
 
-    // ── Runtime ────────────────────────────────────────────────────────────
     private SpriteRenderer flashRenderer;
     private Coroutine flashRoutine;
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -71,8 +69,6 @@ public class HealthComponent : MonoBehaviour
         if (_currentHealth != _lastKnownHealth) SetHealth(_currentHealth);
     }
 #endif
-
-    // ── Public API ─────────────────────────────────────────────────────────
 
     public void TakeDamage(int amount)
     {
@@ -109,8 +105,6 @@ public class HealthComponent : MonoBehaviour
         OnHealthChanged?.Invoke(_currentHealth, maxHealth);
     }
 
-    // ── Damage number ──────────────────────────────────────────────────────
-
     private void SpawnDamageNumber(int amount)
     {
         if (!damageNumberPrefab) return;
@@ -118,8 +112,6 @@ public class HealthComponent : MonoBehaviour
             transform.position + damageNumberOffset, Quaternion.identity);
         dmg.Initialize(amount);
     }
-
-    // ── Flash ──────────────────────────────────────────────────────────────
 
     private void TriggerFlash()
     {
@@ -142,7 +134,12 @@ public class HealthComponent : MonoBehaviour
     private IEnumerator Fade(float from, float to, float dur)
     {
         float t = 0f;
-        while (t < dur) { t += Time.deltaTime; SetFlashAlpha(Mathf.Lerp(from, to, t / dur)); yield return null; }
+        while (t < dur)
+        {
+            t += Time.deltaTime;
+            SetFlashAlpha(Mathf.Lerp(from, to, t / dur));
+            yield return null;
+        }
         SetFlashAlpha(to);
     }
 
@@ -151,8 +148,6 @@ public class HealthComponent : MonoBehaviour
         if (flashRenderer == null) return;
         var c = flashRenderer.color; c.a = a; flashRenderer.color = c;
     }
-
-    // ── Death ──────────────────────────────────────────────────────────────
 
     private void Die()
     {
@@ -163,10 +158,12 @@ public class HealthComponent : MonoBehaviour
 
     private void ExecuteDeath()
     {
+        // FIX: BossUnit owns its own death — don't deactivate or destroy here
+        if (GetComponent<BossUnit>() != null) return;
+
         if (destroyOnDeath) Destroy(gameObject);
         else gameObject.SetActive(false);
     }
 }
 
-/// <summary>Implement on any component that provides max health (PlayerStats, EnemyStats…).</summary>
 public interface IHasHealth { int GetMaxHealth(); }
