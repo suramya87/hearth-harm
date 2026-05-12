@@ -290,6 +290,7 @@ GameObject:
   - component: {fileID: 187304144552775843}
   - component: {fileID: 1460094445985071997}
   - component: {fileID: -3103733176123180351}
+  - component: {fileID: 6649472140401988100}
   m_Layer: 0
   m_Name: Wolf
   m_TagString: Untagged
@@ -484,3 +485,15 @@ MonoBehaviour:
   SwitchTransformSpaceWhenParented: 0
   Interpolate: 1
   SlerpPosition: 0
+--- !u!114 &6649472140401988100
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8194032206900855935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 035a3e551e38c7742a4f314d77931046, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyHoverTarget

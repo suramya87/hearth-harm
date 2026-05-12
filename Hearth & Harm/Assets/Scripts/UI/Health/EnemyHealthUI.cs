@@ -5,10 +5,15 @@ public class EnemyHealthUI : MonoBehaviour
 {
     public static EnemyHealthUI Instance { get; private set; }
 
-    [SerializeField] private HealthTargetUI healthUI;
-
+    [SerializeField] private EnemyHealthContainerUI healthUI;
     private void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         Instance = this;
     }
 

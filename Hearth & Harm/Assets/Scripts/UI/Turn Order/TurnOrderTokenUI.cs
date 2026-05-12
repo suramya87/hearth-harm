@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
 /// Basic token binder for turn order UI.
-public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler
+public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Optional UI")]
     [SerializeField] private TMP_Text nameText;
@@ -67,5 +67,20 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler
             EnemyHealthUI.Instance?.SetTarget(health);
 
         CameraController2D.Instance?.SoftFocusOn(boundEnemy.transform);
+    }
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        if (boundEnemy == null) return;
+
+        HealthComponent health = boundEnemy.GetComponent<HealthComponent>();
+        if (health != null)
+            EnemyHealthUI.Instance?.SetTarget(health);
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        if (boundEnemy == null) return;
+
+        EnemyHealthUI.Instance?.ClearTarget();
     }
 }
