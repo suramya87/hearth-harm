@@ -17,6 +17,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject characterSelectPanel;
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private GameObject creditsPanel;
+    [SerializeField] private GameObject settingsPanel;
 
     // ── Main menu buttons ─────────────────────────────────────────────────
     [Header("Main Menu Buttons")]
@@ -24,6 +25,7 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private Button multiplayerButton;
     [SerializeField] private Button creditsButton;
     [SerializeField] private Button creditsBackButton;
+    [SerializeField] private Button optionsButton;
 
     // ── Mode panel ────────────────────────────────────────────────────────
     [Header("Mode Panel")]
@@ -93,6 +95,7 @@ public class MainMenuController : MonoBehaviour
         multiplayerButton?.onClick.AddListener(() => ShowPanel(multiplayerPanel));
         creditsButton    ?.onClick.AddListener(OpenCredits);
         creditsBackButton?.onClick.AddListener(CloseCredits);
+        optionsButton?.onClick.AddListener(OpenSettings);
 
         startSinglePlayerButton?.onClick.AddListener(GoToSinglePlayerCharSelect);
         backToMainButton       ?.onClick.AddListener(() => ShowPanel(mainMenuPanel));
@@ -350,12 +353,16 @@ public class MainMenuController : MonoBehaviour
         waitingLobbyPanel   ?.SetActive(false);
         characterSelectPanel?.SetActive(false);
         creditsPanel        ?.SetActive(false);
+        settingsPanel       ?.SetActive(false);
         if (target != null) target.SetActive(true);
     }
 
     private void OpenCredits()  => ShowPanel(creditsPanel);
     private void CloseCredits() => ShowPanel(mainMenuPanel);
-
+    private void OpenSettings()
+    {
+        ShowPanel(settingsPanel);
+    }
     private void GoToSinglePlayerCharSelect()
     {
         isSinglePlayer = true;

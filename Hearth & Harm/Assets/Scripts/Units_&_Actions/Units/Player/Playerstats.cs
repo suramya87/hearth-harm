@@ -162,8 +162,6 @@ public class PlayerStats : MonoBehaviour, IHasHealth
 
     private void RecalculateDerivedStats()
     {
-        int oldMaxHealth = maxHealth;
-
         ClassStats baseStats = classStatsDatabase != null
             ? classStatsDatabase.Get(playerClass)
             : null;
@@ -171,14 +169,27 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         if (baseStats == null)
             return;
 
+        int oldMaxHealth = maxHealth;
+        int oldMaxStamina = maxStamina;
+
+        int oldCurrentHealth = currentHealth;
+        int oldCurrentStamina = currentStamina;
+
         maxHealth = Mathf.Max(1, baseStats.baseMaxHealth + constitution);
         maxStamina = Mathf.Max(1, 10 + dexterity * 2);
 
-        int healthDifference = maxHealth - oldMaxHealth;
-        currentHealth = Mathf.Clamp(currentHealth + healthDifference, 1, maxHealth);
-        currentStamina = Mathf.Clamp(currentStamina, 0, maxStamina);
+        int healthIncrease = maxHealth - oldMaxHealth;
+
+        if (healthIncrease > 0)
+            currentHealth = Mathf.Min(oldCurrentHealth + healthIncrease, maxHealth);
+        else
+            currentHealth = Mathf.Clamp(oldCurrentHealth, 1, maxHealth);
+
+        currentStamina = Mathf.Clamp(oldCurrentStamina, 0, maxStamina);
 
         if (health != null)
-            health.InitializeHealth(maxHealth);
+            health.SetHealth(currentHealth);
+
+        Debug.Log($"[PlayerStats] Recalculated stats. HP {currentHealth}/{maxHealth}, Stamina {currentStamina}/{maxStamina}");
     }
 }

@@ -285,6 +285,7 @@ GameObject:
   - component: {fileID: 7017538682358424175}
   - component: {fileID: 4770790920441201146}
   - component: {fileID: 5000342648279679484}
+  - component: {fileID: 6649472140401988100}
   - component: {fileID: 622254541123157116}
   - component: {fileID: 8176856619809374869}
   - component: {fileID: 187304144552775843}
@@ -365,6 +366,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
   stepDelay: 0.2
+--- !u!114 &6649472140401988100
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8194032206900855935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 035a3e551e38c7742a4f314d77931046, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyHoverTarget
 --- !u!65 &622254541123157116
 BoxCollider:
   m_ObjectHideFlags: 0
