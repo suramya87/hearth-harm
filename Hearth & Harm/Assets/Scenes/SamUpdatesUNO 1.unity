@@ -423,6 +423,22 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 4160522123233771587, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -450
+      objectReference: {fileID: 0}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: dotSize
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: minimapDisplaySize.x
+      value: 300
+      objectReference: {fileID: 0}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: minimapDisplaySize.y
+      value: 300
+      objectReference: {fileID: 0}
     - target: {fileID: 6479582309180018011, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: m_LocalPosition.x
       value: 960
@@ -658,7 +674,7 @@ MonoBehaviour:
   minRooms: 80
   maxRooms: 100
   specialRoomChance: 0.3
-  spawnBossRoom: 0
+  spawnBossRoom: 1
   roomSpacing: 16
   playerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}

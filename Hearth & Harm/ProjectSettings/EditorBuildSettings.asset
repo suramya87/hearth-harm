@@ -17,5 +17,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/SamUpdatesUNO.unity
     guid: c136e5a40ced6b8409ffff0b84081af4
+  - enabled: 1
+    path: Assets/Scenes/SamUpdatesUNO 1.unity
+    guid: c69cfaba25360a54e88513557e55eaa3
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

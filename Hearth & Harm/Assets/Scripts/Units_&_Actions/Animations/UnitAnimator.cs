@@ -73,6 +73,8 @@ public class UnitAnimator : MonoBehaviour
         anim.SetBool(hashFacingSouth, south);
         anim.SetBool(hashFacingEast,  east);
         anim.SetBool(hashFacingWest,  west);
+
+        anim.Update(0);
     }
 
     public void TriggerAttack() =>

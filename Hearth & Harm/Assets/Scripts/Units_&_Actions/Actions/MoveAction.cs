@@ -12,24 +12,18 @@ public class MoveAction : BaseAction
     public bool IsActive => isActive;
 
     private int MoveDistance => playerStats != null
-    ? Mathf.Max(0, playerStats.currentStamina)
-    : maxMoveDistance;
+        ? Mathf.Max(0, playerStats.currentStamina)
+        : maxMoveDistance;
 
     private bool IsInCombatRoom()
     {
         RoomGrid room = unit != null ? unit.GetCurrentRoomGrid() : null;
-
-        if (room == null || EnemyManager.Instance == null)
-            return false;
-
+        if (room == null || EnemyManager.Instance == null) return false;
         return EnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
     }
+
     public override string GetActionName() => "Move";
 
-    /// <summary>
-    /// Call this from UnitActionSystem.cs to handle clicks specifically for moving.
-    /// Includes the debugging and UI blocking logic from the PCGTDST branch.
-    /// </summary>
     public void HandleActionInput()
     {
         if (Input.GetMouseButtonDown(0))
@@ -42,7 +36,7 @@ public class MoveAction : BaseAction
 
             Vector3 mouseWorldPosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
             var room = unit.GetCurrentRoomGrid();
-            
+
             if (room == null)
             {
                 Debug.LogWarning("[MoveAction Input] Click ignored: Unit has no current RoomGrid.");
@@ -62,7 +56,7 @@ public class MoveAction : BaseAction
             else
             {
                 if (!room.IsValidGridPosition(targetGP)) Debug.Log(" -> Reason: Outside Grid Bounds.");
-                else if (room.IsWall(targetGP)) Debug.Log(" -> Reason: It's a Wall.");
+                else if (room.IsWall(targetGP))          Debug.Log(" -> Reason: It's a Wall.");
                 else if (GetMoveCost(targetGP) > MoveDistance) Debug.Log(" -> Reason: Too far / No Path.");
             }
         }
@@ -78,8 +72,8 @@ public class MoveAction : BaseAction
     {
         if (newGrid == null) return;
 
-        RoomGrid oldGrid = unit.GetCurrentRoomGrid();
-        GridPosition oldPos = unit.GetGridPosition();
+        RoomGrid     oldGrid = unit.GetCurrentRoomGrid();
+        GridPosition oldPos  = unit.GetGridPosition();
 
         if (oldGrid != null)
         {
@@ -97,19 +91,14 @@ public class MoveAction : BaseAction
         if (room == null || isActive) { onComplete?.Invoke(); return; }
 
         GridPosition startPos = unit.GetGridPosition();
-        
-        var path = new Pathfinder(room).FindPath(startPos, target);
-        if (path == null || path.Count == 0) 
-        { 
-            onComplete?.Invoke(); 
-            return; 
-        }
 
-        int steps = Mathf.Min(path.Count, MoveDistance);
+        var path = new Pathfinder(room).FindPath(startPos, target);
+        if (path == null || path.Count == 0) { onComplete?.Invoke(); return; }
+
+        int steps    = Mathf.Min(path.Count, MoveDistance);
         var usedPath = path.GetRange(0, steps);
         var finalPos = usedPath[^1];
 
-        // Update grid occupancy immediately
         room.RemoveUnitAtGridPosition(startPos, unit);
         room.AddUnitAtGridPosition(finalPos, unit);
 
@@ -117,37 +106,44 @@ public class MoveAction : BaseAction
             playerStats.SpendStamina(steps);
 
         var waypoints = new List<Vector3>();
-        Vector2 visualOffset = unit.GetVisualOffset();          
+        Vector2 visualOffset = unit.GetVisualOffset();
         foreach (var gp in usedPath)
         {
             var wp = room.GetWorldPosition(gp);
-            waypoints.Add(new Vector3(                          
-                wp.x + visualOffset.x,
-                wp.y + visualOffset.y,
-                wp.z));
+            waypoints.Add(new Vector3(wp.x + visualOffset.x, wp.y + visualOffset.y, wp.z));
         }
 
-
-        SetFacingToward(usedPath[0]);
+        SetFacingToward(startPos, usedPath[0]);
         unitAnimator?.SetMoving(true);
 
         isActive = true;
         StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, room, onComplete));
     }
 
-    private IEnumerator MoveAlongPath(List<Vector3> waypoints, List<GridPosition> gridPath, GridPosition finalGP, RoomGrid startingGrid, Action onComplete)
+    private IEnumerator MoveAlongPath(
+        List<Vector3>        waypoints,
+        List<GridPosition>   gridPath,
+        GridPosition         finalGP,
+        RoomGrid             startingGrid,
+        Action               onComplete)
     {
         for (int i = 0; i < waypoints.Count; i++)
         {
+            // FIX: update facing at the start of every step, same frame we begin moving
+            if (i > 0)
+                SetFacingToward(gridPath[i - 1], gridPath[i]);
+
             var target = new Vector3(waypoints[i].x, waypoints[i].y, transform.position.z);
             while (Vector2.Distance(transform.position, target) > 0.01f)
             {
-                transform.position = Vector3.MoveTowards(transform.position, target, moveSpeed * Time.deltaTime);
+                transform.position = Vector3.MoveTowards(
+                    transform.position, target, moveSpeed * Time.deltaTime);
                 yield return null;
             }
             transform.position = target;
         }
 
+        // Stop moving animation on the same frame we finish
         unitAnimator?.SetMoving(false);
         isActive = false;
 
@@ -161,7 +157,6 @@ public class MoveAction : BaseAction
             }
             else
             {
-                // unit.PlaceInRoom(startingGrid, finalGP);
                 unit.PlaceInRoomNoMove(startingGrid, finalGP);
             }
         }
@@ -169,19 +164,20 @@ public class MoveAction : BaseAction
         onComplete?.Invoke();
     }
 
-    public void SetFacingToward(GridPosition next)
+    public void SetFacingToward(GridPosition from, GridPosition to)
     {
-        var current = unit.GetGridPosition();
-        int dx = next.x - current.x;
-        int dy = next.y - current.y;
+        int dx = to.x - from.x;
+        int dy = to.y - from.y;
 
         var dir = new Vector2Int(
             dx == 0 ? 0 : (int)Mathf.Sign(dx),
-            dy == 0 ? 0 : (int)Mathf.Sign(dy)
-        );
+            dy == 0 ? 0 : (int)Mathf.Sign(dy));
 
         unitAnimator?.SetFacing(dir);
     }
+
+    public void SetFacingToward(GridPosition next) =>
+        SetFacingToward(unit.GetGridPosition(), next);
 
     public bool IsValidTarget(GridPosition gp) => GetValidTargets().Contains(gp);
     public bool isValidActionGridPosition(GridPosition gp) => IsValidTarget(gp);
@@ -212,7 +208,7 @@ public class MoveAction : BaseAction
 
             var test = new GridPosition(unitPos.x + dx, unitPos.y + dy);
             if (!room.IsValidGridPosition(test) || !room.IsWalkableIgnoreOccupancy(test)) continue;
-            
+
             var path = pf.FindPath(unitPos, test);
             if (path != null && path.Count > 0 && path.Count <= dist) list.Add(test);
         }

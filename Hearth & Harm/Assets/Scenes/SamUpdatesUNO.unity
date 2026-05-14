@@ -13099,10 +13099,10 @@ MonoBehaviour:
   hallwayTileSet: {fileID: 11400000, guid: 21108b0b5853d2d438107043f6c2f208, type: 2}
   hallwayCellSize: 1
   defaultHallwayWidth: 4
-  minRooms: 80
-  maxRooms: 100
+  minRooms: 1
+  maxRooms: 2
   specialRoomChance: 0.3
-  spawnBossRoom: 0
+  spawnBossRoom: 1
   roomSpacing: 16
   playerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
