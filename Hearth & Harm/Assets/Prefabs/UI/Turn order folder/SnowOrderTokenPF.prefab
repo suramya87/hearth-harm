@@ -89,6 +89,7 @@ GameObject:
   - component: {fileID: 7390969506250857765}
   - component: {fileID: -6092492653835875788}
   - component: {fileID: 6616612372438888309}
+  - component: {fileID: -6284498456950014726}
   m_Layer: 5
   m_Name: SnowOrderTokenPF
   m_TagString: Untagged
@@ -227,6 +228,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &-6284498456950014726
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4239494079777503617}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: snowmen button
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &7622733631081596048
 GameObject:
   m_ObjectHideFlags: 0
