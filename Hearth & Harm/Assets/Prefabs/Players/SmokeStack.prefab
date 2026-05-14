@@ -111,11 +111,11 @@ GameObject:
   - component: {fileID: 6970145410071607390}
   - component: {fileID: 645597687209456580}
   - component: {fileID: 3237938132183170801}
-  - component: {fileID: 5209174905317677569}
   - component: {fileID: 1298762722691077904}
   - component: {fileID: 5280140157903660043}
   - component: {fileID: 7607613053025726379}
   - component: {fileID: 7514983732014160107}
+  - component: {fileID: 7572616877870388138}
   m_Layer: 6
   m_Name: SmokeStack
   m_TagString: Player
@@ -413,28 +413,6 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 1
---- !u!114 &5209174905317677569
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9198468102176965729}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 71e0ff6c2caeb3e49b7a2b6d419503c3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimator
-  paramIsMoving: isMoving
-  paramFacingNorth: facingNorth
-  paramFacingSouth: facingSouth
-  paramFacingEast: facingEast
-  paramFacingWest: facingWest
-  paramAttack: attack
-  paramHurt: hurt
-  paramIsDead: isDead
-  paramStaminaEmpty: staminaEmpty
-  paramRoomTransition: roomTransition
 --- !u!114 &1298762722691077904
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -447,7 +425,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 4219110693
+  GlobalObjectIdHash: 1228650071
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -532,3 +510,25 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkedPlayerBridge
   ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &7572616877870388138
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9198468102176965729}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71e0ff6c2caeb3e49b7a2b6d419503c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerAnimator
+  paramIsMoving: isMoving
+  paramFacingNorth: facingNorth
+  paramFacingSouth: facingSouth
+  paramFacingEast: facingEast
+  paramFacingWest: facingWest
+  paramAttack: attack
+  paramHurt: hurt
+  paramIsDead: isDead
+  paramStaminaEmpty: staminaEmpty
+  paramRoomTransition: roomTransition

@@ -10,6 +10,14 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     [Header("Stats")]
     [SerializeField] private EnemyStats stats;
 
+    [Header("Visual")]
+    [Tooltip("The child GameObject that holds the SpriteRenderer + Animator (e.g. 'Sprite').")]
+    [SerializeField] private Transform spriteChild;
+
+    [Tooltip("Scale applied to the sprite child only. Root stays at (1,1,1).\n" +
+             "1 = one tile exactly. 1.5 = sprite is 50% larger than the tile.")]
+    [SerializeField] private Vector2 spriteScale = Vector2.one;
+
     [Header("Debug")]
     [SerializeField] private bool showDebugLogs;
     [SerializeField] private GameObject selectedVisual;
@@ -29,7 +37,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     public bool IsInitialized => initialized;
     public bool IsDead => health != null && health.IsDead;
 
-    // FIX: defer to BossUnit if present so HealthComponent gets the right max HP
     public int GetMaxHealth()
     {
         var boss = GetComponent<BossUnit>();
@@ -37,7 +44,11 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         return stats != null ? stats.maxHealth : 100;
     }
 
-    private void Awake() => health = GetComponent<HealthComponent>();
+    private void Awake()
+    {
+        health = GetComponent<HealthComponent>();
+        ApplySpriteScale();
+    }
 
     private void Start()
     {
@@ -49,7 +60,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     {
         if (health != null) health.OnDeath -= HandleDeath;
 
-        // BossUnit owns its own cleanup — EnemyUnit must not interfere
         if (GetComponent<BossUnit>() != null) return;
 
         if (currentRoomGrid != null && initialized)
@@ -115,7 +125,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
 
     private void HandleDeath()
     {
-        // FIX: BossUnit owns death — skip all EnemyUnit death logic for the boss
         if (GetComponent<BossUnit>() != null) return;
 
         if (stats != null && CurrencyManager.Instance != null)
@@ -141,4 +150,16 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         EnemyManager.Instance?.UnregisterEnemy(this);
         Destroy(gameObject, 0.5f);
     }
+
+    // ── Sprite scale ───────────────────────────────────────────────────────
+
+    private void ApplySpriteScale()
+    {
+        if (spriteChild == null) return;
+        spriteChild.localScale = new Vector3(spriteScale.x, spriteScale.y, 1f);
+    }
+
+#if UNITY_EDITOR
+    private void OnValidate() => ApplySpriteScale();
+#endif
 }

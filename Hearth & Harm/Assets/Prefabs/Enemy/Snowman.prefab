@@ -80,6 +80,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
   stats: {fileID: 11400000, guid: 3818f3074d71d9348bab594ea94fda85, type: 2}
+  spriteChild: {fileID: 3875177856445167644}
+  spriteScale: {x: 1, y: 1}
   showDebugLogs: 0
   selectedVisual: {fileID: 8570072525550553189}
 --- !u!114 &6062027027240477414
