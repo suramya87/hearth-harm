@@ -117,13 +117,21 @@ public class MoveAction : BaseAction
             playerStats.SpendStamina(steps);
 
         var waypoints = new List<Vector3>();
-        foreach (var gp in usedPath) waypoints.Add(room.GetWorldPosition(gp));
+        Vector2 visualOffset = unit.GetVisualOffset();          
+        foreach (var gp in usedPath)
+        {
+            var wp = room.GetWorldPosition(gp);
+            waypoints.Add(new Vector3(                          
+                wp.x + visualOffset.x,
+                wp.y + visualOffset.y,
+                wp.z));
+        }
+
 
         SetFacingToward(usedPath[0]);
         unitAnimator?.SetMoving(true);
 
         isActive = true;
-        // PCGTDST logic: Pass room reference to ensure we don't snap back to wrong room if we transition mid-move
         StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, room, onComplete));
     }
 
@@ -143,8 +151,6 @@ public class MoveAction : BaseAction
         unitAnimator?.SetMoving(false);
         isActive = false;
 
-        // MULTIPLAYER & ROOM PLACEMENT SYNC
-        // Ensure we only place the unit if the room hasn't changed via a trigger during the walk
         if (unit.GetCurrentRoomGrid() == startingGrid)
         {
             if (GameManager.IsMultiplayer)
@@ -155,7 +161,8 @@ public class MoveAction : BaseAction
             }
             else
             {
-                unit.PlaceInRoom(startingGrid, finalGP);
+                // unit.PlaceInRoom(startingGrid, finalGP);
+                unit.PlaceInRoomNoMove(startingGrid, finalGP);
             }
         }
 

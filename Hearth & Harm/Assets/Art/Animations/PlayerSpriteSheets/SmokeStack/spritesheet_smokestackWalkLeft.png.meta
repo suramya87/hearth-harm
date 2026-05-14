@@ -122,89 +122,89 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: spritesheet_smokestackWalkSide(1)_0
+      name: spritesheet_smokestackWalkLeft_0
       rect:
         serializedVersion: 2
-        x: 23
+        x: 0
         y: 0
-        width: 21
-        height: 38
+        width: 64
+        height: 64
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 38f8f5770cb2a6600800000000000000
-      internalID: 462230017395363715
+      spriteID: 291f8ec59a51d2d4cbf2277e2b9f6530
+      internalID: -1721000147
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: spritesheet_smokestackWalkSide(1)_1
+      name: spritesheet_smokestackWalkLeft_1
       rect:
         serializedVersion: 2
-        x: 82
+        x: 64
         y: 0
-        width: 29
-        height: 37
+        width: 64
+        height: 64
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 3051150c6991fdb80800000000000000
-      internalID: -8367941447368764157
+      spriteID: 2224d7b89fb682843af69f9b05a1f557
+      internalID: 1110359588
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: spritesheet_smokestackWalkSide(1)_2
+      name: spritesheet_smokestackWalkLeft_2
       rect:
         serializedVersion: 2
-        x: 150
+        x: 128
         y: 0
-        width: 22
-        height: 38
+        width: 64
+        height: 64
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 3f82efd059f65e7d0800000000000000
-      internalID: -2889780899912734477
+      spriteID: 64d7db4d7424059488093409752f0840
+      internalID: 239143630
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: spritesheet_smokestackWalkSide(1)_3
+      name: spritesheet_smokestackWalkLeft_3
       rect:
         serializedVersion: 2
-        x: 210
+        x: 192
         y: 0
-        width: 28
-        height: 37
+        width: 64
+        height: 64
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 55698754f954999e0800000000000000
-      internalID: -1614182441067964843
+      spriteID: 4e77d621a90a9b4408ae674f35803e21
+      internalID: -1100530963
       vertices: []
       indices: 
       edges: []
@@ -213,7 +213,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 59e53f403a852f7408669b9d85e1c31c
     internalID: 0
     vertices: []
     indices: 
@@ -221,12 +221,14 @@ TextureImporter:
     weights: []
     secondaryTextures: []
     spriteCustomMetadata:
-      entries: []
+      entries:
+      - key: SpriteEditor.SliceSettings
+        value: '{"sliceOnImport":false,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":64.0,"y":64.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":1,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
-      spritesheet_smokestackWalkSide(1)_0: 462230017395363715
-      spritesheet_smokestackWalkSide(1)_1: -8367941447368764157
-      spritesheet_smokestackWalkSide(1)_2: -2889780899912734477
-      spritesheet_smokestackWalkSide(1)_3: -1614182441067964843
+      spritesheet_smokestackWalkLeft_0: -1721000147
+      spritesheet_smokestackWalkLeft_1: 1110359588
+      spritesheet_smokestackWalkLeft_2: 239143630
+      spritesheet_smokestackWalkLeft_3: -1100530963
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

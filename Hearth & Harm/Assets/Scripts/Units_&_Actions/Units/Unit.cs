@@ -59,6 +59,22 @@ public class Unit : MonoBehaviour
         StartCoroutine(WaitAndPlace(room, pos));
     }
 
+    public void PlaceInRoomNoMove(RoomGrid room, GridPosition newPos)
+        {
+            if (room == null) return;
+ 
+            if (currentRoomGrid != null && isInitialized)
+                currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
+ 
+            currentRoomGrid = room;
+            gridPosition    = newPos;
+            isInitialized   = true;
+ 
+            room.AddUnitAtGridPosition(newPos, this);
+            // deliberately no transform.position change — MoveAction owns the visual position
+        }
+
+
     private IEnumerator WaitAndPlace(RoomGrid room, GridPosition pos)
     {
         if (room == null)
@@ -148,4 +164,5 @@ public class Unit : MonoBehaviour
     public bool          IsInitialized()      => isInitialized;
     public MoveAction    GetMoveAction()      => moveAction;
     public BaseAction[]  GetBaseActionArray() => allActions;
+    public Vector2 GetVisualOffset() => visualOffset;
 }
