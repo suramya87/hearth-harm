@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using Unity.Services.Core;
+using Unity.Services.Core.Environments;
 using Unity.Services.Analytics;
 
 /// <summary>
@@ -28,10 +29,10 @@ public class GameManager : MonoBehaviour
 
     // ── Static accessors ───────────────────────────────────────────────────
 
-    public static GameMode Mode       => Instance != null ? Instance._mode : GameMode.Offline;
-    public static bool IsMultiplayer  => Mode != GameMode.Offline;
-    public static bool IsAuthority    => Mode == GameMode.Offline || Mode == GameMode.Host;
-    public static bool IsClient       => Mode == GameMode.Client;
+    public static GameMode Mode      => Instance != null ? Instance._mode : GameMode.Offline;
+    public static bool IsMultiplayer => Mode != GameMode.Offline;
+    public static bool IsAuthority   => Mode == GameMode.Offline || Mode == GameMode.Host;
+    public static bool IsClient      => Mode == GameMode.Client;
 
     /// <summary>True once UGS has initialized successfully.</summary>
     public static bool AnalyticsReady { get; private set; }
@@ -60,8 +61,15 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator InitAnalytics()
     {
-        // UGS requires async init — wrap in a coroutine so it doesn't block anything
-        var task = UnityServices.InitializeAsync();
+        var options = new InitializationOptions();
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        options.SetEnvironmentName("development");
+#else
+        options.SetEnvironmentName("production");
+#endif
+
+        var task = UnityServices.InitializeAsync(options);
         yield return new WaitUntil(() => task.IsCompleted);
 
         if (task.IsFaulted)

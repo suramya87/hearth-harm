@@ -30,7 +30,7 @@ MonoBehaviour:
     - rid: 1363213480395014155
       type: {class: WindowsPlatformSettings, ns: UnityEditor.WindowsStandalone, asm: UnityEditor.WindowsStandalone.Extensions}
       data:
-        m_Development: 0
+        m_Development: 1
         m_ConnectProfiler: 0
         m_BuildWithDeepProfilingSupport: 0
         m_AllowDebugging: 0
@@ -48,6 +48,5 @@ MonoBehaviour:
         m_Architecture: 0
         m_CreateSolution: 0
         m_CopyPDBFiles: 0
-        m_EnableDirectStorage: 0
         m_WindowsDevicePortalAddress: 
         m_WindowsDevicePortalUsername: 
