@@ -112,6 +112,7 @@ GameObject:
   - component: {fileID: 823646823602097200}
   - component: {fileID: 6419122484163104090}
   - component: {fileID: 7001392543571885719}
+  - component: {fileID: 995243249345033823}
   m_Layer: 0
   m_Name: Frost
   m_TagString: Untagged
@@ -403,8 +404,24 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
   stats: {fileID: 0}
+  spriteChild: {fileID: 0}
+  spriteScale: {x: 1, y: 1}
   showDebugLogs: 0
   selectedVisual: {fileID: 0}
+--- !u!114 &995243249345033823
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2516156627802507729}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f163f0feb8b73b14fbf56fec69992ad0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsClickTracker
+  objectLabel: BOSS
+  trackType: 0
 --- !u!1 &8851842555451419647
 GameObject:
   m_ObjectHideFlags: 0

@@ -3212,6 +3212,7 @@ GameObject:
   - component: {fileID: 3026719722823159935}
   - component: {fileID: 4434739690379266500}
   - component: {fileID: 3372682360396438002}
+  - component: {fileID: 1112002944482431454}
   m_Layer: 5
   m_Name: characterPortrait
   m_TagString: Untagged
@@ -3292,6 +3293,22 @@ MonoBehaviour:
   portraits:
   - {fileID: 21300000, guid: bab4e359c5f13264188301af7aeedc05, type: 3}
   - {fileID: 21300000, guid: d2430c6481d65484294621bd2c01b52e, type: 3}
+--- !u!114 &1112002944482431454
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1342360033353065775}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: ' Image '
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &1362423992757557039
 GameObject:
   m_ObjectHideFlags: 0
@@ -3340,6 +3357,7 @@ GameObject:
   - component: {fileID: 2339576410595022860}
   - component: {fileID: 3144857295420059257}
   - component: {fileID: 6117368689353279169}
+  - component: {fileID: 8503758799405200290}
   m_Layer: 5
   m_Name: Inventory Button
   m_TagString: Untagged
@@ -3449,6 +3467,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &8503758799405200290
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1457096502574070624}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: Inventory
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &1485974395077990946
 GameObject:
   m_ObjectHideFlags: 0
@@ -4903,6 +4937,7 @@ GameObject:
   - component: {fileID: 6360724461806068534}
   - component: {fileID: 4480959987798504434}
   - component: {fileID: 6047593415197804659}
+  - component: {fileID: 4033852061512865964}
   m_Layer: 0
   m_Name: Next
   m_TagString: Untagged
@@ -5012,6 +5047,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &4033852061512865964
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2295389880610474742}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: EndRoomNext
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &2340403640905827153
 GameObject:
   m_ObjectHideFlags: 0
@@ -5024,6 +5075,7 @@ GameObject:
   - component: {fileID: 641951585607090775}
   - component: {fileID: 7287425814980600246}
   - component: {fileID: 6419807122215011167}
+  - component: {fileID: 762978912309947736}
   m_Layer: 5
   m_Name: Dexterity ++
   m_TagString: Untagged
@@ -5133,6 +5185,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &762978912309947736
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2340403640905827153}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: Stamina upgrade
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &2424904836276478338
 GameObject:
   m_ObjectHideFlags: 0
@@ -6393,6 +6461,7 @@ GameObject:
   - component: {fileID: 708792211032984304}
   - component: {fileID: 2349652596488812424}
   - component: {fileID: 6859766807373701197}
+  - component: {fileID: 7469858436885253994}
   m_Layer: 0
   m_Name: Main
   m_TagString: Untagged
@@ -6502,6 +6571,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &7469858436885253994
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2744777728791090983}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: MainMenuLose
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &2768118175983887423
 GameObject:
   m_ObjectHideFlags: 0
@@ -14530,6 +14615,7 @@ GameObject:
   - component: {fileID: 4218625598079626173}
   - component: {fileID: 5923814298538706327}
   - component: {fileID: 7288824035058106317}
+  - component: {fileID: 5910696073432513564}
   m_Layer: 0
   m_Name: Retry
   m_TagString: Untagged
@@ -14639,6 +14725,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &5910696073432513564
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5289805405406820003}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: Retry
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &5336116175362934455
 GameObject:
   m_ObjectHideFlags: 0
@@ -17144,6 +17246,7 @@ GameObject:
   - component: {fileID: 7267998940211055132}
   - component: {fileID: 5545719324856869825}
   - component: {fileID: 7077953972335043858}
+  - component: {fileID: 4950762517550306222}
   m_Layer: 5
   m_Name: Strength ++
   m_TagString: Untagged
@@ -17253,6 +17356,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &4950762517550306222
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6438056627162239056}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: AttackUpgrade
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &6447142011958079567
 GameObject:
   m_ObjectHideFlags: 0
@@ -17265,6 +17384,7 @@ GameObject:
   - component: {fileID: 1261510874436162371}
   - component: {fileID: 6494032448979016517}
   - component: {fileID: 2167560112840144314}
+  - component: {fileID: 7265756435120759520}
   m_Layer: 5
   m_Name: Constitution ++
   m_TagString: Untagged
@@ -17374,6 +17494,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &7265756435120759520
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6447142011958079567}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: HP upgrade
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &6592255310252482730
 GameObject:
   m_ObjectHideFlags: 0
@@ -19816,6 +19952,7 @@ GameObject:
   - component: {fileID: 475844429270968971}
   - component: {fileID: 4687670466876694678}
   - component: {fileID: 6395636263197260778}
+  - component: {fileID: 6289583939903236505}
   m_Layer: 0
   m_Name: Main
   m_TagString: Untagged
@@ -19925,6 +20062,22 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &6289583939903236505
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7659134440093230079}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: MainMenuEnd
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &7670966185609380861
 GameObject:
   m_ObjectHideFlags: 0
@@ -19974,6 +20127,7 @@ GameObject:
   - component: {fileID: 1565760030619862410}
   - component: {fileID: 9066359890828344480}
   - component: {fileID: 4234826951310693419}
+  - component: {fileID: 299385709607248715}
   m_Layer: 5
   m_Name: HealthContainer
   m_TagString: Untagged
@@ -20065,6 +20219,22 @@ MonoBehaviour:
   healthText: {fileID: 3923208707304380105}
   damageFlashUI: {fileID: 4238732559602770440}
   flashDuration: 0.25
+--- !u!114 &299385709607248715
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7698706348240714978}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: Health
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &7707515398794648107
 GameObject:
   m_ObjectHideFlags: 0
@@ -20970,6 +21140,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4160522123233771587}
   - component: {fileID: 6111345872895916054}
+  - component: {fileID: 9201997014884896611}
   m_Layer: 0
   m_Name: MiniMapUI
   m_TagString: Untagged
@@ -20986,7 +21157,7 @@ Transform:
   m_GameObject: {fileID: 7979015670390553188}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -70, y: -575, z: 0}
+  m_LocalPosition: {x: -70, y: -450, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -21006,9 +21177,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MinimapUI
   minimapContainer: {fileID: 3487795020788482167}
-  dotSize: 100
+  dotSize: 150
   dotSpacing: 10
-  minimapDisplaySize: {x: 200, y: 200}
+  minimapDisplaySize: {x: 300, y: 300}
   spriteDefault: {fileID: -1804553015, guid: c39c9d56595c32c4fba3c45c609b37a5, type: 3}
   spriteStart: {fileID: -2278566297644842510, guid: c39c9d56595c32c4fba3c45c609b37a5, type: 3}
   spriteEnd: {fileID: -355287021, guid: c39c9d56595c32c4fba3c45c609b37a5, type: 3}
@@ -21029,6 +21200,22 @@ MonoBehaviour:
   westLabel: {fileID: 0}
   enemyBlockMsg: '!'
   noRoomMsg: "\u2014"
+--- !u!114 &9201997014884896611
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7979015670390553188}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: Minimap
+  trackType: 1
+  characterName: 
+  source: menu
 --- !u!1 &8032437583023291969
 GameObject:
   m_ObjectHideFlags: 0
@@ -21603,10 +21790,10 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 0}
-        m_TargetAssemblyTypeName: SceneLoader, Assembly-CSharp
-        m_MethodName: LoadScene
-        m_Mode: 5
+      - m_Target: {fileID: 2345188725139024422}
+        m_TargetAssemblyTypeName: LoseScreen, Assembly-CSharp
+        m_MethodName: OnMainMenu
+        m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
@@ -22696,6 +22883,7 @@ GameObject:
   - component: {fileID: 318332943129231672}
   - component: {fileID: 3548375964638519131}
   - component: {fileID: 1655088476125757909}
+  - component: {fileID: 7278850884963630756}
   m_Layer: 5
   m_Name: StaminaContainer
   m_TagString: Untagged
@@ -22793,6 +22981,22 @@ MonoBehaviour:
   particleLayer: {fileID: 7166897499722323423}
   hoverOverlay: {fileID: 335157849822604830}
   staminaText: {fileID: 8961639859609677123}
+--- !u!114 &7278850884963630756
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8562534681692002036}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: Stamina
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &8573904225798334676
 GameObject:
   m_ObjectHideFlags: 0
@@ -23162,6 +23366,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7858796910157435085}
   - component: {fileID: 2068777291912689367}
+  - component: {fileID: 8283868720248810666}
   m_Layer: 0
   m_Name: CurrencyManager
   m_TagString: Untagged
@@ -23199,6 +23404,22 @@ MonoBehaviour:
   coinsText: {fileID: 2090070559238839073}
   currentCoins: 0
   countDuration: 0.5
+--- !u!114 &8283868720248810666
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8885893552003421022}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 19c2c1ce375664a45ac9206a3c28fd80, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsUITracker
+  objectLabel: money
+  trackType: 0
+  characterName: 
+  source: menu
 --- !u!1 &8946705839600384589
 GameObject:
   m_ObjectHideFlags: 0

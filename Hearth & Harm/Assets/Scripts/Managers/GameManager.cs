@@ -1,25 +1,22 @@
+using System.Collections;
 using UnityEngine;
+using Unity.Services.Core;
+using Unity.Services.Analytics;
 
 /// <summary>
 /// Game mode enum used across all systems.
 /// </summary>
 public enum GameMode
 {
-    Offline,  // Single-player, no network
-    Host,     // Multiplayer host (also runs server logic)
-    Client,   // Multiplayer client (non-authoritative)
+    Offline,
+    Host,
+    Client,
     None
 }
 
 /// <summary>
 /// Central entry point. Controls game mode so the same scene runs SP or MP.
-///
-/// HOW TO USE:
-///   - Single-player: leave defaultMode = Offline
-///   - Multiplayer: NetworkBootstrapper calls SetMode(Host/Client) before level loads
-///
-/// Systems read GameManager.Mode to decide whether to activate networked behaviour.
-/// IsMultiplayer is fully backwards compatible with the old bool flag.
+/// Also initializes UGS Analytics on startup — no game logic is affected.
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -31,16 +28,13 @@ public class GameManager : MonoBehaviour
 
     // ── Static accessors ───────────────────────────────────────────────────
 
-    public static GameMode Mode => Instance != null ? Instance._mode : GameMode.Offline;
+    public static GameMode Mode       => Instance != null ? Instance._mode : GameMode.Offline;
+    public static bool IsMultiplayer  => Mode != GameMode.Offline;
+    public static bool IsAuthority    => Mode == GameMode.Offline || Mode == GameMode.Host;
+    public static bool IsClient       => Mode == GameMode.Client;
 
-    /// <summary>True if running in any networked mode (Host or Client).</summary>
-    public static bool IsMultiplayer => Mode != GameMode.Offline;
-
-    /// <summary>True if this peer is authoritative (host or offline SP).</summary>
-    public static bool IsAuthority => Mode == GameMode.Offline || Mode == GameMode.Host;
-
-    /// <summary>True only when running as a non-host client.</summary>
-    public static bool IsClient => Mode == GameMode.Client;
+    /// <summary>True once UGS has initialized successfully.</summary>
+    public static bool AnalyticsReady { get; private set; }
 
     // ── Internal ───────────────────────────────────────────────────────────
 
@@ -48,21 +42,41 @@ public class GameManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) 
-        { 
-            Destroy(gameObject); 
-            return; // Early return — don't touch _mode
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
         }
+
         Instance = this;
         DontDestroyOnLoad(gameObject);
         _mode = defaultMode;
         Debug.Log($"[GameManager] Mode = {_mode}");
+
+        StartCoroutine(InitAnalytics());
     }
 
-    /// <summary>
-    /// Called by NetworkBootstrapper when a connection is established.
-    /// Can also be called manually for testing.
-    /// </summary>
+    // ── UGS Analytics init ─────────────────────────────────────────────────
+
+    private IEnumerator InitAnalytics()
+    {
+        // UGS requires async init — wrap in a coroutine so it doesn't block anything
+        var task = UnityServices.InitializeAsync();
+        yield return new WaitUntil(() => task.IsCompleted);
+
+        if (task.IsFaulted)
+        {
+            Debug.LogWarning($"[GameManager] UGS init failed: {task.Exception?.Message}");
+            yield break;
+        }
+
+        AnalyticsService.Instance.StartDataCollection();
+        AnalyticsReady = true;
+        Debug.Log("[GameManager] UGS Analytics ready.");
+    }
+
+    // ── Mode control ───────────────────────────────────────────────────────
+
     public static void SetMode(GameMode mode)
     {
         if (Instance == null)
@@ -74,24 +88,12 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[GameManager] Mode → {mode}");
     }
 
-    /// <summary>
-    /// Compatibility helper called by MainMenuController before scene load.
-    /// Translates the old bool into the correct GameMode.
-    /// Host vs Client is resolved from NGO at the moment of the call;
-    /// NetworkBootstrapper will correct it once the relay handshake finishes
-    /// if NGO isn't fully up yet.
-    /// </summary>
     public static void SetMultiplayer(bool multiplayer)
     {
-        if (!multiplayer)
-        {
-            SetMode(GameMode.Offline);
-            return;
-        }
+        if (!multiplayer) { SetMode(GameMode.Offline); return; }
 
         bool isHost = Unity.Netcode.NetworkManager.Singleton != null
                    && Unity.Netcode.NetworkManager.Singleton.IsHost;
-
         SetMode(isHost ? GameMode.Host : GameMode.Client);
     }
 }

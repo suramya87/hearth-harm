@@ -15,7 +15,7 @@ MonoBehaviour:
   classes:
   - playerClass: 0
     baseMaxHealth: 10
-    baseMaxStamina: 10
+    baseMaxStamina: 15
     strength: 0
     constitution: 0
     dexterity: 0

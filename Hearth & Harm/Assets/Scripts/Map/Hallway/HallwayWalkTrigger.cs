@@ -9,6 +9,9 @@ public class HallwayWalkTrigger : MonoBehaviour
     private bool        cooling;
     private bool        locked;
 
+    // Track units currently being handed off so we don't double-trigger
+    private Unit pendingUnit;
+
     public GameObject DoorStripObject { get; set; }
 
     public void Initialize(HallwayGrid hg)
@@ -39,22 +42,23 @@ public class HallwayWalkTrigger : MonoBehaviour
     {
         if (cooling || locked) return;
         if (!other.CompareTag("Player")) return;
-        
         if (hallway == null || !hallway.IsReady) return;
 
         var unit = other.GetComponent<Unit>() ?? other.GetComponentInParent<Unit>();
         if (unit == null) return;
 
+        // Already on the hallway grid — nothing to do
         if (unit.GetCurrentRoomGrid() == hallway.RoomGrid) return;
 
-        var move = unit.GetMoveAction();
-        if (move != null && move.IsActive) return;
+        // Already processing this unit — don't start a second coroutine
+        if (pendingUnit == unit) return;
 
-        if (RoomManager.Instance != null && RoomManager.Instance.CurrentRoomHasEnemies())
-        {
-            return; 
-        }
+        if (RoomManager.Instance != null && RoomManager.Instance.CurrentRoomHasEnemies()) return;
 
+        // FIX: don't bail if the move is active — HandOffAfterMove waits for it to finish.
+        // Previously returning here meant fast players would exit the collider while still
+        // moving and the handoff would never fire.
+        pendingUnit = unit;
         StartCoroutine(HandOffAfterMove(unit));
     }
 
@@ -62,69 +66,99 @@ public class HallwayWalkTrigger : MonoBehaviour
     {
         cooling = true;
 
+        // Wait for any in-progress move to complete before doing the grid swap
         var move = unit.GetMoveAction();
-        if (move != null && move.IsActive)
+        if (move != null)
         {
-            while (move.IsActive) yield return null;
+            // FIX: use a timeout so a stuck move can't lock this forever
+            float timeout = 3f;
+            float elapsed = 0f;
+            while (move.IsActive)
+            {
+                elapsed += Time.deltaTime;
+                if (elapsed >= timeout)
+                {
+                    Debug.LogWarning($"[HallwayWalkTrigger] Move timed out waiting for {unit.name}. Forcing handoff.");
+                    break;
+                }
+                yield return null;
+            }
         }
 
         yield return new WaitForFixedUpdate();
         yield return new WaitForEndOfFrame();
 
-        var roomGrid = hallway.RoomGrid;
-        if (roomGrid == null || !roomGrid.IsInitialized())
+        // FIX: re-check after waiting — the player may have already transitioned
+        // via the entry trigger during the move, making this handoff redundant
+        if (unit.GetCurrentRoomGrid() == hallway.RoomGrid)
         {
-            cooling = false;
+            pendingUnit = null;
+            cooling     = false;
             yield break;
         }
 
-        Vector3? bestWorld = FindNearestWalkableWorldPos(roomGrid, roomGrid.GetFloorTilemap(), transform.position);
+        var roomGrid = hallway.RoomGrid;
+        if (roomGrid == null || !roomGrid.IsInitialized())
+        {
+            pendingUnit = null;
+            cooling     = false;
+            yield break;
+        }
+
+        Vector3? bestWorld = FindNearestWalkableWorldPos(
+            roomGrid, roomGrid.GetFloorTilemap(), transform.position);
+
         if (bestWorld == null)
         {
-            cooling = false;
+            Debug.LogWarning($"[HallwayWalkTrigger] No walkable cell found near {transform.position}");
+            pendingUnit = null;
+            cooling     = false;
             yield break;
         }
 
         GridPosition gridPos = roomGrid.GetGridPosition(bestWorld.Value);
 
         if (move != null)
-        {
             move.ForceSyncGridPosition(roomGrid, gridPos);
-        }
         else
-        {
             unit.PlaceInRoom(roomGrid, gridPos);
-        }
 
         ApplyHallwayCameraBounds();
         RoomManager.Instance?.SetInHallway();
-        
-        unit.transform.position = new Vector3(bestWorld.Value.x, bestWorld.Value.y, unit.transform.position.z);
+
+        unit.transform.position = new Vector3(
+            bestWorld.Value.x, bestWorld.Value.y, unit.transform.position.z);
 
         if (move != null) move.RefreshValidTargets();
 
-        Debug.Log($"[Hallway Hand-off] {unit.name} adopted by {hallway.name} at {gridPos}");
+        Debug.Log($"[HallwayWalkTrigger] {unit.name} adopted by {hallway.name} at {gridPos}");
 
-        yield return new WaitForSeconds(0.2f); 
+        pendingUnit = null;
+        yield return new WaitForSeconds(0.2f);
         cooling = false;
     }
 
-    private static Vector3? FindNearestWalkableWorldPos(RoomGrid roomGrid, Tilemap floorTilemap, Vector3 targetWorld)
+    private static Vector3? FindNearestWalkableWorldPos(
+        RoomGrid roomGrid, Tilemap floorTilemap, Vector3 targetWorld)
     {
         if (floorTilemap == null) return null;
-        Vector3? best = null;
-        float bestDist = float.MaxValue;
+
+        Vector3? best     = null;
+        float    bestDist = float.MaxValue;
 
         foreach (var cell in floorTilemap.cellBounds.allPositionsWithin)
         {
             if (!floorTilemap.HasTile(cell)) continue;
-            Vector3 worldCentre = floorTilemap.GetCellCenterWorld(cell);
-            GridPosition gp = roomGrid.GetGridPosition(worldCentre);
+
+            Vector3      worldCentre = floorTilemap.GetCellCenterWorld(cell);
+            GridPosition gp          = roomGrid.GetGridPosition(worldCentre);
+
             if (!roomGrid.IsWalkableIgnoreOccupancy(gp)) continue;
 
             float dist = Vector3.Distance(worldCentre, targetWorld);
             if (dist < bestDist) { bestDist = dist; best = worldCentre; }
         }
+
         return best;
     }
 
@@ -132,27 +166,26 @@ public class HallwayWalkTrigger : MonoBehaviour
     {
         var cam = CameraController2D.Instance;
         if (cam == null || hallway == null) return;
-        
+
         var floor = hallway.FloorTilemap;
         if (floor == null) return;
-        
-        var cb = floor.cellBounds;
+
+        var     cb       = floor.cellBounds;
         Vector3 worldMin = floor.GetCellCenterWorld(new Vector3Int(cb.xMin, cb.yMin, 0));
         Vector3 worldMax = floor.GetCellCenterWorld(new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
-        
+
         Vector3 center = (worldMin + worldMax) * 0.5f;
-        float width = Mathf.Abs(worldMax.x - worldMin.x);
-        float height = Mathf.Abs(worldMax.y - worldMin.y);
+        float   width  = Mathf.Abs(worldMax.x - worldMin.x);
+        float   height = Mathf.Abs(worldMax.y - worldMin.y);
 
-        float horizontalPadding = 64f; 
-        float verticalPadding = 64f;
-        float minCameraWidth = 32f;  // Prevents zooming in too far in narrow halls
-        float minCameraHeight = 10f;
+        float horizontalPadding = 64f;
+        float verticalPadding   = 64f;
+        float minCameraWidth    = 32f;
+        float minCameraHeight   = 10f;
 
-        float finalWidth = Mathf.Max(width + horizontalPadding, minCameraWidth);
-        float finalHeight = Mathf.Max(height + verticalPadding, minCameraHeight);
+        float finalWidth  = Mathf.Max(width  + horizontalPadding, minCameraWidth);
+        float finalHeight = Mathf.Max(height + verticalPadding,   minCameraHeight);
 
-        // Apply the smoother, larger bounds
         Bounds hallwayBounds = new Bounds(center, new Vector3(finalWidth, finalHeight, 10f));
         cam.SetRoomBounds(hallwayBounds);
     }

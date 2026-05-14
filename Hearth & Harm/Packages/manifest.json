@@ -19,6 +19,7 @@
     "com.unity.multiplayer.widgets": "1.0.5",
     "com.unity.netcode.gameobjects": "2.11.0",
     "com.unity.render-pipelines.universal": "17.4.0",
+    "com.unity.services.analytics": "6.3.0",
     "com.unity.services.multiplayer": "2.2.1",
     "com.unity.test-framework": "1.6.0",
     "com.unity.timeline": "1.8.12",

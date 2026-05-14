@@ -479,6 +479,22 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7939828504866556733, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Mode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7939828504866556733, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
+      value: 
+      objectReference: {fileID: 969917085}
+    - target: {fileID: 7939828504866556733, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
+      value: OnMainMenu
+      objectReference: {fileID: 0}
+    - target: {fileID: 7939828504866556733, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: LoseScreen, Assembly-CSharp
+      objectReference: {fileID: 0}
     - target: {fileID: 8032437583023291969, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: m_Name
       value: WHOLE UI
@@ -488,6 +504,17 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+--- !u!114 &969917085 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2345188725139024422, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+  m_PrefabInstance: {fileID: 969917084}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21d37b8540aa6cd48b8e130972afb0a6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LoseScreen
 --- !u!1 &1059453620
 GameObject:
   m_ObjectHideFlags: 0
@@ -958,6 +985,37 @@ MonoBehaviour:
   followSmoothness: 8
   unlockDistance: 0.05
   shakeFrequency: 25
+--- !u!1 &1608240830
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1608240831}
+  m_Layer: 0
+  m_Name: AnalyticsEvents
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1608240831
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1608240830}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 50.95388, y: 18.12882, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1624180977
 GameObject:
   m_ObjectHideFlags: 0
@@ -1031,11 +1089,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 77b2c4df5a3278f4d91371e1a47a55df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveManager
-  baseEnemyCount: 5
-  enemiesPerLevel: 3
-  maxEnemies: 40
-  baseMinRooms: 6
-  baseMaxRooms: 15
+  baseEnemyCount: 3
+  enemiesPerLevel: 2
+  maxEnemies: 25
+  baseMinRooms: 3
+  baseMaxRooms: 6
   roomsPerLevel: 1
   maxRooms: 20
 --- !u!4 &1650586711
@@ -1409,3 +1467,4 @@ SceneRoots:
   - {fileID: 1434585243}
   - {fileID: 491675905}
   - {fileID: 969917084}
+  - {fileID: 1608240831}

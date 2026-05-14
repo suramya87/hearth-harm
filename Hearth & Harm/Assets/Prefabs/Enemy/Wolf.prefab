@@ -291,6 +291,7 @@ GameObject:
   - component: {fileID: 187304144552775843}
   - component: {fileID: 1460094445985071997}
   - component: {fileID: -3103733176123180351}
+  - component: {fileID: 7422808117187942805}
   m_Layer: 0
   m_Name: Wolf
   m_TagString: Untagged
@@ -351,6 +352,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyUnit
   stats: {fileID: 11400000, guid: 009a3cb72bf093a4698b4fa3397fbdfa, type: 2}
+  spriteChild: {fileID: 0}
+  spriteScale: {x: 1, y: 1}
   showDebugLogs: 0
   selectedVisual: {fileID: 0}
 --- !u!114 &5000342648279679484
@@ -497,3 +500,17 @@ MonoBehaviour:
   SwitchTransformSpaceWhenParented: 0
   Interpolate: 1
   SlerpPosition: 0
+--- !u!114 &7422808117187942805
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8194032206900855935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f163f0feb8b73b14fbf56fec69992ad0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsClickTracker
+  objectLabel: WOLF
+  trackType: 0

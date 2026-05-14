@@ -2055,6 +2055,7 @@ GameObject:
   - component: {fileID: 572400385253113238}
   - component: {fileID: 5762346388395061144}
   - component: {fileID: 6043448706388377946}
+  - component: {fileID: -2885362972724931786}
   m_Layer: 0
   m_Name: BossRoom1
   m_TagString: Untagged
@@ -2570,6 +2571,21 @@ MonoBehaviour:
   bossPrefab: {fileID: 2516156627802507729, guid: f32a66904fb3ccb4f90e2220915f5c58, type: 3}
   footprintSize: 2
   showDebugLogs: 1
+--- !u!114 &-2885362972724931786
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5114301450661476021}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6cca48b30822c743953b1901d697651, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsRoomTracker
+  roomName: Bossroom
+  autoTrackOnEnable: 1
+  autoTrackCleared: 1
 --- !u!1 &5772435719672450043
 GameObject:
   m_ObjectHideFlags: 0

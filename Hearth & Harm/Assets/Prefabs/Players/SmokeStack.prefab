@@ -116,6 +116,7 @@ GameObject:
   - component: {fileID: 7607613053025726379}
   - component: {fileID: 7514983732014160107}
   - component: {fileID: 7572616877870388138}
+  - component: {fileID: 5627207291722134400}
   m_Layer: 6
   m_Name: SmokeStack
   m_TagString: Player
@@ -259,7 +260,7 @@ MonoBehaviour:
   staminaPopupOffset: {x: 0, y: 1, z: 0}
   strength: 5
   constitution: 5
-  dexterity: 5
+  dexterity: 10
   intelligence: 0
   perception: 0
   charisma: 0
@@ -425,7 +426,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1228650071
+  GlobalObjectIdHash: 4219110693
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -532,3 +533,17 @@ MonoBehaviour:
   paramIsDead: isDead
   paramStaminaEmpty: staminaEmpty
   paramRoomTransition: roomTransition
+--- !u!114 &5627207291722134400
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9198468102176965729}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f163f0feb8b73b14fbf56fec69992ad0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnalyticsClickTracker
+  objectLabel: SmokeStack
+  trackType: 0
