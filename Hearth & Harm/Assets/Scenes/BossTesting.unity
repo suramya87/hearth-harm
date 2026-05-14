@@ -1037,8 +1037,8 @@ MonoBehaviour:
   baseEnemyCount: 5
   enemiesPerLevel: 3
   maxEnemies: 40
-  baseMinRooms: 5
-  baseMaxRooms: 15
+  baseMinRooms: 1
+  baseMaxRooms: 3
   roomsPerLevel: 1
   maxRooms: 20
 --- !u!4 &1650586711
