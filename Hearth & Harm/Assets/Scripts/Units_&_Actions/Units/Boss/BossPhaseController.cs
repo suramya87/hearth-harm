@@ -87,6 +87,7 @@ public class BossPhaseController : MonoBehaviour
 
     private void EnterVulnerable()
     {
+        if (boss == null || boss.IsDead) return;
         CurrentPhase = BossPhase.Vulnerable;
         minionsDead  = true;
 
@@ -105,6 +106,7 @@ public class BossPhaseController : MonoBehaviour
             Debug.LogError("[BossPhaseController] SetInvisible called before Initialize!");
             return;
         }
+        if (boss == null || boss.IsDead) return; // add this
 
         invisActive = on;
         boss.SetAlpha(on ? stats.invisAlpha : 1f);
@@ -126,8 +128,8 @@ public class BossPhaseController : MonoBehaviour
     public void TickInvisibility()
     {
         if (!invisActive) return;
+        if (boss == null || boss.IsDead) return; // add this
         invisTurnsLeft--;
-        Debug.Log($"[BossPhaseController] Invis tick — turns left: {invisTurnsLeft}");
         if (invisTurnsLeft <= 0)
             SetInvisible(false);
     }
@@ -144,12 +146,12 @@ public class BossPhaseController : MonoBehaviour
             yield break;
         }
 
-        yield return null; 
+        yield return null;
+        minionWaveDispatched = true;
 
-        minionWaveDispatched = true; 
+        if (boss == null || boss.IsDead) yield break;
 
         var room = boss.CurrentRoomGrid;
-        if (room == null) yield break;
 
         int toSpawn = Mathf.Min(
             stats.minionsPerWave,
@@ -174,6 +176,7 @@ public class BossPhaseController : MonoBehaviour
 
     private void OnMinionDied(EnemyUnit minion)
     {
+        if (boss == null || boss.IsDead) return;
         minion.OnEnemyDied -= OnMinionDied;
         spawnedMinions.Remove(minion);
         CheckMinionStatus();
@@ -181,6 +184,7 @@ public class BossPhaseController : MonoBehaviour
 
     private void CheckMinionStatus()
     {
+        if (boss == null || boss.IsDead) return;
         if (!minionWaveDispatched) return;
 
         spawnedMinions.RemoveAll(m => m == null || m.IsDead);

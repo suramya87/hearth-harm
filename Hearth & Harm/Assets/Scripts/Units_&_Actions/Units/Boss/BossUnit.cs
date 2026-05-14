@@ -47,7 +47,6 @@ public class BossUnit : MonoBehaviour, IHasHealth
     {
         health      = GetComponent<HealthComponent>();
         interceptor = GetComponent<BossDamageInterceptor>();
-        // NOTE: renderers are NOT cached here — SetAlpha always fetches fresh
     }
 
     private void Start()
@@ -137,10 +136,9 @@ public class BossUnit : MonoBehaviour, IHasHealth
 
     public void SetAlpha(float alpha)
     {
+        if (this == null || gameObject == null) return;
+
         var allRenderers = GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
-
-        Debug.Log($"[BossUnit] SetAlpha({alpha}) — found {allRenderers.Length} renderers");
-
         foreach (var sr in allRenderers)
         {
             if (sr == null) continue;
@@ -149,7 +147,6 @@ public class BossUnit : MonoBehaviour, IHasHealth
             sr.color = c;
         }
     }
-
     // ── Selection visual ───────────────────────────────────────────────────
 
     public void SetSelected(bool on)
@@ -166,11 +163,14 @@ public class BossUnit : MonoBehaviour, IHasHealth
 
     // ── Death ──────────────────────────────────────────────────────────────
 
+
     private void HandleDeath()
     {
         if (showDebugLogs) Debug.Log($"[BossUnit] {bossStats?.bossName} died.");
-        RemoveFromGrid();
+        
         OnBossDied?.Invoke(this);
+        
+        RemoveFromGrid();
         Destroy(gameObject, 0.75f);
     }
 
