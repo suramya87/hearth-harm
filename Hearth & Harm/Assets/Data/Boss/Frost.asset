@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dfee37d256f47044c9c508e4856a4440, type: 3}
+  m_Name: Frost
+  m_EditorClassIdentifier: Assembly-CSharp::BossStats
+  bossName: Frost
+  maxHealth: 150
+  moveRange: 3
+  attackRange: 5
+  turnsBeforeFirstAction: 0
+  rangedAttackData: {fileID: 11400000, guid: 4d7ab4286fb33b642853470a593cf962, type: 2}
+  cleaveAttackData: {fileID: 11400000, guid: 9b2daa61b85a6664a8bcc6d26bacd918, type: 2}
+  enrageThreshold: 0.85
+  invisAlpha: 0.1
+  damageReductionInvis: 0.5
+  invisDurationTurns: 2
+  minionPrefabs:
+  - {fileID: 2607613351963544914, guid: 531d479663f6a5e42a8e789b498e3579, type: 3}
+  minionsPerWave: 3
+  maxConcurrentMinions: 5
+  increasedDamageMultiplier: 2
+  kiteEnabled: 0
+  kiteRange: 2

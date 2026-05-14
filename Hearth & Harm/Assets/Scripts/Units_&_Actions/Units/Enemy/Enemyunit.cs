@@ -1,6 +1,8 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// EnemyUnit.cs
+// ─────────────────────────────────────────────────────────────────────────────
 using System;
 using UnityEngine;
-
 
 [RequireComponent(typeof(HealthComponent))]
 public class EnemyUnit : MonoBehaviour, IHasHealth
@@ -20,7 +22,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
 
     public event Action<EnemyUnit> OnEnemyDied;
 
-    // ── Properties ─────────────────────────────────────────────────────────
     public EnemyStats Stats => stats;
     public HealthComponent Health => health;
     public GridPosition GridPosition => gridPosition;
@@ -28,10 +29,13 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     public bool IsInitialized => initialized;
     public bool IsDead => health != null && health.IsDead;
 
-    // ── IHasHealth ─────────────────────────────────────────────────────────
-    public int GetMaxHealth() => stats != null ? stats.maxHealth : 100;
-
-    // ── Lifecycle ──────────────────────────────────────────────────────────
+    // FIX: defer to BossUnit if present so HealthComponent gets the right max HP
+    public int GetMaxHealth()
+    {
+        var boss = GetComponent<BossUnit>();
+        if (boss != null) return boss.GetMaxHealth();
+        return stats != null ? stats.maxHealth : 100;
+    }
 
     private void Awake() => health = GetComponent<HealthComponent>();
 
@@ -44,12 +48,15 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     private void OnDestroy()
     {
         if (health != null) health.OnDeath -= HandleDeath;
+
+        // BossUnit owns its own cleanup — EnemyUnit must not interfere
+        if (GetComponent<BossUnit>() != null) return;
+
         if (currentRoomGrid != null && initialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, this);
+
         EnemyManager.Instance?.UnregisterEnemy(this);
     }
-
-    // ── Grid placement (called by spawner, no broadcast needed — NGO spawns the GO) ──
 
     public void PlaceOnGrid(RoomGrid room, GridPosition pos)
     {
@@ -67,8 +74,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         if (showDebugLogs) Debug.Log($"[EnemyUnit] {stats?.enemyName} placed at {pos}");
     }
 
-    // ── Movement (called by EnemyAI on server) ─────────────────────────────
-
     public void MoveToPosition(GridPosition newPos)
     {
         if (!initialized) return;
@@ -82,16 +87,12 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
 
         if (showDebugLogs) Debug.Log($"[EnemyUnit] {stats?.enemyName} moved to {newPos}");
 
-        // In multiplayer, enemy AI runs server-only. Broadcast the move so clients
-        // see the enemy actually walk to its new tile.
         if (GameManager.IsMultiplayer)
         {
             var bridge = GetComponent<NetworkedEnemyBridge>();
             bridge?.ServerBroadcastMove(newPos, currentRoomGrid);
         }
     }
-
-    // ── Turn gating ────────────────────────────────────────────────────────
 
     public bool CanActThisTurn()
     {
@@ -101,23 +102,26 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         return true;
     }
 
-    // ── Selection visual ───────────────────────────────────────────────────
-
     public void SetSelected(bool on)
     {
         if (selectedVisual) selectedVisual.SetActive(on);
     }
 
-    // ── Death ──────────────────────────────────────────────────────────────
+    internal void SyncRoomGrid(RoomGrid room)
+    {
+        currentRoomGrid = room;
+        initialized     = true;
+    }
 
     private void HandleDeath()
     {
+        // FIX: BossUnit owns death — skip all EnemyUnit death logic for the boss
+        if (GetComponent<BossUnit>() != null) return;
 
         if (stats != null && CurrencyManager.Instance != null)
         {
             int coinsDropped = stats.RollCoinDrop();
             CurrencyManager.Instance.AddCoins(coinsDropped);
-
             if (showDebugLogs)
                 Debug.Log($"[EnemyUnit] {stats.enemyName} dropped {coinsDropped} coins.");
         }
@@ -127,7 +131,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
         if (currentRoomGrid != null && initialized)
             currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, this);
 
-        // In multiplayer, notify all clients of the death visual
         if (GameManager.IsMultiplayer)
         {
             var bridge = GetComponent<NetworkedEnemyBridge>();
