@@ -2056,6 +2056,7 @@ GameObject:
   - component: {fileID: 5762346388395061144}
   - component: {fileID: 6043448706388377946}
   - component: {fileID: -2885362972724931786}
+  - component: {fileID: 3494027564167055290}
   m_Layer: 0
   m_Name: BossRoom1
   m_TagString: Untagged
@@ -2586,6 +2587,18 @@ MonoBehaviour:
   roomName: Bossroom
   autoTrackOnEnable: 1
   autoTrackCleared: 1
+--- !u!156049354 &3494027564167055290
+Grid:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5114301450661476021}
+  m_Enabled: 1
+  m_CellSize: {x: 1, y: 1, z: 1}
+  m_CellGap: {x: 0, y: 0, z: 0}
+  m_CellLayout: 0
+  m_CellSwizzle: 0
 --- !u!1 &5772435719672450043
 GameObject:
   m_ObjectHideFlags: 0
@@ -3264,7 +3277,7 @@ Grid:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7384428780689297530}
   m_Enabled: 1
-  m_CellSize: {x: 1, y: 1, z: 1}
+  m_CellSize: {x: 1, y: 1, z: 0}
   m_CellGap: {x: 0, y: 0, z: 0}
   m_CellLayout: 0
   m_CellSwizzle: 0

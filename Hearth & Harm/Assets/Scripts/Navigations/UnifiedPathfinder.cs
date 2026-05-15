@@ -1,19 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// World-space A* that runs entirely on UnifiedWorldGrid so paths cross
-/// room and hallway boundaries without any grid-swap logic.
-///
-/// PRIMARY OUTPUT: List<WorldStep>
-///   Each step carries the world-centre position AND the RoomGrid that owns
-///   that cell.  MoveAction uses this to animate correctly across grids and
-///   to know which grid to register the unit on at each waypoint.
-///
-/// SECONDARY OUTPUT: List<Vector3>  (FindPath overload)
-///   Plain world positions — used by Pathfinder.FindPathUnified() which
-///   converts them back to GridPositions for the legacy path.
-/// </summary>
+
 public static class UnifiedPathfinder
 {
     // ── Public data ────────────────────────────────────────────────────────

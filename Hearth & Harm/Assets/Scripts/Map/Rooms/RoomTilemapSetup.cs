@@ -33,19 +33,15 @@ public class RoomTilemapSetup : MonoBehaviour
             Debug.LogError($"[RoomTilemapSetup] No 'Floor' tilemap found in {gameObject.name}!");
 
         var roomGrid = GetComponent<RoomGrid>() ?? gameObject.AddComponent<RoomGrid>();
-
         if (GetComponent<TilemapRoomGrid>() == null)
             gameObject.AddComponent<TilemapRoomGrid>();
 
         roomGrid.Initialize(walls, floor);
-
         initialized = true;
 
-        if (UnifiedWorldGrid.Instance != null)
-            UnifiedWorldGrid.Instance.RegisterTilemap(floor, roomGrid, walls);
-        else
-            Debug.LogWarning($"[RoomTilemapSetup] UnifiedWorldGrid not found — " +
-                             $"add it to the scene so cross-room pathfinding works.");
+        // NOTE: Registration into UnifiedWorldGrid is intentionally NOT done here.
+        // LevelGenerator.RegisterAllTilemaps() handles it after all rooms AND
+        // hallways are fully built, guaranteeing correct timing.
     }
 
     public bool IsInitialized => initialized;

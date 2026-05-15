@@ -74,38 +74,145 @@ public class LevelGenerator : MonoBehaviour
         Invoke(nameof(GenerateLevel), 0.1f);
     }
 
-    public void GenerateLevel()
+        public void GenerateLevel()
     {
+        // STEP 0: UnifiedWorldGrid must exist before anything else runs.
+        EnsureUnifiedWorldGrid();
+ 
         ClearLevel();
-
+ 
         placedRooms    = new();
         roomLayoutGrid = new();
         connections    = new();
-
+ 
         if (!GenerateLayout()) { Debug.LogError("[LevelGenerator] Layout failed."); return; }
-
+ 
         ConfigureDoors();
-        InitRoomGrids();
+        InitRoomGrids();        // builds room grids, does NOT register yet
         InitDoors();
-        BuildHallways();
-
+        BuildHallways();        // builds hallway tiles, does NOT register yet
+        RegisterAllTilemaps();  // ONE clean pass: register everything now that all tiles exist
+ 
         PlacedRoom start = placedRooms.Find(r =>
             r.prefabData.roomType == RoomType.Start
             && r.roomGrid != null
             && r.roomGrid.IsInitialized());
-
+ 
         if (start == null)
         {
             Debug.LogError("[LevelGenerator] No valid start room — retrying.");
             GenerateLevel();
             return;
         }
-
+ 
         if (spawnPlayerOnGenerate && playerPrefabs != null && playerPrefabs.Count > 0)
             SpawnPlayer(start);
-
-        Debug.Log($"[LevelGenerator] {placedRooms.Count} rooms + {spawnedHallways.Count} hallways generated.");
+ 
+        Debug.Log($"[LevelGenerator] {placedRooms.Count} rooms + {spawnedHallways.Count} hallways. " +
+                  $"UnifiedWorldGrid cells: {UnifiedWorldGrid.Instance?.AllCells.Count ?? 0}");
+ 
         OnLevelReady?.Invoke();
+    }
+ 
+    // ── Replaced: no longer registers with UnifiedWorldGrid ───────────────
+ 
+    // ── Replaced: no longer registers with UnifiedWorldGrid ───────────────
+ 
+    private void InitRoomGrids()
+    {
+        foreach (PlacedRoom room in placedRooms)
+        {
+            var setup = room.roomInstance.GetComponent<RoomTilemapSetup>()
+                     ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
+ 
+            // Initialize() builds the RoomGrid/TilemapRoomGrid structures.
+            // It does NOT register with UnifiedWorldGrid — that is done below
+            // in RegisterAllTilemaps() after hallways are also built.
+            setup.Initialize();
+ 
+            room.roomGrid = room.roomInstance.GetComponent<RoomGrid>();
+ 
+            var spawnReader = room.roomInstance.GetComponent<RoomSpawnPointReader>()
+                           ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
+            spawnReader.Initialize();
+        }
+ 
+        RecordDoorStates();
+    }
+ 
+    // ── New: single-pass registration after ALL tiles exist ───────────────
+ 
+    /// <summary>
+    /// Registers every room and hallway into UnifiedWorldGrid in one pass,
+    /// called after BuildHallways() so all tilemaps are fully painted.
+    ///
+    /// This is the ONLY place RegisterTilemap is called. RoomTilemapSetup
+    /// and HallwayGrid.Initialize() deliberately do NOT call it anymore.
+    /// </summary>
+    private void RegisterAllTilemaps()
+    {
+        var uwg = UnifiedWorldGrid.Instance;
+        if (uwg == null)
+        {
+            Debug.LogError("[LevelGenerator] UnifiedWorldGrid missing — cannot register tilemaps!");
+            return;
+        }
+ 
+        // Full clear so a regenerated level doesn't accumulate stale cells.
+        uwg.Clear();
+ 
+        int roomCount    = 0;
+        int hallwayCount = 0;
+ 
+        foreach (PlacedRoom room in placedRooms)
+        {
+            if (room.roomGrid == null || !room.roomGrid.IsInitialized()) continue;
+ 
+            Tilemap floor = room.roomGrid.GetFloorTilemap();
+            Tilemap walls = room.roomGrid.GetWallsTilemap();
+            if (floor == null) continue;
+ 
+            uwg.RegisterTilemap(floor, room.roomGrid, walls);
+            roomCount++;
+        }
+ 
+        foreach (HallwayGrid hg in spawnedHallways)
+        {
+            if (!hg.IsReady) continue;
+            uwg.RegisterTilemap(hg.FloorTilemap, hg.RoomGrid, hg.WallsTilemap);
+            hallwayCount++;
+        }
+ 
+        Debug.Log($"[LevelGenerator] RegisterAllTilemaps: " +
+                  $"{roomCount} rooms + {hallwayCount} hallways = " +
+                  $"{uwg.AllCells.Count} total cells in UnifiedWorldGrid.");
+    }
+
+
+
+    // ── UnifiedWorldGrid bootstrap ─────────────────────────────────────────
+
+    /// <summary>
+    /// Creates the UnifiedWorldGrid singleton if it doesn't already exist,
+    /// then clears it so stale cells from a previous level aren't left behind.
+    ///
+    /// Must be called at the very start of GenerateLevel(), before any room
+    /// or hallway is initialised.
+    /// </summary>
+    private static void EnsureUnifiedWorldGrid()
+    {
+        if (UnifiedWorldGrid.Instance == null)
+        {
+            var go = new GameObject("UnifiedWorldGrid");
+            go.AddComponent<UnifiedWorldGrid>();
+            Debug.Log("[LevelGenerator] Created UnifiedWorldGrid singleton.");
+        }
+        else
+        {
+            // Clear stale data from the previous level.
+            UnifiedWorldGrid.Instance.Clear();
+            Debug.Log("[LevelGenerator] Cleared UnifiedWorldGrid for new level.");
+        }
     }
 
     // ── Public queries ─────────────────────────────────────────────────────
@@ -114,9 +221,7 @@ public class LevelGenerator : MonoBehaviour
     public List<HallwayGrid> GetAllHallways() => spawnedHallways;
 
     public PlacedRoom GetBossRoom()
-    {
-        return placedRooms?.Find(r => r.prefabData.roomType == RoomType.Boss);
-    }
+        => placedRooms?.Find(r => r.prefabData.roomType == RoomType.Boss);
 
     public PlacedRoom GetConnectedRoom(PlacedRoom room, Direction dir)
     {
@@ -154,7 +259,6 @@ public class LevelGenerator : MonoBehaviour
             return false;
         }
 
-        // ── 1. Place start ────────────────────────────────────────────────────
         PlacedRoom start = PlaceRoom(RoomType.Start, Vector2Int.zero, Vector3.zero);
         if (start == null) return false;
 
@@ -162,15 +266,12 @@ public class LevelGenerator : MonoBehaviour
             WaveManager.Instance?.GetMinRooms() ?? minRooms,
             (WaveManager.Instance?.GetMaxRooms() ?? maxRooms) + 1);
 
-        // ── 2. Place normal / special rooms (never Boss or End here) ──────────
-        var  queue        = new Queue<PlacedRoom>();
-        int  placedMiddle = 0;
-
+        var queue        = new Queue<PlacedRoom>();
+        int placedMiddle = 0;
         queue.Enqueue(start);
 
-        // Reserve 1 slot for boss + 1 for end if boss is enabled
         int normalTarget = spawnBossRoom && GetRandomPrefab(RoomType.Boss) != null
-            ? Mathf.Max(0, targetNormalRooms - 1)   // leave one slot for boss
+            ? Mathf.Max(0, targetNormalRooms - 1)
             : targetNormalRooms;
 
         PlacedRoom lastNormal = start;
@@ -189,8 +290,7 @@ public class LevelGenerator : MonoBehaviour
                 if (placedMiddle >= normalTarget) break;
 
                 RoomType type = Random.value < specialRoomChance
-                    ? RoomType.Special
-                    : RoomType.Normal;
+                    ? RoomType.Special : RoomType.Normal;
 
                 PlacedRoom newRoom = PlaceRoomInDirection(current, dir, type);
                 if (newRoom == null) continue;
@@ -203,15 +303,12 @@ public class LevelGenerator : MonoBehaviour
         }
 
         if (placedMiddle < normalTarget)
-            Debug.LogWarning($"[LevelGenerator] Only placed {placedMiddle}/{normalTarget} normal rooms.");
+            Debug.LogWarning($"[LevelGenerator] Placed {placedMiddle}/{normalTarget} normal rooms.");
 
-        // ── 3. Place Boss room off the last placed normal room ────────────────
         PlacedRoom bossRoom = null;
         if (spawnBossRoom && GetRandomPrefab(RoomType.Boss) != null)
         {
             bossRoom = TryPlaceRoomOnto(lastNormal, RoomType.Boss);
-
-            // Fallback: walk backwards through placed rooms until we find a free slot
             if (bossRoom == null)
             {
                 for (int i = placedRooms.Count - 1; i >= 0 && bossRoom == null; i--)
@@ -220,22 +317,19 @@ public class LevelGenerator : MonoBehaviour
                     bossRoom = TryPlaceRoomOnto(placedRooms[i], RoomType.Boss);
                 }
             }
-
             if (bossRoom == null)
-                Debug.LogWarning("[LevelGenerator] Could not place Boss room — level will have no boss.");
+                Debug.LogWarning("[LevelGenerator] Could not place Boss room.");
         }
 
-        // ── 4. Place End room off the Boss (or last normal if no boss) ────────
         PlacedRoom anchorForEnd = bossRoom ?? lastNormal;
         PlacedRoom endRoom = TryPlaceRoomOnto(anchorForEnd, RoomType.End);
 
-        // Fallback: try every room except start
         if (endRoom == null)
         {
             for (int i = placedRooms.Count - 1; i >= 0 && endRoom == null; i--)
             {
                 if (placedRooms[i].prefabData.roomType == RoomType.Start) continue;
-                if (placedRooms[i] == bossRoom) continue; // already tried
+                if (placedRooms[i] == bossRoom) continue;
                 endRoom = TryPlaceRoomOnto(placedRooms[i], RoomType.End);
             }
         }
@@ -253,12 +347,10 @@ public class LevelGenerator : MonoBehaviour
     {
         var dirs = GetAvailableDirections(anchor);
         Shuffle(dirs);
-
         foreach (Direction dir in dirs)
         {
             PlacedRoom placed = PlaceRoomInDirection(anchor, dir, type);
             if (placed == null) continue;
-
             Connect(anchor, placed, dir);
             return placed;
         }
@@ -347,13 +439,13 @@ public class LevelGenerator : MonoBehaviour
         b.connector.MarkConnectionUsed(opp);
     }
 
-    // ── PCG Hallway building ───────────────────────────────────────────────
+    // ── Hallways ───────────────────────────────────────────────────────────
 
     private void BuildHallways()
     {
         if (hallwayTileSet == null)
         {
-            Debug.LogWarning("[LevelGenerator] No HallwayTileSet assigned — skipping hallways.");
+            Debug.LogWarning("[LevelGenerator] No HallwayTileSet — skipping hallways.");
             return;
         }
 
@@ -382,7 +474,7 @@ public class LevelGenerator : MonoBehaviour
         }
     }
 
-    // ── Door configuration ─────────────────────────────────────────────────
+    // ── Doors ──────────────────────────────────────────────────────────────
 
     private void ConfigureDoors()
     {
@@ -390,37 +482,32 @@ public class LevelGenerator : MonoBehaviour
         {
             if (room.connector == null || room.roomGrid == null) continue;
 
-            // Start by assuming every side is a solid wall
             room.connector.CloseAllDoors();
 
             foreach (Direction dir in Enum.GetValues(typeof(Direction)))
             {
-                // If there is NO connection in this direction, it's a permanent wall
                 if (!connections.TryGetValue((room, dir), out PlacedRoom neighbour))
                 {
                     room.roomGrid.SetDoorState(dir, false);
                     continue;
                 }
 
-                // Check if this is a Boss -> End Room connection
-                bool isBossExit = (room.prefabData.roomType == RoomType.Boss && 
-                                neighbour.prefabData.roomType == RoomType.End);
+                bool isBossExit = room.prefabData.roomType == RoomType.Boss &&
+                                  neighbour.prefabData.roomType == RoomType.End;
 
                 if (isBossExit)
                 {
-                    // Logic: It's a door, but it starts CLOSED
                     room.roomGrid.SetDoorState(dir, false);
-                    
                     var strip = GetStripObject(room.connector, dir);
                     if (strip != null)
                     {
-                        var brd = strip.GetComponent<BossRoomDoor>() ?? strip.AddComponent<BossRoomDoor>();
+                        var brd = strip.GetComponent<BossRoomDoor>()
+                               ?? strip.AddComponent<BossRoomDoor>();
                         brd.Initialize(room.roomGrid);
                     }
                 }
                 else
                 {
-                    // Logic: Normal hallway, starts OPEN
                     room.roomGrid.SetDoorState(dir, true);
                     room.connector.SetDoorOpen(dir, true);
                 }
@@ -428,56 +515,33 @@ public class LevelGenerator : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Writes each door's open/closed decision into the room's RoomGrid so that
-    /// RoomDoor can restore the correct visual state on every subsequent room entry.
-    /// Must be called after InitRoomGrids() so that room.roomGrid is valid.
-    /// </summary>
-private void RecordDoorStates()
-{
-    foreach (PlacedRoom room in placedRooms)
-    {
-        if (room.roomGrid == null || room.connector == null) continue;
-
-        foreach (Direction dir in Enum.GetValues(typeof(Direction)))
-        {
-            bool hasConnection = connections.ContainsKey((room, dir));
-
-            if (!hasConnection)
-            {
-                room.roomGrid.SetDoorState(dir, false);
-                room.connector.SetDoorOpen(dir, false);
-            }
-            else
-            {
-                PlacedRoom neighbour = connections[(room, dir)];
-                bool isBossExit = (room.prefabData.roomType == RoomType.Boss && 
-                                   neighbour.prefabData.roomType == RoomType.End);
-                
-                room.roomGrid.SetDoorState(dir, !isBossExit);
-                room.connector.SetDoorOpen(dir, !isBossExit);
-            }
-        }
-    }
-}
-    private void InitRoomGrids()
+    private void RecordDoorStates()
     {
         foreach (PlacedRoom room in placedRooms)
         {
-            var setup = room.roomInstance.GetComponent<RoomTilemapSetup>()
-                     ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
-            setup.Initialize();
+            if (room.roomGrid == null || room.connector == null) continue;
 
-            room.roomGrid = room.roomInstance.GetComponent<RoomGrid>();
-
-            var spawnReader = room.roomInstance.GetComponent<RoomSpawnPointReader>()
-                           ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
-            spawnReader.Initialize();
+            foreach (Direction dir in Enum.GetValues(typeof(Direction)))
+            {
+                bool hasConnection = connections.ContainsKey((room, dir));
+                if (!hasConnection)
+                {
+                    room.roomGrid.SetDoorState(dir, false);
+                    room.connector.SetDoorOpen(dir, false);
+                }
+                else
+                {
+                    PlacedRoom neighbour = connections[(room, dir)];
+                    bool isBossExit = room.prefabData.roomType == RoomType.Boss &&
+                                      neighbour.prefabData.roomType == RoomType.End;
+                    room.roomGrid.SetDoorState(dir, !isBossExit);
+                    room.connector.SetDoorOpen(dir, !isBossExit);
+                }
+            }
         }
-
-        // Now that roomGrid refs are valid, persist door state into them.
-        RecordDoorStates();
     }
+
+
 
     private void InitDoors()
     {
@@ -515,26 +579,15 @@ private void RecordDoorStates()
         Debug.Log($"[LevelGenerator] Player spawned at {sp.Value}");
     }
 
-    /// <summary>
-    /// Looks for a PlayerSpawnTile in any tilemap on the start room.
-    /// </summary>
     private static GridPosition? FindPlayerSpawnTile(PlacedRoom room)
     {
         foreach (Tilemap tm in room.roomInstance.GetComponentsInChildren<Tilemap>())
-        {
-            foreach (Vector3Int pos in tm.cellBounds.allPositionsWithin)
-            {
-                if (tm.GetTile(pos) is PlayerSpawnTile)
-                    return new GridPosition(pos.x, pos.y);
-            }
-        }
+        foreach (Vector3Int pos in tm.cellBounds.allPositionsWithin)
+            if (tm.GetTile(pos) is PlayerSpawnTile)
+                return new GridPosition(pos.x, pos.y);
         return null;
     }
 
-    /// <summary>
-    /// Finds a walkable floor tile near the room's centre that is NOT a
-    /// SpawnPointTile (hallway-entry cell). Used as the fallback spawn position.
-    /// </summary>
     private static GridPosition? FindCentralFloorTile(RoomGrid roomGrid)
     {
         var tilemap = roomGrid.GetFloorTilemap();
@@ -545,18 +598,14 @@ private void RecordDoorStates()
         if (root != null)
         {
             foreach (Tilemap tm in root.GetComponentsInChildren<Tilemap>())
-            {
-                foreach (Vector3Int pos in tm.cellBounds.allPositionsWithin)
-                {
-                    if (tm.GetTile(pos) is SpawnPointTile)
-                        spawnCells.Add(new GridPosition(pos.x, pos.y));
-                }
-            }
+            foreach (Vector3Int pos in tm.cellBounds.allPositionsWithin)
+                if (tm.GetTile(pos) is SpawnPointTile)
+                    spawnCells.Add(new GridPosition(pos.x, pos.y));
         }
 
         var bounds = tilemap.cellBounds;
-        int cx     = (bounds.xMin + bounds.xMax) / 2;
-        int cy     = (bounds.yMin + bounds.yMax) / 2;
+        int cx = (bounds.xMin + bounds.xMax) / 2;
+        int cy = (bounds.yMin + bounds.yMax) / 2;
 
         for (int r = 0; r < Mathf.Max(bounds.size.x, bounds.size.y); r++)
         for (int x = cx - r; x <= cx + r; x++)
@@ -564,8 +613,8 @@ private void RecordDoorStates()
         {
             if (Mathf.Abs(x - cx) != r && Mathf.Abs(y - cy) != r) continue;
             var gp = new GridPosition(x, y);
-            if (spawnCells.Contains(gp))    continue;
-            if (!roomGrid.IsWalkable(gp))   continue;
+            if (spawnCells.Contains(gp)) continue;
+            if (!roomGrid.IsWalkable(gp)) continue;
             return gp;
         }
 

@@ -3,18 +3,21 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 
 /// <summary>
-/// Singleton that owns a single flat walkability graph spanning every room
-/// and hallway in the level.
+/// Singleton flat walkability graph spanning every room and hallway.
 ///
-/// Add this component to one GameObject in your scene (e.g. on LevelGenerator).
-/// Rooms register themselves via RoomTilemapSetup.Initialize().
-/// Hallways register themselves via HallwayBuilder.Build().
+/// KEY FIX: The previous WorldKey used Mathf.RoundToInt() which breaks when
+/// Unity's Grid places cell centres at X.5 offsets (e.g. 0.5, 1.5, 2.5).
+/// RoundToInt(0.5f) is ambiguous due to banker's rounding, causing ~50% of
+/// cells to be stored under the wrong key, so the unit's position is never
+/// found and BFS returns empty.
+///
+/// FIX: Multiply world pos by 2 then FloorToInt. Both integer-centre grids
+/// (cells at 0,1,2…) and half-integer-centre grids (cells at 0.5,1.5,2.5…)
+/// map to distinct stable integers. Neighbours differ by exactly 2 (Steps[]).
 /// </summary>
 public class UnifiedWorldGrid : MonoBehaviour
 {
     public static UnifiedWorldGrid Instance { get; private set; }
-
-    // ── Cell data ──────────────────────────────────────────────────────────
 
     public class CellData
     {
@@ -26,8 +29,6 @@ public class UnifiedWorldGrid : MonoBehaviour
     private readonly Dictionary<Vector3Int, CellData>         cells          = new();
     private readonly Dictionary<Tilemap, HashSet<Vector3Int>> registeredKeys = new();
 
-    // ── Lifecycle ──────────────────────────────────────────────────────────
-
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -35,10 +36,7 @@ public class UnifiedWorldGrid : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    private void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-    }
+    private void OnDestroy() { if (Instance == this) Instance = null; }
 
     // ── Registration ───────────────────────────────────────────────────────
 
@@ -47,113 +45,79 @@ public class UnifiedWorldGrid : MonoBehaviour
     {
         if (floorTilemap == null || ownerGrid == null)
         {
-            Debug.LogWarning("[UnifiedWorldGrid] RegisterTilemap called with null args.");
+            Debug.LogWarning("[UnifiedWorldGrid] RegisterTilemap: null arg, skipping.");
             return;
         }
 
         Unregister(floorTilemap);
-
         var keys = new HashSet<Vector3Int>();
 
-        // Floor cells — walkable.
         foreach (Vector3Int cell in floorTilemap.cellBounds.allPositionsWithin)
         {
             if (!floorTilemap.HasTile(cell)) continue;
-
-            var    key    = WorldKey(floorTilemap.GetCellCenterWorld(cell));
-            cells[key] = new CellData
-            {
-                OwnerGrid   = ownerGrid,
-                WorldCentre = floorTilemap.GetCellCenterWorld(cell),
-                IsFloor     = true,
-            };
+            Vector3    centre = floorTilemap.GetCellCenterWorld(cell);
+            Vector3Int key    = WorldKey(centre);
+            cells[key] = new CellData { OwnerGrid = ownerGrid, WorldCentre = centre, IsFloor = true };
             keys.Add(key);
         }
 
-        // Wall cells — non-walkable blockers.
-        // Floor always wins so hallway floor at a room mouth is never
-        // overwritten by the room's wall tile.
         if (wallsTilemap != null)
         {
             foreach (Vector3Int cell in wallsTilemap.cellBounds.allPositionsWithin)
             {
                 if (!wallsTilemap.HasTile(cell)) continue;
-
-                var key = WorldKey(wallsTilemap.GetCellCenterWorld(cell));
-                if (cells.ContainsKey(key)) continue;
-
-                cells[key] = new CellData
-                {
-                    OwnerGrid   = ownerGrid,
-                    WorldCentre = wallsTilemap.GetCellCenterWorld(cell),
-                    IsFloor     = false,
-                };
+                Vector3    centre = wallsTilemap.GetCellCenterWorld(cell);
+                Vector3Int key    = WorldKey(centre);
+                if (cells.ContainsKey(key)) continue; // floor wins
+                cells[key] = new CellData { OwnerGrid = ownerGrid, WorldCentre = centre, IsFloor = false };
                 keys.Add(key);
             }
         }
 
         registeredKeys[floorTilemap] = keys;
-
         Debug.Log($"[UnifiedWorldGrid] +{keys.Count} cells from " +
-                  $"{floorTilemap.transform.parent?.name ?? floorTilemap.name}. " +
-                  $"Total: {cells.Count}");
+                  $"'{floorTilemap.transform.parent?.name ?? floorTilemap.name}'. Total: {cells.Count}");
     }
 
-    public void Unregister(Tilemap floorTilemap)
+    public void Unregister(Tilemap tm)
     {
-        if (floorTilemap == null) return;
-        if (!registeredKeys.TryGetValue(floorTilemap, out var keys)) return;
-        foreach (var key in keys) cells.Remove(key);
-        registeredKeys.Remove(floorTilemap);
+        if (tm == null || !registeredKeys.TryGetValue(tm, out var keys)) return;
+        foreach (var k in keys) cells.Remove(k);
+        registeredKeys.Remove(tm);
     }
 
-    /// <summary>Wipe all cells — call before loading a new level.</summary>
-    public void Clear()
-    {
-        cells.Clear();
-        registeredKeys.Clear();
-    }
+    public void Clear() { cells.Clear(); registeredKeys.Clear(); }
 
-    // ── Query API ──────────────────────────────────────────────────────────
+    // ── Query ──────────────────────────────────────────────────────────────
 
-    /// <summary>Floor tile at worldPos that is also unoccupied.</summary>
     public bool IsWalkable(Vector3 worldPos)
     {
-        if (!cells.TryGetValue(WorldKey(worldPos), out var data)) return false;
-        if (!data.IsFloor) return false;
-        // Delegate occupancy check to the owning RoomGrid.
-        return data.OwnerGrid == null || data.OwnerGrid.IsWalkableAtWorld(data.WorldCentre);
+        if (!cells.TryGetValue(WorldKey(worldPos), out var d) || !d.IsFloor) return false;
+        return d.OwnerGrid == null || d.OwnerGrid.IsWalkableAtWorld(d.WorldCentre);
     }
 
-    /// <summary>Floor tile at worldPos (occupancy ignored).</summary>
     public bool IsWalkableIgnoreOccupancy(Vector3 worldPos)
-    {
-        return cells.TryGetValue(WorldKey(worldPos), out var data) && data.IsFloor;
-    }
+        => cells.TryGetValue(WorldKey(worldPos), out var d) && d.IsFloor;
 
-    public bool     HasCell(Vector3 worldPos) => cells.ContainsKey(WorldKey(worldPos));
+    public bool HasCell(Vector3 worldPos) => cells.ContainsKey(WorldKey(worldPos));
 
     public CellData GetCell(Vector3 worldPos)
-    {
-        cells.TryGetValue(WorldKey(worldPos), out var data);
-        return data;
-    }
+    { cells.TryGetValue(WorldKey(worldPos), out var d); return d; }
 
-    /// <summary>Returns the RoomGrid that owns the cell at worldPos.</summary>
+    public CellData GetCellByKey(Vector3Int key)
+    { cells.TryGetValue(key, out var d); return d; }
+
     public RoomGrid GetOwnerAt(Vector3 worldPos)
-    {
-        cells.TryGetValue(WorldKey(worldPos), out var data);
-        return data?.OwnerGrid;
-    }
+    { cells.TryGetValue(WorldKey(worldPos), out var d); return d?.OwnerGrid; }
 
     public IReadOnlyDictionary<Vector3Int, CellData> AllCells => cells;
 
-    // ── Neighbour query (used by UnifiedPathfinder) ────────────────────────
-
+    // ── Neighbours ────────────────────────────────────────────────────────
+    // Steps are ±2 because keys are in doubled (×2) coordinate space.
     private static readonly Vector3Int[] Steps =
     {
-        new( 1,  0, 0), new(-1,  0, 0),
-        new( 0,  1, 0), new( 0, -1, 0),
+        new( 2,  0, 0), new(-2,  0, 0),
+        new( 0,  2, 0), new( 0, -2, 0),
     };
 
     public List<Vector3Int> GetWalkableNeighbours(Vector3Int key, bool ignoreOccupancy = false)
@@ -162,28 +126,23 @@ public class UnifiedWorldGrid : MonoBehaviour
         foreach (var step in Steps)
         {
             var n = key + step;
-            if (!cells.TryGetValue(n, out var data)) continue;
-            if (!data.IsFloor) continue;
-
-            if (!ignoreOccupancy && data.OwnerGrid != null)
-            {
-                if (!data.OwnerGrid.IsWalkableAtWorld(data.WorldCentre)) continue;
-            }
-
+            if (!cells.TryGetValue(n, out var d) || !d.IsFloor) continue;
+            if (!ignoreOccupancy && d.OwnerGrid != null)
+                if (!d.OwnerGrid.IsWalkableAtWorld(d.WorldCentre)) continue;
             result.Add(n);
         }
         return result;
     }
 
-    // ── Key helper ─────────────────────────────────────────────────────────
+    // ── Key ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Converts a world position to an integer dictionary key.
-    /// RoundToInt handles sub-pixel floating-point drift so positions
-    /// slightly off-centre still land on the correct cell.
+    /// Multiply by 2 then floor — works for both integer and half-integer
+    /// cell-centre grids without rounding ambiguity.
+    /// Small epsilon (+0.01) avoids the -0 / 0 split at exact integer inputs.
     /// </summary>
-    public static Vector3Int WorldKey(Vector3 worldPos) =>
-        new(Mathf.RoundToInt(worldPos.x),
-            Mathf.RoundToInt(worldPos.y),
+    public static Vector3Int WorldKey(Vector3 w) =>
+        new(Mathf.FloorToInt(w.x * 2f + 0.01f),
+            Mathf.FloorToInt(w.y * 2f + 0.01f),
             0);
 }

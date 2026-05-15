@@ -2,38 +2,38 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Paints move/range/AoE highlights onto the active floor tilemap.
-/// </summary>
+
 public class TilemapHighlighter : MonoBehaviour
 {
     public static TilemapHighlighter Instance { get; private set; }
 
-    [Header("Tile asset — plain white TileBase")]
-    [SerializeField] private TileBase solidWhiteTile;
+    [Header("Overlay tile — plain white 1×1 sprite TileBase")]
+    [SerializeField] private TileBase overlayTile;
 
-    [Header("Default colors")]
-    [SerializeField] private Color moveColor  = new(0.2f, 0.6f, 1f,   1f);
-    [SerializeField] private Color rangeColor = new(1f,  0.85f, 0f,   1f);
-    [SerializeField] private Color aoeColor   = new(1f,  0.15f, 0.15f, 1f);
-    [SerializeField] private Color hoverColor = new(1f,  1f,   1f,   0.4f);
+    [Header("Highlight colours")]
+    [SerializeField] private Color moveColor      = new(0.2f, 0.6f, 1f,    0.55f);
+    [SerializeField] private Color rangeColor     = new(1f,  0.85f, 0f,    0.55f);
+    [SerializeField] private Color aoeColor       = new(1f,  0.15f, 0.15f, 0.55f);
+    [SerializeField] private Color hoverColor     = new(1f,  1f,   1f,    0.35f);
+    [SerializeField] private Color enemyMoveColor = new(1f,  0.25f, 0.25f, 0.5f);
 
-    [Header("Enemy Preview")]
-    [SerializeField] private Color enemyMoveColor = new(1f, 0.25f, 0.25f, 0.65f);
+    [Header("Overlay sorting")]
+    [SerializeField] private string overlaySortingLayer = "Default";
+    [SerializeField] private int    overlaySortingOrder = 10;
 
-    private EnemyUnit previewEnemy;
+    private GameObject overlayRoot;
+    private Tilemap    overlayTilemap;
+    private Grid       overlayGrid;
+
+    private EnemyUnit          previewEnemy;
     private List<GridPosition> previewEnemyPositions;
 
-    private Tilemap                          paintedTilemap;
-    private Dictionary<Vector3Int, TileBase> originalTiles = new();
-    private HashSet<Vector3Int>              painted        = new();
+    // ── Lifecycle ──────────────────────────────────────────────────────────
 
-    private void Awake() => Instance = this;
-
-    private void Start()
+    private void Awake()
     {
-        if (paintedTilemap == null)
-            RefreshTilemap();
+        Instance = this;
+        EnsureOverlay();
     }
 
     private void OnEnable()
@@ -46,84 +46,80 @@ public class TilemapHighlighter : MonoBehaviour
     {
         LevelGenerator.OnLevelReady  -= OnLevelReady;
         RoomManager.OnAnyRoomChanged -= OnRoomChanged;
-        ResetAll();
+        SafeClear();
     }
 
-    private void OnLevelReady()                              => RefreshTilemap();
-
-    /// <summary>
-    /// Called when RoomManager's current room changes — including when it is
-    /// set to null while the player is in a hallway. We still call
-    /// RefreshTilemap() so the unit-grid fallback path runs.
-    /// </summary>
-    private void OnRoomChanged(LevelGenerator.PlacedRoom room) => RefreshTilemap();
-
-    // ── Tilemap resolution ─────────────────────────────────────────────────
-
-    private void RefreshTilemap()
+    private void OnDestroy()
     {
-        ResetAll();
+        SafeClear();
+        if (overlayRoot != null)
+            Destroy(overlayRoot);
+    }
 
-        var unit = FindLocalUnit();
-        if (unit != null)
+    private void OnLevelReady()                                => SafeClear();
+    private void OnRoomChanged(LevelGenerator.PlacedRoom _)   => SafeClear();
+
+    // ── Overlay creation ───────────────────────────────────────────────────
+
+    private void EnsureOverlay()
+    {
+        if (overlayRoot != null && overlayTilemap != null) return;
+
+        var existing = GameObject.Find("__HighlightOverlay__");
+        if (existing != null)
         {
-            var unitGrid = unit.GetCurrentRoomGrid();
-            if (unitGrid != null)
-            {
-                paintedTilemap = unitGrid.GetFloorTilemap();
-                if (paintedTilemap != null) return;
-            }
+            overlayRoot    = existing;
+            overlayGrid    = existing.GetComponent<Grid>();
+            overlayTilemap = existing.GetComponentInChildren<Tilemap>();
+            if (overlayTilemap != null) return;
+            Destroy(existing);
         }
 
-        paintedTilemap = RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap();
-
-        if (paintedTilemap == null && GameManager.IsMultiplayer)
-            TryFindLocalPlayerRoom();
+        BuildOverlay();
     }
 
-    private void TryFindLocalPlayerRoom()
+    private void BuildOverlay()
     {
-        foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
-        {
-            if (!bridge.IsOwner) continue;
-            var pos = bridge.GetNetworkGridPosition();
-            var gen = FindAnyObjectByType<LevelGenerator>();
-            if (gen == null) return;
-            foreach (var placed in gen.GetAllRooms())
-            {
-                if (placed.roomGrid == null || !placed.roomGrid.IsInitialized()) continue;
-                if (placed.roomGrid.IsValidGridPosition(pos))
-                {
-                    RoomManager.Instance?.SetCurrentRoom(placed);
-                    return;
-                }
-            }
-        }
+        overlayRoot = new GameObject("__HighlightOverlay__");
+        DontDestroyOnLoad(overlayRoot);
+
+        overlayGrid           = overlayRoot.AddComponent<Grid>();
+        overlayGrid.cellSize  = new Vector3(1f, 1f, 0f);
+        overlayGrid.cellGap   = Vector3.zero;
+
+        var tmGo = new GameObject("Tilemap");
+        tmGo.transform.SetParent(overlayRoot.transform, worldPositionStays: false);
+
+        overlayTilemap = tmGo.AddComponent<Tilemap>();
+
+        var ren = tmGo.AddComponent<TilemapRenderer>();
+        ren.sortingLayerName = overlaySortingLayer;
+        ren.sortingOrder     = overlaySortingOrder;
     }
 
-    // ── Update loop ────────────────────────────────────────────────────────
+    private void SafeClear()
+    {
+        // Guard against the destroyed-tilemap crash.
+        if (overlayTilemap != null && overlayRoot != null)
+            overlayTilemap.ClearAllTiles();
+    }
+
+    // ── Update ─────────────────────────────────────────────────────────────
 
     private void Update()
     {
-        var unit     = FindLocalUnit();
-        var unitGrid = unit?.GetCurrentRoomGrid();
-        var tilemap  = unitGrid?.GetFloorTilemap()
-                    ?? RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap();
-
-        if (tilemap != paintedTilemap)
-        {
-            ResetAll();
-            paintedTilemap = tilemap;
-        }
-
-        if (paintedTilemap == null) return;
-
-        ResetAll();
+        EnsureOverlay();   // rebuild if overlay was destroyed
+        SafeClear();
         GridCostVisualizer.Instance?.ClearAll();
 
+        var unit       = FindLocalUnit();
+        var unitGrid   = unit?.GetCurrentRoomGrid();
+        var activeGrid = unitGrid ?? RoomManager.Instance?.GetCurrentRoomGrid();
+
+        // Enemy preview.
         if (previewEnemy != null && previewEnemyPositions != null)
         {
-            Paint(previewEnemyPositions, enemyMoveColor);
+            PaintGridPositions(previewEnemyPositions, enemyMoveColor, activeGrid);
             return;
         }
 
@@ -132,15 +128,13 @@ public class TilemapHighlighter : MonoBehaviour
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
 
-        var activeGrid = unitGrid ?? RoomManager.Instance?.GetCurrentRoomGrid();
-
         if (action is MoveAction move)
         {
-            Paint(move.GetValidActionGridPositionList(), moveColor);
+            PaintWorldPositions(move.GetValidActionWorldPositions(), moveColor);
 
             if (activeGrid != null)
             {
-                var mouseGP = activeGrid.GetGridPosition(MouseWorld2D.GetPosition());
+                var mouseGP = activeGrid.GetGridPosition(GetMouseWorldRaw());
                 if (move.IsValidTarget(mouseGP))
                 {
                     int cost = move.GetMoveCost(mouseGP);
@@ -151,149 +145,129 @@ public class TilemapHighlighter : MonoBehaviour
         }
         else if (action is CombatAction combat)
         {
-            Color rc = combat.ActionData != null ? combat.ActionData.rangeHighlightColor : rangeColor;
-            Color ac = combat.ActionData != null ? combat.ActionData.aoeHighlightColor   : aoeColor;
-
-            Paint(combat.GetValidActionGridPositionList(), rc);
+            Color rc = combat.ActionData?.rangeHighlightColor ?? rangeColor;
+            Color ac = combat.ActionData?.aoeHighlightColor   ?? aoeColor;
+            PaintGridPositions(combat.GetValidActionGridPositionList(), rc, activeGrid);
 
             if (activeGrid != null)
             {
-                var mouseGP = activeGrid.GetGridPosition(MouseWorld2D.GetPosition());
-                Paint(combat.GetPreviewPositions(mouseGP), ac);
+                var mouseGP = activeGrid.GetGridPosition(GetMouseWorldRaw());
+                PaintGridPositions(combat.GetPreviewPositions(mouseGP), ac, activeGrid);
             }
         }
 
-        // Hover highlight
+        // Hover.
         if (activeGrid != null)
         {
-            var gp = activeGrid.GetGridPosition(MouseWorld2D.GetPosition());
-            if (activeGrid.IsValidGridPosition(gp))
-                PaintCell(new Vector3Int(gp.x, gp.y, 0), hoverColor);
+            var hoverGP = activeGrid.GetGridPosition(GetMouseWorldRaw());
+            if (activeGrid.IsValidGridPosition(hoverGP))
+                PaintOverlayCell(WorldToOverlayCell(activeGrid.GetWorldPosition(hoverGP)), hoverColor);
         }
-    }
-
-    // ── Turn-phase helper ──────────────────────────────────────────────────
-
-    private static bool IsPlayerPhaseNow()
-    {
-        if (GameManager.IsMultiplayer)
-            return NetworkedTurnSystem.Instance == null || NetworkedTurnSystem.Instance.IsPlayerPhase;
-
-        return TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
-    }
-
-    // ── Local unit helper ──────────────────────────────────────────────────
-
-    private static Unit FindLocalUnit()
-    {
-        if (!GameManager.IsMultiplayer)
-            return FindAnyObjectByType<Unit>();
-
-        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
-        {
-            var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
-            if (netObj != null && netObj.IsOwner) return u;
-        }
-        return null;
     }
 
     // ── Paint helpers ──────────────────────────────────────────────────────
 
-    private void Paint(List<GridPosition> list, Color color)
+    private void PaintWorldPositions(IList<Vector3> worldPositions, Color color)
     {
-        foreach (var gp in list)
-            PaintCell(new Vector3Int(gp.x, gp.y, 0), color);
+        if (worldPositions == null) return;
+        foreach (var wp in worldPositions)
+            PaintOverlayCell(WorldToOverlayCell(wp), color);
     }
 
-    private void PaintCell(Vector3Int pos, Color color)
+    private void PaintGridPositions(IList<GridPosition> gps, Color color, RoomGrid grid)
     {
-        if (paintedTilemap == null || !paintedTilemap.HasTile(pos)) return;
-
-        if (!originalTiles.ContainsKey(pos))
-            originalTiles[pos] = paintedTilemap.GetTile(pos);
-
-        paintedTilemap.SetTile(pos, solidWhiteTile);
-        paintedTilemap.SetTileFlags(pos, TileFlags.None);
-        paintedTilemap.SetColor(pos, color);
-        painted.Add(pos);
+        if (gps == null || grid == null) return;
+        foreach (var gp in gps)
+            PaintOverlayCell(WorldToOverlayCell(grid.GetWorldPosition(gp)), color);
     }
 
-    private void ResetAll()
+    private void PaintOverlayCell(Vector3Int cell, Color color)
     {
-        if (paintedTilemap == null) { painted.Clear(); originalTiles.Clear(); return; }
-
-        foreach (var pos in painted)
-        {
-            if (originalTiles.TryGetValue(pos, out var orig))
-            {
-                paintedTilemap.SetTile(pos, orig);
-                paintedTilemap.SetTileFlags(pos, TileFlags.None);
-                paintedTilemap.SetColor(pos, Color.white);
-            }
-        }
-        painted.Clear();
-        originalTiles.Clear();
+        if (overlayTilemap == null || overlayTile == null) return;
+        overlayTilemap.SetTile(cell, overlayTile);
+        overlayTilemap.SetTileFlags(cell, TileFlags.None);
+        overlayTilemap.SetColor(cell, color);
     }
+
+    private Vector3Int WorldToOverlayCell(Vector3 worldPos)
+    {
+        if (overlayGrid != null) return overlayGrid.WorldToCell(worldPos);
+        return new Vector3Int(Mathf.FloorToInt(worldPos.x), Mathf.FloorToInt(worldPos.y), 0);
+    }
+
+    // ── Mouse ──────────────────────────────────────────────────────────────
+
+    private static Vector3 GetMouseWorldRaw()
+    {
+        Vector3 raw = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        return new Vector3(raw.x, raw.y, 0f);
+    }
+
+    // ── Public API ─────────────────────────────────────────────────────────
 
     public void ShowPositions(List<GridPosition> positions, Color color)
     {
-        if (paintedTilemap == null) return;
-        Paint(positions, color);
+        var grid = RoomManager.Instance?.GetCurrentRoomGrid()
+                ?? FindLocalUnit()?.GetCurrentRoomGrid();
+        if (grid != null) PaintGridPositions(positions, color, grid);
     }
 
-    public void HideAll() => ResetAll();
+    public void HideAll() => SafeClear();
 
     public void ShowEnemyMoveRange(EnemyUnit enemy)
     {
-        previewEnemy = enemy;
+        previewEnemy          = enemy;
         previewEnemyPositions = BuildEnemyMoveRange(enemy);
     }
 
     public void ClearEnemyPreview()
     {
-        previewEnemy = null;
+        previewEnemy          = null;
         previewEnemyPositions = null;
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static bool IsPlayerPhaseNow()
+    {
+        if (GameManager.IsMultiplayer)
+            return NetworkedTurnSystem.Instance == null || NetworkedTurnSystem.Instance.IsPlayerPhase;
+        return TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
+    }
+
+    private static Unit FindLocalUnit()
+    {
+        if (!GameManager.IsMultiplayer) return FindAnyObjectByType<Unit>();
+        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var net = u.GetComponent<Unity.Netcode.NetworkObject>();
+            if (net != null && net.IsOwner) return u;
+        }
+        return null;
     }
 
     private List<GridPosition> BuildEnemyMoveRange(EnemyUnit enemy)
     {
-        List<GridPosition> positions = new();
+        var positions = new List<GridPosition>();
+        if (enemy?.Stats == null || enemy.CurrentRoomGrid == null) return positions;
 
-        if (enemy == null || enemy.Stats == null || enemy.CurrentRoomGrid == null)
-            return positions;
-
-        RoomGrid room = enemy.CurrentRoomGrid;
+        RoomGrid     room     = enemy.CurrentRoomGrid;
         GridPosition enemyPos = enemy.GridPosition;
-        int range = enemy.Stats.moveRange;
-
-        Pathfinder pf = new Pathfinder(room);
+        int          range    = enemy.Stats.moveRange;
+        var          pf       = new Pathfinder(room);
 
         for (int dx = -range; dx <= range; dx++)
-            for (int dy = -range; dy <= range; dy++)
-            {
-                if (Mathf.Abs(dx) + Mathf.Abs(dy) > range)
-                    continue;
-
-                if (dx == 0 && dy == 0)
-                    continue;
-
-                GridPosition test = new GridPosition(enemyPos.x + dx, enemyPos.y + dy);
-
-                if (!room.IsValidGridPosition(test))
-                    continue;
-
-                if (!room.IsWalkableIgnoreOccupancy(test))
-                    continue;
-
-                if (room.HasAnyUnitOnGridPosition(test))
-                    continue;
-
-                List<GridPosition> path = pf.FindPath(enemyPos, test);
-
-                if (path != null && path.Count > 0 && path.Count <= range)
-                    positions.Add(test);
-            }
-
+        for (int dy = -range; dy <= range; dy++)
+        {
+            if (Mathf.Abs(dx) + Mathf.Abs(dy) > range || (dx == 0 && dy == 0)) continue;
+            var test = new GridPosition(enemyPos.x + dx, enemyPos.y + dy);
+            if (!room.IsValidGridPosition(test))       continue;
+            if (!room.IsWalkableIgnoreOccupancy(test)) continue;
+            if (room.HasAnyUnitOnGridPosition(test))   continue;
+            var path = pf.FindPath(enemyPos, test);
+            if (path != null && path.Count > 0 && path.Count <= range)
+                positions.Add(test);
+        }
         return positions;
     }
 }

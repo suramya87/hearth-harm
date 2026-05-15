@@ -15,13 +15,28 @@ public class MoveAction : BaseAction
         ? Mathf.Max(0, playerStats.currentStamina)
         : maxMoveDistance;
 
-    // Reachable-cell cache — rebuilt once per turn/position change.
     private List<Vector3>      cachedReachableWorld;
     private List<GridPosition> cachedReachableGP;
     private bool               cacheDirty = true;
 
-    private void OnEnable()  => cacheDirty = true;
-    private void OnDisable() => InvalidateCache();
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+
+    private void OnEnable()
+    {
+        cacheDirty = true;
+        LevelGenerator.OnLevelReady  += OnLevelReady;
+        RoomManager.OnAnyRoomChanged += OnRoomChanged;
+    }
+
+    private void OnDisable()
+    {
+        LevelGenerator.OnLevelReady  -= OnLevelReady;
+        RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+        InvalidateCache();
+    }
+
+    private void OnLevelReady()                              => InvalidateCache();
+    private void OnRoomChanged(LevelGenerator.PlacedRoom _) => InvalidateCache();
 
     public void InvalidateCache()
     {
@@ -46,7 +61,6 @@ public class MoveAction : BaseAction
         if (!Input.GetMouseButtonDown(0)) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
-        // Convert screen click to world — use z=0 plane, not camera z.
         Vector3 raw        = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         Vector3 mouseWorld = new Vector3(raw.x, raw.y, 0f);
 
@@ -56,27 +70,30 @@ public class MoveAction : BaseAction
 
             if (reachable.Count == 0)
             {
-                Debug.LogWarning("[MoveAction] Reachable list is empty — is UnifiedWorldGrid populated?");
+                Debug.LogWarning("[MoveAction] Reachable list is empty.");
                 return;
             }
 
+            // Reachable world positions are raw cell centres (no visual offset).
+            // The click comes in at raw world coords too, so comparison is direct.
             Vector3 best     = default;
             float   bestDist = float.MaxValue;
             foreach (var w in reachable)
             {
-                float d = Vector2.Distance(new Vector2(w.x, w.y), new Vector2(mouseWorld.x, mouseWorld.y));
+                float d = Vector2.Distance(new Vector2(w.x, w.y),
+                                           new Vector2(mouseWorld.x, mouseWorld.y));
                 if (d < bestDist) { bestDist = d; best = w; }
             }
 
-            // 0.6 = within half a tile (assumes cellSize ≈ 1).
-            if (bestDist < 0.6f)
+            // Accept clicks within one full tile (cellSize is typically 1).
+            if (bestDist < 1.0f)
             {
                 Move(best, () => Debug.Log("[MoveAction] Move Complete."));
                 return;
             }
 
-            Debug.Log($"<color=red>[MoveAction] No reachable cell near click {mouseWorld} " +
-                      $"(closest was {bestDist:F2} away)</color>");
+            Debug.Log($"<color=red>[MoveAction] No reachable cell near {mouseWorld} " +
+                      $"(closest {bestDist:F2} away)</color>");
             return;
         }
 
@@ -119,7 +136,9 @@ public class MoveAction : BaseAction
             return;
         }
 
-        Vector3 startWorld = GetUnitWorldPos();
+        // targetWorld is a raw cell centre — find the path from the unit's
+        // current raw cell centre (no visual offset involved).
+        Vector3 startWorld = GetUnitCellCentreWorld();
         var worldPath = UnifiedPathfinder.FindWorldPath(startWorld, targetWorld);
         if (worldPath == null || worldPath.Count == 0) { onComplete?.Invoke(); return; }
 
@@ -139,10 +158,12 @@ public class MoveAction : BaseAction
 
         if (UnifiedWorldGrid.Instance != null)
         {
+            // Convert to raw cell centre — no visual offset.
             Move(room.GetWorldPosition(target), onComplete);
             return;
         }
 
+        // Pure local path.
         GridPosition startPos = unit.GetGridPosition();
         var path = new Pathfinder(room).FindPath(startPos, target);
         if (path == null || path.Count == 0) { onComplete?.Invoke(); return; }
@@ -157,12 +178,16 @@ public class MoveAction : BaseAction
         if (playerStats != null && IsInCombatRoom())
             playerStats.SpendStamina(steps);
 
+        // Build waypoints WITH visual offset for the legacy animator.
         Vector2 visualOff = unit.GetVisualOffset();
         var waypoints = new List<Vector3>();
         foreach (var gp in usedPath)
         {
             var wp = room.GetWorldPosition(gp);
-            waypoints.Add(new Vector3(wp.x + visualOff.x, wp.y + visualOff.y, wp.z));
+            waypoints.Add(new Vector3(
+                wp.x + visualOff.x,
+                wp.y + visualOff.y,
+                transform.position.z));
         }
 
         SetFacingToward(startPos, usedPath[0]);
@@ -172,7 +197,7 @@ public class MoveAction : BaseAction
         StartCoroutine(MoveAlongLocalPath(waypoints, usedPath, finalPos, room, onComplete));
     }
 
-    // ── Coroutine: world-path movement ────────────────────────────────────
+
 
     private IEnumerator MoveAlongWorldPath(
         List<UnifiedPathfinder.WorldStep> path, Action onComplete)
@@ -189,7 +214,7 @@ public class MoveAction : BaseAction
             var stepGrid = step.OwnerGrid ?? unit.GetCurrentRoomGrid();
             var stepGP   = stepGrid?.GetGridPosition(step.WorldPos) ?? unit.GetGridPosition();
 
-            // Update facing.
+            // Facing.
             if (i == 0)
                 SetFacingToward(unit.GetGridPosition(), stepGP);
             else
@@ -199,43 +224,57 @@ public class MoveAction : BaseAction
                 SetFacingToward(prevGrid.GetGridPosition(prev.WorldPos), stepGP);
             }
 
-            // Cross-grid registration.
+            // Grid registration when crossing into a different grid.
             if (stepGrid != null && stepGrid != unit.GetCurrentRoomGrid())
             {
                 var oldGrid = unit.GetCurrentRoomGrid();
                 var oldGP   = unit.GetGridPosition();
                 oldGrid?.RemoveUnitAtGridPosition(oldGP, unit);
+
+                // Use PlaceInRoom so the unit's internal state is fully
+                // consistent, but suppress the transform snap — we are
+                // controlling the visual position ourselves in this coroutine.
+                unit.IsSyncingFromNetwork = true;
                 unit.PlaceInRoom(stepGrid, stepGP);
+                unit.IsSyncingFromNetwork = false;
+
                 stepGrid.AddUnitAtGridPosition(stepGP, unit);
             }
 
-            var target = new Vector3(
+            // Animate the SPRITE to cell centre + visual offset.
+            var visualTarget = new Vector3(
                 step.WorldPos.x + visualOff.x,
                 step.WorldPos.y + visualOff.y,
                 transform.position.z);
 
-            while (Vector2.Distance(transform.position, target) > 0.01f)
+            while (Vector2.Distance(transform.position, visualTarget) > 0.01f)
             {
                 transform.position = Vector3.MoveTowards(
-                    transform.position, target, moveSpeed * Time.deltaTime);
+                    transform.position, visualTarget, moveSpeed * Time.deltaTime);
                 yield return null;
             }
-            transform.position = target;
+            transform.position = visualTarget;
             stamSpent++;
         }
 
-        if (playerStats != null && IsInCombatRoom())
-            playerStats.SpendStamina(stamSpent);
-
+        // Final placement — uses PlaceInRoom normally (it will set transform
+        // to rawWorld + visualOffset, which matches where we just animated to).
         var finalStep = path[^1];
         var finalGrid = finalStep.OwnerGrid ?? unit.GetCurrentRoomGrid();
         var finalGP   = finalGrid?.GetGridPosition(finalStep.WorldPos) ?? unit.GetGridPosition();
+
+        if (playerStats != null && IsInCombatRoom())
+            playerStats.SpendStamina(stamSpent);
 
         unitAnimator?.SetMoving(false);
         isActive = false;
 
         if (!GameManager.IsMultiplayer)
-            unit.PlaceInRoomNoMove(finalGrid, finalGP);
+        {
+            // PlaceInRoom snaps transform to rawWorld + visualOffset.
+            // That matches our last animated position, so there's no visible pop.
+            unit.PlaceInRoom(finalGrid, finalGP);
+        }
         else
         {
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
@@ -246,7 +285,7 @@ public class MoveAction : BaseAction
         onComplete?.Invoke();
     }
 
-    // ── Coroutine: local-path movement ────────────────────────────────────
+    // ── Coroutine: local-path movement (legacy, unchanged logic) ──────────
 
     private IEnumerator MoveAlongLocalPath(
         List<Vector3> waypoints, List<GridPosition> gridPath,
@@ -283,7 +322,7 @@ public class MoveAction : BaseAction
         onComplete?.Invoke();
     }
 
-    // ── Reachable-cell cache ───────────────────────────────────────────────
+    // ── Reachable-cell cache (BFS on UnifiedWorldGrid) ─────────────────────
 
     private void RebuildReachableCache()
     {
@@ -295,74 +334,46 @@ public class MoveAction : BaseAction
 
         if (unified == null || unified.AllCells.Count == 0)
         {
-            // ── Local fallback ─────────────────────────────────────────────
-            Debug.LogWarning("[MoveAction] UnifiedWorldGrid empty or absent — using local BFS.");
-            var room = unit.GetCurrentRoomGrid();
-            if (room == null) return;
-
-            var unitPos = unit.GetGridPosition();
-            int dist    = MoveDistance;
-            var pf      = new Pathfinder(room);
-
-            for (int dx = -dist; dx <= dist; dx++)
-            for (int dy = -dist; dy <= dist; dy++)
-            {
-                if (Mathf.Abs(dx) + Mathf.Abs(dy) > dist || (dx == 0 && dy == 0)) continue;
-                var test = new GridPosition(unitPos.x + dx, unitPos.y + dy);
-                if (!room.IsValidGridPosition(test) || !room.IsWalkableIgnoreOccupancy(test)) continue;
-                var path = pf.FindPath(unitPos, test);
-                if (path != null && path.Count > 0 && path.Count <= dist)
-                {
-                    cachedReachableGP.Add(test);
-                    cachedReachableWorld.Add(room.GetWorldPosition(test));
-                }
-            }
-
-            Debug.Log($"[MoveAction] Local BFS found {cachedReachableWorld.Count} cells.");
+            LocalBFS();
             return;
         }
 
-        // ── Unified BFS ────────────────────────────────────────────────────
         var startRoom = unit.GetCurrentRoomGrid();
-        if (startRoom == null)
+        if (startRoom == null) return;
+
+        Vector3    unitWorld = startRoom.GetWorldPosition(unit.GetGridPosition());
+        Vector3Int startKey  = UnifiedWorldGrid.WorldKey(unitWorld);
+
+        if (!unified.AllCells.ContainsKey(startKey))
         {
-            Debug.LogWarning("[MoveAction] Unit has no current RoomGrid.");
-            return;
-        }
+            Vector3 tpos = unit.transform.position;
+            Vector2 vo = unit.GetVisualOffset();
+            unitWorld = new Vector3(tpos.x - vo.x, tpos.y - vo.y, 0f);
+            startKey  = UnifiedWorldGrid.WorldKey(unitWorld);
 
-        Vector3    unitWorldRaw = startRoom.GetWorldPosition(unit.GetGridPosition());
-        Vector3Int startKey     = UnifiedWorldGrid.WorldKey(unitWorldRaw);
-
-        var startCell = unified.GetCell(unitWorldRaw);
-        if (startCell == null)
-        {
-            unitWorldRaw = unit.transform.position;
-            startKey     = UnifiedWorldGrid.WorldKey(unitWorldRaw);
-            startCell    = unified.GetCell(unitWorldRaw);
-
-            if (startCell == null)
+            if (!unified.AllCells.ContainsKey(startKey))
             {
-                Debug.LogWarning($"[MoveAction] Start position {unitWorldRaw} (key {startKey}) " +
-                                 $"not found in UnifiedWorldGrid ({unified.AllCells.Count} cells). " +
-                                 $"Falling back to local BFS.");
-                // Fall back to local
-                unified = null;
-                goto localFallback;
+                // Nearest-key fallback.
+                float best = float.MaxValue; Vector3Int bestKey = default;
+                foreach (var k in unified.AllCells.Keys)
+                {
+                    float d = Vector3Int.Distance(k, startKey);
+                    if (d < best) { best = d; bestKey = k; }
+                }
+                if (best > 4f) { LocalBFS(); return; }
+                startKey = bestKey;
             }
         }
 
         int moveRange = MoveDistance;
-
-        // BFS outward from start key.
-        var visited = new Dictionary<Vector3Int, int> { [startKey] = 0 };
-        var queue   = new Queue<(Vector3Int key, int cost)>();
+        var visited   = new Dictionary<Vector3Int, int> { [startKey] = 0 };
+        var queue     = new Queue<(Vector3Int key, int cost)>();
         queue.Enqueue((startKey, 0));
 
         while (queue.Count > 0)
         {
             var (current, cost) = queue.Dequeue();
             if (cost >= moveRange) continue;
-
             foreach (var nKey in unified.GetWalkableNeighbours(current, ignoreOccupancy: false))
             {
                 if (visited.ContainsKey(nKey)) continue;
@@ -371,42 +382,36 @@ public class MoveAction : BaseAction
             }
         }
 
-        // Convert to world positions using stored WorldCentre values.
         foreach (var kvp in visited)
         {
             if (kvp.Key == startKey) continue;
-            var cellData = unified.GetCell(new Vector3(kvp.Key.x, kvp.Key.y, 0f));
+            var cellData = unified.GetCellByKey(kvp.Key);
             if (cellData == null || cellData.OwnerGrid == null) continue;
-
             cachedReachableWorld.Add(cellData.WorldCentre);
             cachedReachableGP.Add(cellData.OwnerGrid.GetGridPosition(cellData.WorldCentre));
         }
 
-        Debug.Log($"[MoveAction] Unified BFS from key {startKey}: " +
-                  $"visited {visited.Count} cells, {cachedReachableWorld.Count} reachable.");
-        return;
+        Debug.Log($"[MoveAction] BFS: {cachedReachableWorld.Count} reachable cells.");
+    }
 
-        // ── Local fallback label ───────────────────────────────────────────
-        localFallback:
+    private void LocalBFS()
+    {
+        var room = unit.GetCurrentRoomGrid();
+        if (room == null) return;
+        var unitPos = unit.GetGridPosition();
+        int dist    = MoveDistance;
+        var pf      = new Pathfinder(room);
+        for (int dx = -dist; dx <= dist; dx++)
+        for (int dy = -dist; dy <= dist; dy++)
         {
-            var room = unit.GetCurrentRoomGrid();
-            if (room == null) return;
-            var unitPos = unit.GetGridPosition();
-            int dist    = MoveDistance;
-            var pf      = new Pathfinder(room);
-
-            for (int dx = -dist; dx <= dist; dx++)
-            for (int dy = -dist; dy <= dist; dy++)
+            if (Mathf.Abs(dx) + Mathf.Abs(dy) > dist || (dx == 0 && dy == 0)) continue;
+            var test = new GridPosition(unitPos.x + dx, unitPos.y + dy);
+            if (!room.IsValidGridPosition(test) || !room.IsWalkableIgnoreOccupancy(test)) continue;
+            var path = pf.FindPath(unitPos, test);
+            if (path != null && path.Count > 0 && path.Count <= dist)
             {
-                if (Mathf.Abs(dx) + Mathf.Abs(dy) > dist || (dx == 0 && dy == 0)) continue;
-                var test = new GridPosition(unitPos.x + dx, unitPos.y + dy);
-                if (!room.IsValidGridPosition(test) || !room.IsWalkableIgnoreOccupancy(test)) continue;
-                var path = pf.FindPath(unitPos, test);
-                if (path != null && path.Count > 0 && path.Count <= dist)
-                {
-                    cachedReachableGP.Add(test);
-                    cachedReachableWorld.Add(room.GetWorldPosition(test));
-                }
+                cachedReachableGP.Add(test);
+                cachedReachableWorld.Add(room.GetWorldPosition(test));
             }
         }
     }
@@ -455,11 +460,18 @@ public class MoveAction : BaseAction
     public void SetFacingToward(GridPosition next) =>
         SetFacingToward(unit.GetGridPosition(), next);
 
-    private Vector3 GetUnitWorldPos()
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+
+    private Vector3 GetUnitCellCentreWorld()
     {
         var room = unit.GetCurrentRoomGrid();
-        return room != null
-            ? room.GetWorldPosition(unit.GetGridPosition())
-            : unit.transform.position;
+        if (room != null) return room.GetWorldPosition(unit.GetGridPosition());
+
+        Vector2 vo = unit.GetVisualOffset();
+        return new Vector3(
+            transform.position.x - vo.x,
+            transform.position.y - vo.y,
+            0f);
     }
 }
