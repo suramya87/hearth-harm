@@ -64,8 +64,6 @@ public class TilemapHighlighter : MonoBehaviour
     {
         ResetAll();
 
-        // Primary: use whatever grid the unit is registered in right now.
-        // This covers both normal rooms and hallways transparently.
         var unit = FindLocalUnit();
         if (unit != null)
         {
@@ -77,8 +75,6 @@ public class TilemapHighlighter : MonoBehaviour
             }
         }
 
-        // Fallback: RoomManager's current room (covers the brief window
-        // before the unit is registered in a grid)
         paintedTilemap = RoomManager.Instance?.GetCurrentRoomGrid()?.GetFloorTilemap();
 
         if (paintedTilemap == null && GameManager.IsMultiplayer)
@@ -109,7 +105,6 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void Update()
     {
-        // Resolve tilemap from unit grid every frame so hallway transit is seamless.
         var unit     = FindLocalUnit();
         var unitGrid = unit?.GetCurrentRoomGrid();
         var tilemap  = unitGrid?.GetFloorTilemap()
@@ -137,8 +132,6 @@ public class TilemapHighlighter : MonoBehaviour
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
 
-        // Use the unit's current grid for all mouse → grid position conversions.
-        // This is correct in rooms AND in hallways.
         var activeGrid = unitGrid ?? RoomManager.Instance?.GetCurrentRoomGrid();
 
         if (action is MoveAction move)

@@ -2889,7 +2889,7 @@ ParticleSystem:
     startLifetime:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 70
+      scalar: 90
       minScalar: 5
       maxCurve:
         serializedVersion: 2
@@ -3376,8 +3376,8 @@ ParticleSystem:
         m_PostInfinity: 2
         m_RotationOrder: 4
     randomizeRotationDirection: 0
-    gravitySource: 0
-    maxNumParticles: 300
+    gravitySource: 1
+    maxNumParticles: 350
     customEmitterVelocity: {x: 0, y: 0, z: 0}
     size3D: 0
     rotation3D: 0
@@ -7537,13 +7537,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 350055939}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: 0.7071068, z: -0.7071068, w: 0}
-  m_LocalPosition: {x: 0, y: 820, z: -51}
+  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 0, y: 819.9996, z: -50.999905}
   m_LocalScale: {x: 1, y: 1, z: 0.51}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 2130559005}
-  m_LocalEulerAnglesHint: {x: 90, y: 90, z: -90}
+  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
 --- !u!114 &350055943
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7556,8 +7556,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4a9bb47de8463ce4ea69c7072ff3f3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SnowBreezeController
-  breezeStrength: 0.25
-  breezeSpeed: 0.25
+  breezeStrength: -0.25
+  breezeSpeed: -0.25
   breezeShiftInterval: 5
   fallSpeed: -0.25
 --- !u!1 &359624670

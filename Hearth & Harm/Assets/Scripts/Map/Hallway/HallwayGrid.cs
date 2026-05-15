@@ -1,24 +1,6 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Owns the Unity Grid + child Tilemaps that make up one procedural hallway.
-///
-/// Hierarchy created at runtime:
-///   HallwayGrid (GameObject)
-///     Grid  (Unity Grid component, HallwayGrid, RoomGrid, TilemapRoomGrid all here)
-///       Floor  (Tilemap + TilemapRenderer, sortOrder 0)
-///       Walls  (Tilemap + TilemapRenderer, sortOrder 1)
-///
-/// Call Initialize() after painting tiles into Floor/Walls.
-///
-/// WIDTH CONTROL (for future use):
-///   HallwayBuilder passes widthA/widthB from the room's SpawnPointTile count.
-///   To override, set a defaultHallwayWidth on LevelGenerator and pass it into
-///   HallwayBuilder.Build() as a fallback when GetMouthWidth() returns 0.
-///   The painter then uses it as exitWidth/entryWidth, which flows through
-///   midWidth = (exitWidth + entryWidth + 1) / 2 for bends automatically.
-/// </summary>
 [RequireComponent(typeof(Grid))]
 [RequireComponent(typeof(RoomGrid))]
 [RequireComponent(typeof(TilemapRoomGrid))]
@@ -36,10 +18,6 @@ public class HallwayGrid : MonoBehaviour
 
     // ── Factory ────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Creates the full GameObject hierarchy for one hallway.
-    /// Returns the HallwayGrid component ready for tile painting.
-    /// </summary>
     public static HallwayGrid Create(
         Transform                 parent,
         LevelGenerator.PlacedRoom roomA,
@@ -47,12 +25,11 @@ public class HallwayGrid : MonoBehaviour
         LevelGenerator.Direction  dirAtoB,
         string                    name = "Hallway")
     {
-        // Root object with all required components
         var go = new GameObject(name);
         go.transform.SetParent(parent, worldPositionStays: false);
 
         go.AddComponent<Grid>();
-        go.AddComponent<TilemapRoomGrid>();   // RoomGrid [RequireComponent] pulls TilemapRoomGrid
+        go.AddComponent<TilemapRoomGrid>();
         var hg = go.AddComponent<HallwayGrid>();
         var rg = go.AddComponent<RoomGrid>();
 
@@ -80,19 +57,36 @@ public class HallwayGrid : MonoBehaviour
         return hg;
     }
 
-    /// <summary>
-    /// Call this after HallwayTilemapPainter has finished writing tiles.
-    /// Wires RoomGrid → TilemapRoomGrid exactly the same way RoomTilemapSetup does.
-    /// </summary>
+
     public void Initialize()
     {
         RoomGrid.Initialize(WallsTilemap, FloorTilemap);
 
         if (!RoomGrid.IsInitialized())
+        {
             Debug.LogError($"[HallwayGrid] RoomGrid failed to initialize on {gameObject.name}!");
+            return;
+        }
+
+        if (UnifiedWorldGrid.Instance != null)
+        {
+            UnifiedWorldGrid.Instance.RegisterTilemap(FloorTilemap, RoomGrid, WallsTilemap);
+            Debug.Log($"[HallwayGrid] {gameObject.name} registered with UnifiedWorldGrid.");
+        }
         else
-            Debug.Log($"[HallwayGrid] {gameObject.name} initialized. " +
-                      $"W={RoomGrid.GetWidth()} H={RoomGrid.GetHeight()}");
+        {
+            Debug.LogWarning($"[HallwayGrid] UnifiedWorldGrid not present — " +
+                             $"{gameObject.name} won't be part of the unified graph.");
+        }
+
+        Debug.Log($"[HallwayGrid] {gameObject.name} initialized. " +
+                  $"W={RoomGrid.GetWidth()} H={RoomGrid.GetHeight()}");
+    }
+
+    private void OnDestroy()
+    {
+        if (UnifiedWorldGrid.Instance != null && FloorTilemap != null)
+            UnifiedWorldGrid.Instance.Unregister(FloorTilemap);
     }
 
     /// <summary>True once Initialize() has completed successfully.</summary>

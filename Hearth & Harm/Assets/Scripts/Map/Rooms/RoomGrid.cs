@@ -5,6 +5,11 @@ using UnityEngine.Tilemaps;
 /// <summary>
 /// Thin adapter component that lives on every room prefab root.
 /// Delegates all real work to TilemapRoomGrid.
+///
+/// CHANGES FROM PREVIOUS VERSION
+///   • IsWalkableAtWorld() — new convenience method used by UnifiedWorldGrid
+///     to delegate occupancy checks without needing a GridPosition.
+///   • No other changes — all existing callers compile unchanged.
 /// </summary>
 [RequireComponent(typeof(TilemapRoomGrid))]
 public class RoomGrid : MonoBehaviour
@@ -15,29 +20,21 @@ public class RoomGrid : MonoBehaviour
 
     public bool HasBeenCleared { get; private set; }
 
-    public void MarkCleared()
-    {
-        HasBeenCleared = true;
-    }
+    public void MarkCleared() => HasBeenCleared = true;
 
     // ── Door state ─────────────────────────────────────────────────────────
 
     private Dictionary<LevelGenerator.Direction, bool> doorStates = new();
 
-    public void SetDoorState(LevelGenerator.Direction dir, bool isOpen) 
+    public void SetDoorState(LevelGenerator.Direction dir, bool isOpen)
     {
-        if (doorStates.ContainsKey(dir))
-            doorStates[dir] = isOpen;
-        else
-            doorStates.Add(dir, isOpen);
+        if (doorStates.ContainsKey(dir)) doorStates[dir] = isOpen;
+        else                             doorStates.Add(dir, isOpen);
     }
 
-    public bool GetDoorState(LevelGenerator.Direction dir) 
+    public bool GetDoorState(LevelGenerator.Direction dir)
     {
-        // If the direction isn't in the dictionary, it was never a door
-        if (doorStates.TryGetValue(dir, out bool isOpen)) 
-            return isOpen;
-        return false; 
+        return doorStates.TryGetValue(dir, out bool isOpen) ? isOpen : false;
     }
 
     // ── Init ───────────────────────────────────────────────────────────────
@@ -63,14 +60,30 @@ public class RoomGrid : MonoBehaviour
     public bool IsWalkableIgnoreOccupancy(GridPosition gp) => tilemapGrid.IsWalkableIgnoreOccupancy(gp);
     public bool IsWall(GridPosition gp)                    => tilemapGrid.IsWall(gp);
 
+    /// <summary>
+    /// World-space convenience used by UnifiedWorldGrid to check occupancy
+    /// without the caller needing to know this grid's local coordinate system.
+    /// </summary>
+    public bool IsWalkableAtWorld(Vector3 worldPos)
+    {
+        if (tilemapGrid == null) return false;
+        var gp = tilemapGrid.GetGridPosition(worldPos);
+        return tilemapGrid.IsWalkable(gp);
+    }
+
+    public bool IsWalkableIgnoreOccupancyAtWorld(Vector3 worldPos)
+    {
+        if (tilemapGrid == null) return false;
+        var gp = tilemapGrid.GetGridPosition(worldPos);
+        return tilemapGrid.IsWalkableIgnoreOccupancy(gp);
+    }
+
     // ── Unit management ────────────────────────────────────────────────────
 
-    public void         AddUnitAtGridPosition(GridPosition gp, Unit u)    => tilemapGrid.AddUnit(gp, u);
-    public void         RemoveUnitAtGridPosition(GridPosition gp, Unit u) => tilemapGrid.RemoveUnit(gp, u);
-    public bool         HasAnyUnitOnGridPosition(GridPosition gp)         => tilemapGrid.HasAnyUnit(gp);
-
-    /// <summary>Returns the list of all units currently tracked at this position.</summary>
-    public List<Unit>   GetUnitsAtGridPosition(GridPosition gp)           => tilemapGrid.GetUnitsAt(gp);
+    public void       AddUnitAtGridPosition(GridPosition gp, Unit u)    => tilemapGrid.AddUnit(gp, u);
+    public void       RemoveUnitAtGridPosition(GridPosition gp, Unit u) => tilemapGrid.RemoveUnit(gp, u);
+    public bool       HasAnyUnitOnGridPosition(GridPosition gp)         => tilemapGrid.HasAnyUnit(gp);
+    public List<Unit> GetUnitsAtGridPosition(GridPosition gp)           => tilemapGrid.GetUnitsAt(gp);
 
     // ── Enemy management ───────────────────────────────────────────────────
 

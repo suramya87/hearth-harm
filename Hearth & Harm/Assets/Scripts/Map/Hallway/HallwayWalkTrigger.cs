@@ -9,7 +9,6 @@ public class HallwayWalkTrigger : MonoBehaviour
     private bool        cooling;
     private bool        locked;
 
-    // Track units currently being handed off so we don't double-trigger
     private Unit pendingUnit;
 
     public GameObject DoorStripObject { get; set; }
@@ -47,49 +46,34 @@ public class HallwayWalkTrigger : MonoBehaviour
         var unit = other.GetComponent<Unit>() ?? other.GetComponentInParent<Unit>();
         if (unit == null) return;
 
-        // Already on the hallway grid — nothing to do
+        // Already on the hallway grid — nothing to do.
         if (unit.GetCurrentRoomGrid() == hallway.RoomGrid) return;
 
-        // Already processing this unit — don't start a second coroutine
+        // Already processing this unit.
         if (pendingUnit == unit) return;
 
         if (RoomManager.Instance != null && RoomManager.Instance.CurrentRoomHasEnemies()) return;
 
-        // FIX: don't bail if the move is active — HandOffAfterMove waits for it to finish.
-        // Previously returning here meant fast players would exit the collider while still
-        // moving and the handoff would never fire.
         pendingUnit = unit;
-        StartCoroutine(HandOffAfterMove(unit));
+        StartCoroutine(HandOffImmediate(unit));
     }
 
-    private IEnumerator HandOffAfterMove(Unit unit)
+    // FIX: We no longer wait for the move action to finish before doing the
+    // grid swap. Waiting created a race where the player could reach the
+    // HallwayEntryTrigger while still registered on the source room's grid,
+    // causing the entry trigger to reject them ("not on hallway grid").
+    //
+    // Instead we swap the grid registration immediately, then let the move
+    // action finish naturally on the new grid. MoveAction.ForceSyncGridPosition
+    // already handles the mid-move case correctly.
+    private IEnumerator HandOffImmediate(Unit unit)
     {
         cooling = true;
 
-        // Wait for any in-progress move to complete before doing the grid swap
-        var move = unit.GetMoveAction();
-        if (move != null)
-        {
-            // FIX: use a timeout so a stuck move can't lock this forever
-            float timeout = 3f;
-            float elapsed = 0f;
-            while (move.IsActive)
-            {
-                elapsed += Time.deltaTime;
-                if (elapsed >= timeout)
-                {
-                    Debug.LogWarning($"[HallwayWalkTrigger] Move timed out waiting for {unit.name}. Forcing handoff.");
-                    break;
-                }
-                yield return null;
-            }
-        }
-
+        // One fixed-update so physics has settled before we read positions.
         yield return new WaitForFixedUpdate();
-        yield return new WaitForEndOfFrame();
 
-        // FIX: re-check after waiting — the player may have already transitioned
-        // via the entry trigger during the move, making this handoff redundant
+        // Re-check: entry trigger may have already handled this.
         if (unit.GetCurrentRoomGrid() == hallway.RoomGrid)
         {
             pendingUnit = null;
@@ -110,7 +94,7 @@ public class HallwayWalkTrigger : MonoBehaviour
 
         if (bestWorld == null)
         {
-            Debug.LogWarning($"[HallwayWalkTrigger] No walkable cell found near {transform.position}");
+            Debug.LogWarning($"[HallwayWalkTrigger] No walkable cell near {transform.position}");
             pendingUnit = null;
             cooling     = false;
             yield break;
@@ -118,7 +102,10 @@ public class HallwayWalkTrigger : MonoBehaviour
 
         GridPosition gridPos = roomGrid.GetGridPosition(bestWorld.Value);
 
+        var move = unit.GetMoveAction();
         if (move != null)
+            // ForceSyncGridPosition re-registers the unit on the new grid
+            // mid-move without interrupting the path.
             move.ForceSyncGridPosition(roomGrid, gridPos);
         else
             unit.PlaceInRoom(roomGrid, gridPos);
@@ -126,15 +113,22 @@ public class HallwayWalkTrigger : MonoBehaviour
         ApplyHallwayCameraBounds();
         RoomManager.Instance?.SetInHallway();
 
-        unit.transform.position = new Vector3(
-            bestWorld.Value.x, bestWorld.Value.y, unit.transform.position.z);
+        // Snap the visual position only when the unit is NOT actively moving,
+        // so we don't cause a visible teleport during a move animation.
+        if (move == null || !move.IsActive)
+        {
+            unit.transform.position = new Vector3(
+                bestWorld.Value.x, bestWorld.Value.y, unit.transform.position.z);
+        }
 
         if (move != null) move.RefreshValidTargets();
 
         Debug.Log($"[HallwayWalkTrigger] {unit.name} adopted by {hallway.name} at {gridPos}");
 
         pendingUnit = null;
-        yield return new WaitForSeconds(0.2f);
+
+        // Short cooldown so OnTriggerStay can't re-fire this frame.
+        yield return new WaitForSeconds(0.15f);
         cooling = false;
     }
 

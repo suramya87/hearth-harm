@@ -50,8 +50,24 @@ public class HallwayEntryTrigger : MonoBehaviour
             if (bridge == null || !bridge.IsOwner) return;
         }
 
+        // Already in the destination — nothing to do.
         if (IsOnDestinationGrid(unit)) return;
-        if (!IsOnHallwayGrid(unit)) return;
+
+        // FIX: removed the hard "must be on hallway grid" guard.
+        //
+        // Old behaviour: if the walk trigger's async HandOffAfterMove hadn't
+        // finished yet the unit was still registered on the source room grid,
+        // IsOnHallwayGrid() returned false and we silently returned — the
+        // player walked through the mouth and nothing happened.
+        //
+        // New behaviour: we allow the transition as long as the player is NOT
+        // already in the destination room. If they happen to still be on the
+        // source room grid (walk trigger mid-handoff) that's fine — we just
+        // move them into the destination anyway, which is the correct outcome.
+        //
+        // We do still reject players that are on a *different* hallway to
+        // prevent cross-hallway ghost transitions.
+        if (!IsOnHallwayOrAdjacentGrid(unit)) return;
 
         StartCoroutine(TransitionAfterMove(unit));
     }
@@ -60,21 +76,38 @@ public class HallwayEntryTrigger : MonoBehaviour
     {
         cooling = true;
 
+        // Wait for an in-progress move to finish so we don't snap the player
+        // mid-animation. Cap at 2s to avoid a permanent lock if the path stalls.
         var move = unit.GetMoveAction();
         if (move != null)
-            while (move.IsActive) yield return null;
+        {
+            float timeout = 2f;
+            float elapsed = 0f;
+            while (move.IsActive)
+            {
+                elapsed += Time.deltaTime;
+                if (elapsed >= timeout)
+                {
+                    Debug.LogWarning($"[HallwayEntryTrigger] Move timeout — forcing transition.");
+                    break;
+                }
+                yield return null;
+            }
+        }
 
         yield return new WaitForSeconds(0.05f);
 
+        // Re-check: another trigger may have handled this while we waited.
         if (IsOnDestinationGrid(unit)) { cooling = false; yield break; }
 
         GridPosition spawnPos = GetDestinationSpawnPos();
 
-        HallwayWalkTrigger[] allWalkTriggers = FindObjectsByType<HallwayWalkTrigger>(FindObjectsSortMode.None);
+        // Briefly disable all walk triggers so the position change doesn't
+        // immediately rubber-band the player back into the hallway.
+        HallwayWalkTrigger[] allWalkTriggers =
+            FindObjectsByType<HallwayWalkTrigger>(FindObjectsSortMode.None);
         foreach (var wt in allWalkTriggers)
-        {
-            wt.DisableTemporarily(1.5f); // Increased to 1.5s for safety
-        }
+            wt.DisableTemporarily(1.5f);
 
         if (GameManager.IsMultiplayer)
         {
@@ -102,6 +135,8 @@ public class HallwayEntryTrigger : MonoBehaviour
         cooling = false;
     }
 
+    // ── Grid identity helpers ──────────────────────────────────────────────
+
     private bool IsOnDestinationGrid(Unit unit)
     {
         var current = unit.GetCurrentRoomGrid();
@@ -110,13 +145,43 @@ public class HallwayEntryTrigger : MonoBehaviour
         return current.gameObject.name == DestinationRoom.roomGrid.gameObject.name;
     }
 
-    private bool IsOnHallwayGrid(Unit unit)
+    // FIX: replaces the old strict IsOnHallwayGrid check.
+    // Returns true when the unit is on:
+    //   • this hallway's grid (the normal case), OR
+    //   • the room on the OTHER side of this hallway (walk trigger mid-handoff), OR
+    //   • null (unit hasn't been placed yet — let it through).
+    // Returns false only when the unit is already on a completely unrelated grid
+    // (prevents ghost transitions through walls or into wrong hallways).
+    private bool IsOnHallwayOrAdjacentGrid(Unit unit)
     {
         var current = unit.GetCurrentRoomGrid();
-        if (current == null || Hallway?.RoomGrid == null) return false;
-        if (current == Hallway.RoomGrid) return true;
-        return current.gameObject.name == Hallway.RoomGrid.gameObject.name;
+
+        // No grid yet — allow through (handles spawn edge cases).
+        if (current == null) return true;
+
+        // On this hallway — normal path.
+        if (Hallway?.RoomGrid != null)
+        {
+            if (current == Hallway.RoomGrid) return true;
+            if (current.gameObject.name == Hallway.RoomGrid.gameObject.name) return true;
+        }
+
+        // Still on RoomA or RoomB of this hallway (walk trigger mid-handoff).
+        // We identify those rooms via the HallwayGrid's stored references.
+        if (Hallway != null)
+        {
+            var roomA = Hallway.RoomA?.roomGrid;
+            var roomB = Hallway.RoomB?.roomGrid;
+            if (roomA != null && (current == roomA || current.gameObject.name == roomA.gameObject.name))
+                return true;
+            if (roomB != null && (current == roomB || current.gameObject.name == roomB.gameObject.name))
+                return true;
+        }
+
+        return false;
     }
+
+    // ── Spawn position ─────────────────────────────────────────────────────
 
     private GridPosition GetDestinationSpawnPos()
     {
@@ -129,96 +194,96 @@ public class HallwayEntryTrigger : MonoBehaviour
             DestinationRoom.roomGrid.GetHeight() / 2);
     }
 
+    // ── Room locking / enemy spawning ──────────────────────────────────────
+
     private static bool LockRoomAndSpawnEnemies(
         LevelGenerator.PlacedRoom room,
         HallwayEntryTrigger triggerForCallback)
     {
         if (room?.connector == null) return false;
-        
+
         if (room.prefabData.roomType == LevelGenerator.RoomType.Start) return false;
-        
+
         if (EnemyManager.Instance == null) return false;
 
-        bool alreadyHasEnemies = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
+        bool alreadyHasEnemies =
+            EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
 
         if (!alreadyHasEnemies)
         {
             var spawner = FindAnyObjectByType<EnemySpawner>();
-            if (spawner != null)
-            {
-                spawner.SpawnForRoom(room);
-            }
+            spawner?.SpawnForRoom(room);
         }
 
-        int enemyCount = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count;
+        int  enemyCount = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count;
         bool hasEnemies = enemyCount > 0;
 
         if (hasEnemies)
         {
-            // Close everything to trap the player
             room.connector.CloseAllDoors();
-            
+
             EnemyManager.Instance.OnRoomCleared -= triggerForCallback.HandleRoomCleared;
             EnemyManager.Instance.OnRoomCleared += triggerForCallback.HandleRoomCleared;
-            
-            Debug.Log($"[RoomLock] Room {room.roomGrid.name} locked with {enemyCount} enemies.");
+
+            Debug.Log($"[RoomLock] {room.roomGrid.name} locked with {enemyCount} enemies.");
         }
         else
         {
-            foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+            foreach (LevelGenerator.Direction dir in
+                System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             {
                 bool shouldBeOpen = room.roomGrid.GetDoorState(dir);
                 room.connector.SetDoorOpen(dir, shouldBeOpen);
             }
 
-            Debug.Log($"[RoomLock] Room {room.roomGrid.name} is empty. Restoring saved door states.");
+            Debug.Log($"[RoomLock] {room.roomGrid.name} empty — restoring door states.");
         }
 
         return hasEnemies;
     }
 
-        private void LockAllRoomExits(LevelGenerator.PlacedRoom room)
+    private void LockAllRoomExits(LevelGenerator.PlacedRoom room)
+    {
+        if (!RoomManager.Instance.CurrentRoomHasEnemies()) return;
+
+        roomBorderTriggers = new List<HallwayWalkTrigger>();
+
+        foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
         {
-            // Only proceed if the room actually has enemies
-            if (!RoomManager.Instance.CurrentRoomHasEnemies()) return;
+            if (et.DestinationRoom?.roomGrid == null) continue;
 
-            roomBorderTriggers = new List<HallwayWalkTrigger>();
+            bool isThisRoom =
+                et.DestinationRoom.roomGrid == room.roomGrid ||
+                et.DestinationRoom.roomGrid.gameObject.name == room.roomGrid.gameObject.name;
 
-            foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
+            if (!isThisRoom) continue;
+            if (et.pairedWalkTrigger == null) continue;
+
+            if (et.pairedWalkTrigger.DoorStripObject == null && room.connector != null)
             {
-                if (et.DestinationRoom?.roomGrid == null) continue;
-
-                bool isThisRoom = et.DestinationRoom.roomGrid == room.roomGrid ||
-                                et.DestinationRoom.roomGrid.gameObject.name == room.roomGrid.gameObject.name;
-                
-                if (!isThisRoom) continue;
-                if (et.pairedWalkTrigger == null) continue;
-
-                // Link the visual door strips to the trigger
-                if (et.pairedWalkTrigger.DoorStripObject == null && room.connector != null)
+                GameObject strip = et.EntryDirection switch
                 {
-                    GameObject strip = et.EntryDirection switch
-                    {
-                        LevelGenerator.Direction.North => room.connector.northDoorStrip,
-                        LevelGenerator.Direction.South => room.connector.southDoorStrip,
-                        LevelGenerator.Direction.East  => room.connector.eastDoorStrip,
-                        LevelGenerator.Direction.West  => room.connector.westDoorStrip,
-                        _                              => null
-                    };
-                    et.pairedWalkTrigger.DoorStripObject = strip;
-                }
-
-                et.pairedWalkTrigger.SetLocked(true);
-                roomBorderTriggers.Add(et.pairedWalkTrigger);
+                    LevelGenerator.Direction.North => room.connector.northDoorStrip,
+                    LevelGenerator.Direction.South => room.connector.southDoorStrip,
+                    LevelGenerator.Direction.East  => room.connector.eastDoorStrip,
+                    LevelGenerator.Direction.West  => room.connector.westDoorStrip,
+                    _                              => null
+                };
+                et.pairedWalkTrigger.DoorStripObject = strip;
             }
+
+            et.pairedWalkTrigger.SetLocked(true);
+            roomBorderTriggers.Add(et.pairedWalkTrigger);
         }
+    }
 
     private void HandleRoomCleared(RoomGrid clearedRoom)
     {
         if (clearedRoom == null) return;
 
-        bool isOurRoom = clearedRoom == DestinationRoom?.roomGrid ||
-                         clearedRoom.gameObject.name == DestinationRoom?.roomGrid?.gameObject.name;
+        bool isOurRoom =
+            clearedRoom == DestinationRoom?.roomGrid ||
+            clearedRoom.gameObject.name == DestinationRoom?.roomGrid?.gameObject.name;
         if (!isOurRoom) return;
 
         if (EnemyManager.Instance != null)
@@ -229,11 +294,13 @@ public class HallwayEntryTrigger : MonoBehaviour
         {
             foreach (var placed in gen.GetAllRooms())
             {
-                bool match = placed.roomGrid == clearedRoom ||
-                             placed.roomGrid?.gameObject.name == clearedRoom.gameObject.name;
+                bool match =
+                    placed.roomGrid == clearedRoom ||
+                    placed.roomGrid?.gameObject.name == clearedRoom.gameObject.name;
                 if (!match) continue;
 
-                foreach (LevelGenerator.Direction dir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+                foreach (LevelGenerator.Direction dir in
+                    System.Enum.GetValues(typeof(LevelGenerator.Direction)))
                 {
                     if (gen.GetConnectedRoom(placed, dir) != null)
                         placed.connector.SetDoorOpen(dir, true);
