@@ -45,6 +45,7 @@ public class CameraController2D : MonoBehaviour
     [Header("Screen Shake")]
     [SerializeField] private float shakeFrequency = 25f;
 
+    private bool inCombat;
     // ── State ──────────────────────────────────────────────────────────────
 
     private Transform followTarget;
@@ -342,4 +343,28 @@ public class CameraController2D : MonoBehaviour
         var pt = PlayerTarget.Instance;
         return pt != null ? pt.transform : null;
     }
+
+    public void SetCombatState(bool combat)
+    {
+        followingPlayer = false;
+
+        if (combat)
+            snapping = true;
+    }
+    public void FollowUntilArrived(Transform target)
+    {
+        if (target == null) return;
+
+        followTarget = target;
+        cameraInputLocked = true;
+        unlockWhenCentered = false;
+        snapping = false;
+    }
+
+    public void StopFollow()
+{
+    followTarget = null;
+    cameraInputLocked = false;
+    unlockWhenCentered = false;
+}
 }

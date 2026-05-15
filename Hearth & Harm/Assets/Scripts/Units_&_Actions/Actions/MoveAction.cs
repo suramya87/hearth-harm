@@ -115,7 +115,7 @@ public class MoveAction : BaseAction
 
         SetFacingToward(startPos, usedPath[0]);
         unitAnimator?.SetMoving(true);
-
+        CameraController2D.Instance?.FollowUntilArrived(unit.transform);
         isActive = true;
         StartCoroutine(MoveAlongPath(waypoints, usedPath, finalPos, room, onComplete));
     }
@@ -160,7 +160,7 @@ public class MoveAction : BaseAction
                 unit.PlaceInRoomNoMove(startingGrid, finalGP);
             }
         }
-
+        CameraController2D.Instance?.StopFollow();
         onComplete?.Invoke();
     }
 

@@ -39,6 +39,12 @@ public class RoomManager : MonoBehaviour
         if (room != null)
         {
             ApplyRoomCamera(room);
+
+            if (CurrentRoomHasEnemies())
+                CameraController2D.Instance?.SetCombatState(true);
+            else
+                CameraController2D.Instance?.SetCombatState(false);
+
             Debug.Log($"[RoomManager] Entered: {room.roomInstance?.name ?? "unknown"}");
         }
     }
