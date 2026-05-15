@@ -7559,7 +7559,7 @@ MonoBehaviour:
   breezeStrength: 0.25
   breezeSpeed: 0.25
   breezeShiftInterval: 5
-  fallSpeed: -0.25
+  fallSpeed: 0
 --- !u!1 &359624670
 GameObject:
   m_ObjectHideFlags: 0
