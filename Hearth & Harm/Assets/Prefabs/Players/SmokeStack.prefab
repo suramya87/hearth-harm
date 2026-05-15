@@ -257,8 +257,8 @@ MonoBehaviour:
   currentStamina: 0
   staminaNumberPrefab: {fileID: 395528008300433492, guid: 87dfa8ca1a97b76448ac5684a7e34908, type: 3}
   staminaPopupOffset: {x: 0, y: 1, z: 0}
-  strength: 5
-  constitution: 5
+  strength: 0
+  constitution: 10
   dexterity: 5
   intelligence: 0
   perception: 0
@@ -425,7 +425,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1228650071
+  GlobalObjectIdHash: 4219110693
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
