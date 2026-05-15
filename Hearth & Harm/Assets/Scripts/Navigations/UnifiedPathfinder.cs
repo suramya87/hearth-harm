@@ -125,21 +125,21 @@ public static class UnifiedPathfinder
         var path = new List<WorldStep>();
         for (var n = end; n.Parent != null; n = n.Parent)
         {
-            var data = grid.GetCell(new Vector3(n.Key.x, n.Key.y, 0));
+            var data = grid.GetCellByKey(n.Key);
+            if (data == null) continue;
+
             path.Add(new WorldStep
             {
-                WorldPos  = data?.WorldCentre ?? new Vector3(n.Key.x, n.Key.y, 0),
-                OwnerGrid = data?.OwnerGrid,
+                WorldPos  = data.WorldCentre,
+                OwnerGrid = data.OwnerGrid,
             });
         }
         path.Reverse();
         return path;
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
-
     private static int Heuristic(Vector3Int a, Vector3Int b) =>
-        Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y);
+        (Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y)) / 2;
 
     private static Node Best(List<Node> list)
     {

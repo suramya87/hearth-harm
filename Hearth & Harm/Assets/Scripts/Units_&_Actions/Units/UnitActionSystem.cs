@@ -55,7 +55,7 @@ public class UnitActionSystem : MonoBehaviour
         if (GameManager.IsMultiplayer)
         {
             float waited = 0f;
-            while (waited < 8f) // increased from 5s — spawner can take a moment
+            while (waited < 8f) 
             {
                 waited += Time.deltaTime;
                 var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
@@ -91,6 +91,15 @@ public class UnitActionSystem : MonoBehaviour
         }
     }
 
+    // private void UnitActionSystem_OnBusyChanged(object sender, bool isBusy)
+    // {
+    //     isSystemBusy = isBusy;
+    //     if (isBusy)
+    //     {
+    //         SafeClear(); // Wipe the tiles immediately when movement starts
+    //     }
+    // }
+
     // ── Update ─────────────────────────────────────────────────────────────
 
     private void Update()
@@ -105,21 +114,16 @@ public class UnitActionSystem : MonoBehaviour
             return;
         }
 
-        // Keep RoomManager AND unit internals reconciled every frame in MP.
         if (GameManager.IsMultiplayer && localBridge != null)
             ReconcileRoomFromBridge();
 
         if (isBusy) return;
 
-        // ── Turn system guard ──────────────────────────────────────────────
-        // Keep MP and SP paths completely separate — don't fall through from
-        // one to the other, as TurnSystem.Instance exists in SP scenes and
-        // could be non-null even during an MP session if the scene was reused.
+       
         if (GameManager.IsMultiplayer)
         {
             if (NetworkedTurnSystem.Instance != null && !NetworkedTurnSystem.Instance.IsPlayerPhase)
                 return;
-            // If NetworkedTurnSystem not yet spawned, allow input (it will arrive soon).
         }
         else
         {
@@ -313,9 +317,26 @@ public class UnitActionSystem : MonoBehaviour
 
     // ── Busy state ─────────────────────────────────────────────────────────
 
-    private void SetBusy()   { isBusy = true;  OnBusyChanged?.Invoke(this, true);  }
-    private void ClearBusy() { isBusy = false; OnBusyChanged?.Invoke(this, false); }
+    private void SetBusy()   
+    { 
+        isBusy = true;  
+        OnBusyChanged?.Invoke(this, true);  
+    }
+    
+    private void ClearBusy() 
+    { 
+        isBusy = false; 
 
+        // Re-select the action. This forces OnSelectedActionChange to fire,
+        // which tells the TilemapHighlighter to recalculate valid positions
+        // from the unit's NEW grid position.
+        if (selectedAction != null)
+        {
+            SetSelectedAction(selectedAction);
+        }
+
+        OnBusyChanged?.Invoke(this, false); 
+    }
     // ── Public getters ─────────────────────────────────────────────────────
 
     public Unit       GetSelectedUnit()   => selectedUnit;

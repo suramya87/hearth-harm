@@ -340,7 +340,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 30fe39cae9ce1dd45b93bcc3057d1e7f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemySpawner
-  spawnTables: []
+  spawnTables:
+  - {fileID: 11400000, guid: abfb13e501666d242bb151bbe38a4667, type: 2}
+  - {fileID: 11400000, guid: 25f94ee721b71064ba297df61eff1ed8, type: 2}
+  - {fileID: 11400000, guid: ca8eb0b85d4f206468eb11c0854c0df3, type: 2}
   legacyEntries: []
   borderPadding: 2
   spawnOnLevelReady: 1
@@ -1073,11 +1076,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 77b2c4df5a3278f4d91371e1a47a55df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveManager
-  baseEnemyCount: 0
-  enemiesPerLevel: 0
-  maxEnemies: 0
-  baseMinRooms: 50
-  baseMaxRooms: 51
+  baseEnemyCount: 2
+  enemiesPerLevel: 3
+  maxEnemies: 50
+  baseMinRooms: 5
+  baseMaxRooms: 7
   roomsPerLevel: 1
   maxRooms: 51
 --- !u!4 &1650586711

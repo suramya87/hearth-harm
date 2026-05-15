@@ -1,7 +1,7 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
-
 
 public class TilemapHighlighter : MonoBehaviour
 {
@@ -14,7 +14,7 @@ public class TilemapHighlighter : MonoBehaviour
     [SerializeField] private Color moveColor      = new(0.2f, 0.6f, 1f,    0.55f);
     [SerializeField] private Color rangeColor     = new(1f,  0.85f, 0f,    0.55f);
     [SerializeField] private Color aoeColor       = new(1f,  0.15f, 0.15f, 0.55f);
-    [SerializeField] private Color hoverColor     = new(1f,  1f,   1f,    0.35f);
+    [SerializeField] private Color hoverColor     = new(1f,  1f,    1f,    0.35f);
     [SerializeField] private Color enemyMoveColor = new(1f,  0.25f, 0.25f, 0.5f);
 
     [Header("Overlay sorting")]
@@ -28,7 +28,8 @@ public class TilemapHighlighter : MonoBehaviour
     private EnemyUnit          previewEnemy;
     private List<GridPosition> previewEnemyPositions;
 
-    // ── Lifecycle ──────────────────────────────────────────────────────────
+    // --- NEW VARIABLE ---
+    private bool isSystemBusy; 
 
     private void Awake()
     {
@@ -40,13 +41,39 @@ public class TilemapHighlighter : MonoBehaviour
     {
         LevelGenerator.OnLevelReady  += OnLevelReady;
         RoomManager.OnAnyRoomChanged += OnRoomChanged;
+        
+        // This tells the Highlighter to listen to the Action System
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnBusyChanged += UnitActionSystem_OnBusyChanged;
+        }
     }
 
     private void OnDisable()
     {
         LevelGenerator.OnLevelReady  -= OnLevelReady;
         RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+
+        if (UnitActionSystem.Instance != null)
+        {
+            UnitActionSystem.Instance.OnBusyChanged -= UnitActionSystem_OnBusyChanged;
+        }
         SafeClear();
+    }
+
+    private void OnBusyChanged(object sender, bool isBusy)
+    {
+        isSystemBusy = isBusy;
+        if (isBusy) SafeClear(); 
+    }
+
+    private void UnitActionSystem_OnBusyChanged(object sender, bool isBusy)
+    {
+        isSystemBusy = isBusy;
+        if (isBusy)
+        {
+            SafeClear(); 
+        }
     }
 
     private void OnDestroy()
@@ -56,15 +83,12 @@ public class TilemapHighlighter : MonoBehaviour
             Destroy(overlayRoot);
     }
 
-    private void OnLevelReady()                                => SafeClear();
-    private void OnRoomChanged(LevelGenerator.PlacedRoom _)   => SafeClear();
-
-    // ── Overlay creation ───────────────────────────────────────────────────
+    private void OnLevelReady()            => SafeClear();
+    private void OnRoomChanged(LevelGenerator.PlacedRoom _) => SafeClear();
 
     private void EnsureOverlay()
     {
         if (overlayRoot != null && overlayTilemap != null) return;
-
         var existing = GameObject.Find("__HighlightOverlay__");
         if (existing != null)
         {
@@ -74,7 +98,6 @@ public class TilemapHighlighter : MonoBehaviour
             if (overlayTilemap != null) return;
             Destroy(existing);
         }
-
         BuildOverlay();
     }
 
@@ -82,16 +105,13 @@ public class TilemapHighlighter : MonoBehaviour
     {
         overlayRoot = new GameObject("__HighlightOverlay__");
         DontDestroyOnLoad(overlayRoot);
-
-        overlayGrid           = overlayRoot.AddComponent<Grid>();
-        overlayGrid.cellSize  = new Vector3(1f, 1f, 0f);
-        overlayGrid.cellGap   = Vector3.zero;
+        overlayGrid          = overlayRoot.AddComponent<Grid>();
+        overlayGrid.cellSize = new Vector3(1f, 1f, 0f); 
+        overlayGrid.cellGap  = Vector3.zero;
 
         var tmGo = new GameObject("Tilemap");
         tmGo.transform.SetParent(overlayRoot.transform, worldPositionStays: false);
-
         overlayTilemap = tmGo.AddComponent<Tilemap>();
-
         var ren = tmGo.AddComponent<TilemapRenderer>();
         ren.sortingLayerName = overlaySortingLayer;
         ren.sortingOrder     = overlaySortingOrder;
@@ -99,24 +119,23 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void SafeClear()
     {
-        // Guard against the destroyed-tilemap crash.
         if (overlayTilemap != null && overlayRoot != null)
             overlayTilemap.ClearAllTiles();
     }
 
-    // ── Update ─────────────────────────────────────────────────────────────
-
     private void Update()
     {
-        EnsureOverlay();   // rebuild if overlay was destroyed
+        EnsureOverlay();   
         SafeClear();
+
+        if (isSystemBusy) return; 
+
         GridCostVisualizer.Instance?.ClearAll();
 
         var unit       = FindLocalUnit();
         var unitGrid   = unit?.GetCurrentRoomGrid();
         var activeGrid = unitGrid ?? RoomManager.Instance?.GetCurrentRoomGrid();
 
-        // Enemy preview.
         if (previewEnemy != null && previewEnemyPositions != null)
         {
             PaintGridPositions(previewEnemyPositions, enemyMoveColor, activeGrid);
@@ -156,7 +175,6 @@ public class TilemapHighlighter : MonoBehaviour
             }
         }
 
-        // Hover.
         if (activeGrid != null)
         {
             var hoverGP = activeGrid.GetGridPosition(GetMouseWorldRaw());
@@ -164,8 +182,6 @@ public class TilemapHighlighter : MonoBehaviour
                 PaintOverlayCell(WorldToOverlayCell(activeGrid.GetWorldPosition(hoverGP)), hoverColor);
         }
     }
-
-    // ── Paint helpers ──────────────────────────────────────────────────────
 
     private void PaintWorldPositions(IList<Vector3> worldPositions, Color color)
     {
@@ -195,15 +211,11 @@ public class TilemapHighlighter : MonoBehaviour
         return new Vector3Int(Mathf.FloorToInt(worldPos.x), Mathf.FloorToInt(worldPos.y), 0);
     }
 
-    // ── Mouse ──────────────────────────────────────────────────────────────
-
     private static Vector3 GetMouseWorldRaw()
     {
         Vector3 raw = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         return new Vector3(raw.x, raw.y, 0f);
     }
-
-    // ── Public API ─────────────────────────────────────────────────────────
 
     public void ShowPositions(List<GridPosition> positions, Color color)
     {
@@ -225,8 +237,6 @@ public class TilemapHighlighter : MonoBehaviour
         previewEnemy          = null;
         previewEnemyPositions = null;
     }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
 
     private static bool IsPlayerPhaseNow()
     {
@@ -251,10 +261,10 @@ public class TilemapHighlighter : MonoBehaviour
         var positions = new List<GridPosition>();
         if (enemy?.Stats == null || enemy.CurrentRoomGrid == null) return positions;
 
-        RoomGrid     room     = enemy.CurrentRoomGrid;
+        RoomGrid      room     = enemy.CurrentRoomGrid;
         GridPosition enemyPos = enemy.GridPosition;
-        int          range    = enemy.Stats.moveRange;
-        var          pf       = new Pathfinder(room);
+        int           range    = enemy.Stats.moveRange;
+        var           pf       = new Pathfinder(room);
 
         for (int dx = -range; dx <= range; dx++)
         for (int dy = -range; dy <= range; dy++)
