@@ -26,7 +26,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     private int turnsWaited;
 
     // Prevents HandleDeath and OnDestroy from both running cleanup.
-    // HandleDeath sets this first; OnDestroy checks it before acting.
     private bool deathHandled = false;
 
     public event Action<EnemyUnit> OnEnemyDied;
@@ -49,11 +48,20 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     {
         health = GetComponent<HealthComponent>();
         ApplySpriteScale();
+
+        if (health != null)
+        {
+            health.OnDeath += HandleDeath;
+            Debug.Log($"[EnemyUnit] {stats?.enemyName} subscribed OnDeath in Awake. Health={health.CurrentHealth}");
+        }
+        else
+        {
+            Debug.LogError($"[EnemyUnit] {name} has no HealthComponent in Awake!");
+        }
     }
 
     private void Start()
     {
-        health.OnDeath += HandleDeath;
         if (selectedVisual) selectedVisual.SetActive(false);
     }
 
@@ -61,10 +69,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     {
         if (health != null) health.OnDeath -= HandleDeath;
 
-        // Only run cleanup here if HandleDeath never fired — e.g. direct
-        // Destroy() call, ClearAllEnemies(), or level reload. In normal
-        // combat HandleDeath runs first and sets deathHandled = true, so
-        // this block is skipped entirely for normal deaths.
         if (!deathHandled)
         {
             deathHandled = true;
@@ -74,8 +78,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
             if (currentRoomGrid != null && initialized)
                 currentRoomGrid.RemoveEnemyAtGridPosition(gridPosition, this);
 
-            // Use plain UnregisterEnemy — room ref may or may not be valid
-            // here depending on destroy order, but it's the best we can do.
             EnemyManager.Instance?.UnregisterEnemy(this);
         }
     }
@@ -137,17 +139,10 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
 
     private void HandleDeath()
     {
-        // Guard — HealthComponent.OnDeath could theoretically fire more than
-        // once, and OnDestroy also calls cleanup. Only the first call wins.
         if (deathHandled) return;
         deathHandled = true;
 
         if (GetComponent<BossUnit>() != null) return;
-
-        // Capture the room reference NOW, before any cleanup can null it.
-        // This is the key fix — by the time Destroy(gameObject, 0.5f) fires
-        // OnDestroy, currentRoomGrid may already be null, so UnregisterEnemy
-        // can't reliably check it. We pass it explicitly instead.
         var roomAtDeath = currentRoomGrid;
 
         if (stats != null && CurrencyManager.Instance != null)
@@ -171,8 +166,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
 
         OnEnemyDied?.Invoke(this);
 
-        // Use the room-explicit overload so OnRoomCleared fires reliably
-        // even if currentRoomGrid gets nulled before the check runs.
         EnemyManager.Instance?.UnregisterEnemyFromRoom(this, roomAtDeath);
 
         Destroy(gameObject, 0.5f);

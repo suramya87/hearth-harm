@@ -57,21 +57,16 @@ public class EnemyManager : MonoBehaviour
 
         if (roomAtDeath == null) return;
 
-        // GetEnemiesInRoom filters out IsDead enemies, so if all remaining
-        // active enemies in this room are dead, count will be 0 and we fire.
         if (GetEnemiesInRoom(roomAtDeath).Count == 0)
         {
             Debug.Log($"[EnemyManager] Room cleared: {roomAtDeath.gameObject.name}");
             roomAtDeath.MarkCleared();
             OnRoomCleared?.Invoke(roomAtDeath);
+
+            ResetAllTriggersForRoom(roomAtDeath);
         }
     }
 
-    /// <summary>
-    /// Fallback path — called from EnemyUnit.OnDestroy when HandleDeath was
-    /// never reached (direct Destroy call, ClearAllEnemies, level reload).
-    /// Room reference may be null or stale here; best-effort only.
-    /// </summary>
     public void UnregisterEnemy(EnemyUnit e)
     {
         var room = e.CurrentRoomGrid;
@@ -90,6 +85,26 @@ public class EnemyManager : MonoBehaviour
             Debug.Log($"[EnemyManager] Room cleared: {room.gameObject.name}");
             room.MarkCleared();
             OnRoomCleared?.Invoke(room);
+            ResetAllTriggersForRoom(room);
+        }
+    }
+
+    private static void ResetAllTriggersForRoom(RoomGrid clearedRoom)
+    {
+        foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
+        {
+            if (et == null) continue;
+            var roomA = et.Hallway?.RoomA?.roomGrid;
+            var roomB = et.Hallway?.RoomB?.roomGrid;
+            bool aMatch = roomA != null && (roomA == clearedRoom ||
+                roomA.gameObject.name == clearedRoom.gameObject.name);
+            bool bMatch = roomB != null && (roomB == clearedRoom ||
+                roomB.gameObject.name == clearedRoom.gameObject.name);
+            if (aMatch || bMatch)
+            {
+                Debug.Log($"[EnemyManager] Resetting trigger → {et.DestinationRoom?.roomGrid?.name ?? "null"}");
+                et.ResetTrigger();
+            }
         }
     }
 

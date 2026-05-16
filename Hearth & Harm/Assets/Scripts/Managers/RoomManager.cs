@@ -27,13 +27,19 @@ public class RoomManager : MonoBehaviour
         Debug.Log($"<color=#B800FF>[RoomManager]</color> Transition lock: {locked}");
     }
 
+    /// <summary>
+    /// Returns true while HallwayEntryTrigger.TransitionAfterMove is running.
+    /// Used by HallwayWalkTrigger to suppress SetInHallway during transitions.
+    /// </summary>
+    public bool IsTransitionActive() => transitionLocked;
+
     // ── Set / Clear ────────────────────────────────────────────────────────
 
     public void SetCurrentRoom(LevelGenerator.PlacedRoom room)
     {
         currentRoom      = room;
         inHallway        = false;
-        transitionLocked = false; // entering a room always clears the lock
+        transitionLocked = false;
 
         OnRoomChanged?.Invoke(room);
         OnAnyRoomChanged?.Invoke(room);
@@ -48,8 +54,6 @@ public class RoomManager : MonoBehaviour
                       $"({room.gridPosition.x}, {room.gridPosition.y})</color> " +
                       $"({room.roomInstance?.name ?? "unknown"})");
 
-            // Set combat camera state AFTER enemies are spawned — called
-            // again from HallwayEntryTrigger once enemy count is known.
             if (CurrentRoomHasEnemies())
                 CameraController2D.Instance?.SetCombatState(true);
             else
@@ -59,9 +63,6 @@ public class RoomManager : MonoBehaviour
 
     public void SetInHallway()
     {
-        // If a room transition is in progress, ignore this completely.
-        // HallwayWalkTrigger fires OnTriggerStay2D every frame and would
-        // overwrite SetCurrentRoom if we don't guard here.
         if (transitionLocked)
         {
             Debug.Log("<color=#B800FF>[RoomManager]</color> SetInHallway suppressed " +

@@ -5,7 +5,7 @@ using UnityEngine;
 public class HallwayWalkTrigger : MonoBehaviour
 {
     private HallwayGrid hallway;
-    private bool        locked;
+    internal bool        locked;
     private bool        cooling;
 
     public GameObject DoorStripObject { get; set; }
@@ -40,6 +40,9 @@ public class HallwayWalkTrigger : MonoBehaviour
         if (cooling || locked) return;
         if (!other.CompareTag("Player")) return;
         if (hallway == null || !hallway.IsReady) return;
+
+        if (RoomManager.Instance != null && RoomManager.Instance.IsTransitionActive())
+            return;
 
         ApplyHallwayCameraBounds();
         RoomManager.Instance?.SetInHallway();
