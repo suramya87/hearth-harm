@@ -109,11 +109,6 @@ public class MinimapUI : MonoBehaviour
         if (room != null)
         {
             discovered.Add(room);
-
-            bool hasEnemies = EnemyManager.Instance != null &&
-                              EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
-            if (!hasEnemies)
-                cleared.Add(room);
         }
 
         Refresh();
@@ -128,7 +123,7 @@ public class MinimapUI : MonoBehaviour
     private void OnRoomClearedCallback(LevelGenerator.PlacedRoom room)
     {
         if (room == null) return;
-        discovered.Add(room);  // should already be there, but be safe
+        discovered.Add(room);  
         cleared.Add(room);
         Refresh();
     }
@@ -233,7 +228,6 @@ public class MinimapUI : MonoBehaviour
                 continue;
             }
 
-            // Priority: current > cleared > visited > undiscovered
             if (room == currentRoom)
                 img.color = tintCurrent;
             else if (cleared.Contains(room))

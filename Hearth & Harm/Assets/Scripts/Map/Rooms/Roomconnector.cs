@@ -81,10 +81,29 @@ public class RoomConnector : MonoBehaviour
             SetDoorOpen(d, false);
     }
 
+    public void CloseConnectedDoors(System.Collections.Generic.IEnumerable<LevelGenerator.Direction> connectedDirs)
+    {
+        foreach (var dir in connectedDirs)
+        {
+            var strip = GetStrip(dir);
+            if (strip != null) strip.SetActive(true); // true = closed/visible
+        }
+    }
+
     public void OpenAllDoors()
     {
         foreach (LevelGenerator.Direction d in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             SetDoorOpen(d, true);
+    }
+
+    public void OpenConnectedDoors(System.Collections.Generic.IEnumerable<LevelGenerator.Direction> connectedDirs)
+    {
+        foreach (var dir in connectedDirs)
+        {
+            if (deadEnds.Contains(dir)) continue;
+            var strip = GetStrip(dir);
+            if (strip != null) strip.SetActive(false); // false = open/hidden
+        }
     }
 
     public ConnectionPoint GetConnectionPoint(LevelGenerator.Direction dir) => dir switch

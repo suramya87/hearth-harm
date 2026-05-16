@@ -126,7 +126,7 @@ public class UnitActionSystem : MonoBehaviour
         if (selectedAction is MoveAction moveAction)
         {
             moveAction.HandleActionInput();
-            return; // move action owns the click; don't also run HandleInput
+            return; 
         }
 
         HandleInput();
@@ -161,6 +161,9 @@ public class UnitActionSystem : MonoBehaviour
     {
         selectedUnit = unit;
         SetSelectedAction(unit.GetMoveAction());
+
+        unit.GetMoveAction()?.InvalidateCache();
+
         OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
     }
 

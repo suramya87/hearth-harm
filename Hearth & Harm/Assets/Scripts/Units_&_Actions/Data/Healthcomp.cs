@@ -152,15 +152,16 @@ public class HealthComponent : MonoBehaviour
     private void Die()
     {
         OnDeath?.Invoke();
+        var enemy = GetComponent<EnemyUnit>();
+        if (enemy != null) return; // EnemyUnit.HandleDeath handles destruction
+
         if (deathDelay > 0f) Invoke(nameof(ExecuteDeath), deathDelay);
         else ExecuteDeath();
     }
 
     private void ExecuteDeath()
     {
-        // FIX: BossUnit owns its own death — don't deactivate or destroy here
         if (GetComponent<BossUnit>() != null) return;
-
         if (destroyOnDeath) Destroy(gameObject);
         else gameObject.SetActive(false);
     }

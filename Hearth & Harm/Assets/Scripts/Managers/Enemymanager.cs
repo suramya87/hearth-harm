@@ -40,6 +40,38 @@ public class EnemyManager : MonoBehaviour
         OnEnemyListChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Primary death path — called from EnemyUnit.HandleDeath with the room
+    /// captured before any cleanup. This guarantees OnRoomCleared fires even
+    /// if the enemy's currentRoomGrid is nulled before Destroy completes.
+    /// </summary>
+    public void UnregisterEnemyFromRoom(EnemyUnit e, RoomGrid roomAtDeath)
+    {
+        if (!active.Remove(e)) return;
+
+        EnemyTurnQueue.Instance?.RemoveEnemy(e);
+
+        if (showDebugLogs)
+            Debug.Log($"[EnemyManager] -{e.Stats?.enemyName} remain:{active.Count}");
+        OnEnemyListChanged?.Invoke();
+
+        if (roomAtDeath == null) return;
+
+        // GetEnemiesInRoom filters out IsDead enemies, so if all remaining
+        // active enemies in this room are dead, count will be 0 and we fire.
+        if (GetEnemiesInRoom(roomAtDeath).Count == 0)
+        {
+            Debug.Log($"[EnemyManager] Room cleared: {roomAtDeath.gameObject.name}");
+            roomAtDeath.MarkCleared();
+            OnRoomCleared?.Invoke(roomAtDeath);
+        }
+    }
+
+    /// <summary>
+    /// Fallback path — called from EnemyUnit.OnDestroy when HandleDeath was
+    /// never reached (direct Destroy call, ClearAllEnemies, level reload).
+    /// Room reference may be null or stale here; best-effort only.
+    /// </summary>
     public void UnregisterEnemy(EnemyUnit e)
     {
         var room = e.CurrentRoomGrid;
@@ -51,7 +83,9 @@ public class EnemyManager : MonoBehaviour
             Debug.Log($"[EnemyManager] -{e.Stats?.enemyName} remain:{active.Count}");
         OnEnemyListChanged?.Invoke();
 
-        if (room != null && GetEnemiesInRoom(room).Count == 0)
+        if (room == null) return;
+
+        if (GetEnemiesInRoom(room).Count == 0)
         {
             Debug.Log($"[EnemyManager] Room cleared: {room.gameObject.name}");
             room.MarkCleared();
@@ -77,8 +111,8 @@ public class EnemyManager : MonoBehaviour
     public List<EnemyUnit> GetAllEnemies() => new(active);
 
     /// <summary>
-    /// Compares by GameObject name rather than reference so enemies are found
-    /// correctly even when grid references differ between systems.
+    /// Returns only living (non-dead) enemies in the given room.
+    /// Compares by GameObject name so references don't need to match exactly.
     /// </summary>
     public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
     {
@@ -103,15 +137,12 @@ public class EnemyManager : MonoBehaviour
     {
         if (EnemyTurnQueue.Instance == null) return;
 
-        // Get room from the player unit directly — more reliable than
-        // RoomManager when transitions are mid-frame.
         RoomGrid room = null;
 
         var unit = FindLocalPlayerUnit();
         if (unit != null)
             room = unit.GetCurrentRoomGrid();
 
-        // Fall back to RoomManager if unit lookup fails.
         if (room == null)
             room = RoomManager.Instance?.GetCurrentRoomGrid();
 

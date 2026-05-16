@@ -8,7 +8,7 @@ public class DoorStripBlocker : MonoBehaviour
 {
     [Tooltip("If left empty the component auto-detects cells from Tilemap, " +
              "SpriteRenderer, or BoxCollider2D on this GameObject.")]
-    [SerializeField] private Vector2Int[] manualCells; // optional override
+    [SerializeField] private Vector2Int[] manualCells; 
 
     private RoomGrid ownerGrid;
 

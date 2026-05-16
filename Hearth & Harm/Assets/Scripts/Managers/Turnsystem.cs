@@ -89,6 +89,10 @@ public class TurnSystem : MonoBehaviour
     private static void RecoverPlayerStamina()
     {
         var unit = UnitActionSystem.Instance?.GetSelectedUnit();
+
+        if (unit == null)
+            unit = FindAnyObjectByType<Unit>();
+
         if (unit == null) return;
 
         var stats = unit.GetComponent<PlayerStats>();
