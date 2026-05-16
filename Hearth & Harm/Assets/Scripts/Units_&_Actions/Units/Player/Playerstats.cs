@@ -49,8 +49,35 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         }
     }
 
-    private void OnEnable() => RoomManager.OnAnyRoomChanged += OnRoomChanged;
-    private void OnDisable() => RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+    private void OnEnable()
+    {
+        RoomManager.OnAnyRoomChanged += OnRoomChanged;
+
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnRoomCleared += OnRoomCleared;
+    }
+
+    private void OnDisable()
+    {
+        RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnRoomCleared -= OnRoomCleared;
+    }
+
+    private void OnRoomCleared(RoomGrid clearedRoom)
+    {
+        RoomGrid currentRoom = RoomManager.Instance != null
+            ? RoomManager.Instance.GetCurrentRoomGrid()
+            : null;
+
+        if (clearedRoom == null || clearedRoom != currentRoom)
+            return;
+
+        RefillStaminaToMax();
+
+        Debug.Log("[PlayerStats] Combat room cleared → stamina refilled for traversal.");
+    }
 
     // --- Room Transition ---
 
@@ -156,7 +183,8 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         }
 
         RecalculateDerivedStats();
-
+        if (statType == PlayerStatType.Dexterity)
+            RefillStaminaToMax();
         Debug.Log($"[PlayerStats] Increased {statType} by {amount}");
     }
 

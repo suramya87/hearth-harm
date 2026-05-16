@@ -258,9 +258,9 @@ MonoBehaviour:
   currentStamina: 0
   staminaNumberPrefab: {fileID: 395528008300433492, guid: 87dfa8ca1a97b76448ac5684a7e34908, type: 3}
   staminaPopupOffset: {x: 0, y: 1, z: 0}
-  strength: 5
-  constitution: 5
-  dexterity: 10
+  strength: 0
+  constitution: 10
+  dexterity: 5
   intelligence: 0
   perception: 0
   charisma: 0

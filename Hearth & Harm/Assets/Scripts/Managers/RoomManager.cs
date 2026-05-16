@@ -78,6 +78,13 @@ public class RoomManager : MonoBehaviour
                     $"<color=#E066FF>{room.prefabData.roomType}</color> Room " +
                     $"at layout grid: <color=#E066FF>({room.gridPosition.x}, {room.gridPosition.y})</color> " +
                     $"({room.roomInstance?.name ?? "unknown"})");
+
+            if (CurrentRoomHasEnemies())
+                CameraController2D.Instance?.SetCombatState(true);
+            else
+                CameraController2D.Instance?.SetCombatState(false);
+
+            Debug.Log($"[RoomManager] Entered: {room.roomInstance?.name ?? "unknown"}");
         }
     }
 

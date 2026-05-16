@@ -21,6 +21,11 @@ public class SettingsPanelController : MonoBehaviour
         ShowMain();
     }
 
+    public void ResetToMain()
+    {
+        ShowMain();
+    }
+
     void HideAllSubPanels()
     {
         if (displayPanel) displayPanel.SetActive(false);

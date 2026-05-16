@@ -10,7 +10,8 @@ public class PauseOverlay : MonoBehaviour
 
     [Header("Settings Canvases")]
     [SerializeField] private Canvas[] settingsCanvases;
-
+    [Header("Settings Controller")]
+    [SerializeField] private SettingsPanelController settingsPanelController;
     bool isPaused = false;
 
     void Awake()
@@ -57,12 +58,16 @@ public class PauseOverlay : MonoBehaviour
     {
         if (!isPaused) return;
 
+        settingsPanelController?.ResetToMain();
+
         SetCanvases(pauseCanvases, false);
         SetCanvases(settingsCanvases, true);
     }
 
     public void CloseSettings()
     {
+        settingsPanelController?.ResetToMain();
+
         SetCanvases(settingsCanvases, false);
         SetCanvases(pauseCanvases, true);
     }

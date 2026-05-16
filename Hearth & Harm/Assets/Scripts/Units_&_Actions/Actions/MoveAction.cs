@@ -74,8 +74,6 @@ public class MoveAction : BaseAction
                 return;
             }
 
-            // Determine cell size from the current room so the acceptance
-            // threshold scales correctly regardless of prefab cell size.
             float cellSize = 1f;
             var roomForSize = unit.GetCurrentRoomGrid();
             if (roomForSize != null)
@@ -130,7 +128,6 @@ public class MoveAction : BaseAction
         newGrid.AddUnitAtGridPosition(newPos, unit);
     }
 
-    // ── Move: world-position entry point (unified) ─────────────────────────
 
     public void Move(Vector3 targetWorld, Action onComplete)
     {
@@ -144,8 +141,6 @@ public class MoveAction : BaseAction
             return;
         }
 
-        // targetWorld is a raw cell centre — find the path from the unit's
-        // current raw cell centre (no visual offset involved).
         Vector3 startWorld = GetUnitCellCentreWorld();
         var worldPath = UnifiedPathfinder.FindWorldPath(startWorld, targetWorld);
         if (worldPath == null || worldPath.Count == 0) { onComplete?.Invoke(); return; }
@@ -157,7 +152,6 @@ public class MoveAction : BaseAction
         StartCoroutine(MoveAlongWorldPath(usedPath, onComplete));
     }
 
-    // ── Move: GridPosition entry point (legacy / AI) ───────────────────────
 
     public void Move(GridPosition target, Action onComplete)
     {
@@ -186,7 +180,6 @@ public class MoveAction : BaseAction
         if (playerStats != null && IsInCombatRoom())
             playerStats.SpendStamina(steps);
 
-        // Build waypoints WITH visual offset for the legacy animator.
         Vector2 visualOff = unit.GetVisualOffset();
         var waypoints = new List<Vector3>();
         foreach (var gp in usedPath)
@@ -200,17 +193,12 @@ public class MoveAction : BaseAction
 
         SetFacingToward(startPos, usedPath[0]);
         unitAnimator?.SetMoving(true);
+        CameraController2D.Instance?.FollowUntilArrived(unit.transform);
         isActive = true;
         InvalidateCache();
         StartCoroutine(MoveAlongLocalPath(waypoints, usedPath, finalPos, room, onComplete));
     }
 
-    // ── Coroutine: unified world-path movement ─────────────────────────────
-    //
-    // KEY FIX: we animate to (step.WorldPos + visualOffset) so the SPRITE
-    // lands on the visual centre of the tile, matching where PlaceInRoom
-    // would put it.  But the GRID position is registered using step.WorldPos
-    // (the raw cell centre) so walkability and occupancy checks stay correct.
 
     private IEnumerator MoveAlongWorldPath(
         List<UnifiedPathfinder.WorldStep> path, Action onComplete)
@@ -227,7 +215,6 @@ public class MoveAction : BaseAction
             var stepGrid = step.OwnerGrid ?? unit.GetCurrentRoomGrid();
             var stepGP   = stepGrid?.GetGridPosition(step.WorldPos) ?? unit.GetGridPosition();
 
-            // Facing.
             if (i == 0)
                 SetFacingToward(unit.GetGridPosition(), stepGP);
             else
@@ -244,7 +231,6 @@ public class MoveAction : BaseAction
                 var oldGP   = unit.GetGridPosition();
                 oldGrid?.RemoveUnitAtGridPosition(oldGP, unit);
 
-                // Suppress transform snap — we own the visual position here.
                 unit.IsSyncingFromNetwork = true;
                 unit.PlaceInRoom(stepGrid, stepGP);
                 unit.IsSyncingFromNetwork = false;
@@ -252,7 +238,6 @@ public class MoveAction : BaseAction
                 stepGrid.AddUnitAtGridPosition(stepGP, unit);
             }
 
-            // Animate sprite to cell centre + visual offset.
             var visualTarget = new Vector3(
                 step.WorldPos.x + visualOff.x,
                 step.WorldPos.y + visualOff.y,
@@ -283,8 +268,6 @@ public class MoveAction : BaseAction
 
         if (!GameManager.IsMultiplayer)
         {
-            // PlaceInRoomNoMove updates grid occupancy and internal state without
-            // touching transform.position — the animation already landed correctly.
             unit.PlaceInRoomNoMove(finalGrid, finalGP);
         }
         else
@@ -331,7 +314,7 @@ public class MoveAction : BaseAction
             else
                 unit.PlaceInRoomNoMove(startingGrid, finalGP);
         }
-
+        CameraController2D.Instance?.StopFollow();
         onComplete?.Invoke();
     }
 
