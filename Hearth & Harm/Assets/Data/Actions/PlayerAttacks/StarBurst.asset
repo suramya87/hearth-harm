@@ -28,8 +28,8 @@ MonoBehaviour:
   canTargetSelf: 0
   staminaCost: 2
   requiresEnoughStamina: 1
-  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 1}
-  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+  aoeHighlightColor: {r: 1, g: 0.25, b: 0.25, a: 0.39215687}
+  rangeHighlightColor: {r: 1, g: 0.8, b: 0.2, a: 0.39215687}
   showSpritePerTile: 0
   _summary: 'Damage: 5d6+0
 

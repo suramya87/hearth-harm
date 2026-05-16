@@ -1,18 +1,23 @@
 using UnityEngine;
-using System.Collections.Generic; // Added this to fix the HashSet error
-using System.Linq;                // Optional, but good practice if using Enums as lists
+using System.Collections.Generic;
 
 /// <summary>
 /// Marks connection points and door strips on a room prefab.
+///
+/// DOOR BLOCKING:
+///   Call InitBlockers(roomGrid) after the room's RoomGrid is initialized.
+///   This wires all DoorStripBlocker components on the door strips so they
+///   automatically register/unregister wall cells in UnifiedWorldGrid
+///   whenever SetDoorOpen() is called.
 /// </summary>
 public class RoomConnector : MonoBehaviour
 {
     [System.Serializable]
     public class ConnectionPoint
     {
-        public Transform transform;
-        public LevelGenerator.Direction direction;
-        public bool isConnected;
+        public Transform                 transform;
+        public LevelGenerator.Direction  direction;
+        public bool                      isConnected;
     }
 
     [Header("Connection Points")]
@@ -27,10 +32,34 @@ public class RoomConnector : MonoBehaviour
     public GameObject eastDoorStrip;
     public GameObject westDoorStrip;
 
-    // ── API ────────────────────────────────────────────────────────────────
+    // Directions that are permanent dead-end walls.
+    private readonly HashSet<LevelGenerator.Direction> deadEnds = new();
 
-    // This HashSet tracks directions that are permanent walls (dead ends)
-    private HashSet<LevelGenerator.Direction> deadEnds = new HashSet<LevelGenerator.Direction>();
+    // ── Blocker initialisation ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Call this after the room's RoomGrid is ready (i.e. after
+    /// RoomTilemapSetup.Initialize() and RegisterAllTilemaps() have run).
+    /// Gives every DoorStripBlocker its owning RoomGrid reference.
+    /// </summary>
+    public void InitBlockers(RoomGrid grid)
+    {
+        InitStrip(northDoorStrip, grid);
+        InitStrip(southDoorStrip, grid);
+        InitStrip(eastDoorStrip,  grid);
+        InitStrip(westDoorStrip,  grid);
+    }
+
+    private static void InitStrip(GameObject strip, RoomGrid grid)
+    {
+        if (strip == null) return;
+        // Add the component automatically if the designer forgot.
+        var blocker = strip.GetComponent<DoorStripBlocker>()
+                   ?? strip.AddComponent<DoorStripBlocker>();
+        blocker.SetOwnerGrid(grid);
+    }
+
+    // ── API ────────────────────────────────────────────────────────────────
 
     public void PermanentClose(LevelGenerator.Direction dir)
     {
@@ -40,8 +69,7 @@ public class RoomConnector : MonoBehaviour
 
     public void SetDoorOpen(LevelGenerator.Direction dir, bool open)
     {
-        // If the direction is a permanent dead end, block any logic trying to open it
-        if (deadEnds.Contains(dir) && open) return; 
+        if (deadEnds.Contains(dir) && open) return;
 
         var strip = GetStrip(dir);
         if (strip != null) strip.SetActive(!open);

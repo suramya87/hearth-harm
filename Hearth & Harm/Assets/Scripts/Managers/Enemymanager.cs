@@ -3,10 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Tracks all living enemies, runs their turns, and fires events when rooms clear.
-/// Single-player only — multiplayer extends this separately.
-/// </summary>
 public class EnemyManager : MonoBehaviour
 {
     public static EnemyManager Instance { get; private set; }
@@ -22,7 +18,7 @@ public class EnemyManager : MonoBehaviour
 
     [Header("Enemy Turn Pacing")]
     [SerializeField] private float delayBeforeEnemyTurn = 0.35f;
-    [SerializeField] private float delayAfterEnemyTurn = 0.45f;
+    [SerializeField] private float delayAfterEnemyTurn  = 0.45f;
 
     public event Action<EnemyUnit> OnEnemyTurnStarted;
     public event Action<EnemyUnit> OnEnemyTurnFinished;
@@ -31,7 +27,6 @@ public class EnemyManager : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
-        // No DontDestroyOnLoad
     }
 
     // ── Registration ───────────────────────────────────────────────────────
@@ -40,7 +35,8 @@ public class EnemyManager : MonoBehaviour
     {
         if (active.Contains(e)) return;
         active.Add(e);
-        if (showDebugLogs) Debug.Log($"[EnemyManager] +{e.Stats?.enemyName} total:{active.Count}");
+        if (showDebugLogs)
+            Debug.Log($"[EnemyManager] +{e.Stats?.enemyName} total:{active.Count}");
         OnEnemyListChanged?.Invoke();
     }
 
@@ -49,16 +45,16 @@ public class EnemyManager : MonoBehaviour
         var room = e.CurrentRoomGrid;
         if (!active.Remove(e)) return;
 
-        if (EnemyTurnQueue.Instance != null)
-            EnemyTurnQueue.Instance.RemoveEnemy(e);
+        EnemyTurnQueue.Instance?.RemoveEnemy(e);
 
-        if (showDebugLogs) Debug.Log($"[EnemyManager] -{e.Stats?.enemyName} remain:{active.Count}");
+        if (showDebugLogs)
+            Debug.Log($"[EnemyManager] -{e.Stats?.enemyName} remain:{active.Count}");
         OnEnemyListChanged?.Invoke();
 
         if (room != null && GetEnemiesInRoom(room).Count == 0)
         {
             Debug.Log($"[EnemyManager] Room cleared: {room.gameObject.name}");
-            room.MarkCleared(); // Persist cleared state so enemies never re-spawn here
+            room.MarkCleared();
             OnRoomCleared?.Invoke(room);
         }
     }
@@ -69,8 +65,7 @@ public class EnemyManager : MonoBehaviour
         foreach (var e in active) if (e != null) Destroy(e.gameObject);
         active.Clear();
 
-        if (EnemyTurnQueue.Instance != null)
-            EnemyTurnQueue.Instance.ClearQueue();
+        EnemyTurnQueue.Instance?.ClearQueue();
 
         OnEnemyListChanged?.Invoke();
         Debug.Log("[EnemyManager] All enemies cleared.");
@@ -80,11 +75,25 @@ public class EnemyManager : MonoBehaviour
 
     public int             GetEnemyCount() => active.Count;
     public List<EnemyUnit> GetAllEnemies() => new(active);
+
+    /// <summary>
+    /// Compares by GameObject name rather than reference so enemies are found
+    /// correctly even when grid references differ between systems.
+    /// </summary>
     public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
     {
         var result = new List<EnemyUnit>();
+        if (room == null) return result;
+
+        string roomName = room.gameObject.name;
         foreach (var e in active)
-            if (!e.IsDead && e.CurrentRoomGrid == room) result.Add(e);
+        {
+            if (e == null || e.IsDead) continue;
+            if (e.CurrentRoomGrid == null) continue;
+            if (e.CurrentRoomGrid == room ||
+                e.CurrentRoomGrid.gameObject.name == roomName)
+                result.Add(e);
+        }
         return result;
     }
 
@@ -92,16 +101,37 @@ public class EnemyManager : MonoBehaviour
 
     private void BuildQueueForCurrentRoom()
     {
-        RoomGrid room = RoomManager.Instance?.GetCurrentRoomGrid();
-        if (room == null || EnemyTurnQueue.Instance == null) return;
+        if (EnemyTurnQueue.Instance == null) return;
 
-        EnemyTurnQueue.Instance.BuildQueue(room, GetEnemiesInRoom(room));
+        // Get room from the player unit directly — more reliable than
+        // RoomManager when transitions are mid-frame.
+        RoomGrid room = null;
+
+        var unit = FindLocalPlayerUnit();
+        if (unit != null)
+            room = unit.GetCurrentRoomGrid();
+
+        // Fall back to RoomManager if unit lookup fails.
+        if (room == null)
+            room = RoomManager.Instance?.GetCurrentRoomGrid();
+
+        if (room == null)
+        {
+            Debug.LogWarning("[EnemyManager] BuildQueueForCurrentRoom: no room found.");
+            return;
+        }
+
+        var enemies = GetEnemiesInRoom(room);
+        EnemyTurnQueue.Instance.BuildQueue(room, enemies);
+
+        if (showDebugLogs)
+            Debug.Log($"[EnemyManager] Queue built: {enemies.Count} enemies in " +
+                      $"{room.gameObject.name}");
     }
 
     public void RunEnemyTurns()
     {
         if (running) return;
-
         BuildQueueForCurrentRoom();
         StartCoroutine(RunTurns());
     }
@@ -114,21 +144,21 @@ public class EnemyManager : MonoBehaviour
             ? EnemyTurnQueue.Instance.GetQueuedEnemies()
             : new List<EnemyUnit>();
 
-        if (showDebugLogs) Debug.Log($"[EnemyManager] Running {queueSnapshot.Count} enemy turns.");
+        if (showDebugLogs)
+            Debug.Log($"[EnemyManager] Running {queueSnapshot.Count} enemy turns.");
 
         foreach (var enemy in queueSnapshot)
         {
             if (enemy == null || enemy.IsDead) continue;
 
-            // Check for boss first, then regular AI types
-            var bossAI = enemy.GetComponent<BossAI>();
-            var ai     = enemy.GetComponent<EnemyAI>();
-            var ranged = enemy.GetComponent<RangedEnemyAI>();
+            var bossAI  = enemy.GetComponent<BossAI>();
+            var ai      = enemy.GetComponent<EnemyAI>();
+            var ranged  = enemy.GetComponent<RangedEnemyAI>();
 
             if (bossAI == null && ai == null && ranged == null) continue;
 
             if (showDebugLogs)
-                Debug.Log($"[EnemyManager] Enemy turn started: {enemy.Stats?.enemyName ?? enemy.name}");
+                Debug.Log($"[EnemyManager] Turn: {enemy.Stats?.enemyName ?? enemy.name}");
 
             OnEnemyTurnStarted?.Invoke(enemy);
 
@@ -137,10 +167,9 @@ public class EnemyManager : MonoBehaviour
 
             bool done = false;
 
-            // Priority: boss > ranged > melee
-            if (bossAI != null)       bossAI.TakeTurn(() => done = true);
-            else if (ranged != null)  ranged.TakeTurn(() => done = true);
-            else                      ai.TakeTurn(() => done = true);
+            if (bossAI != null)      bossAI.TakeTurn(() => done = true);
+            else if (ranged != null) ranged.TakeTurn(() => done = true);
+            else                     ai.TakeTurn(() => done = true);
 
             yield return new WaitUntil(() => done);
 
@@ -149,15 +178,30 @@ public class EnemyManager : MonoBehaviour
 
             OnEnemyTurnFinished?.Invoke(enemy);
 
-            if (showDebugLogs)
-                Debug.Log($"[EnemyManager] Enemy turn finished: {enemy.Stats?.enemyName ?? enemy.name}");
-
-            if (enemy != null && !enemy.IsDead && EnemyTurnQueue.Instance != null)
-                EnemyTurnQueue.Instance.RotateEnemyToBack(enemy);
+            if (enemy != null && !enemy.IsDead)
+                EnemyTurnQueue.Instance?.RotateEnemyToBack(enemy);
         }
 
         running = false;
         if (showDebugLogs) Debug.Log("[EnemyManager] All turns done.");
         OnEnemyTurnsComplete?.Invoke();
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static Unit FindLocalPlayerUnit()
+    {
+        if (!GameManager.IsMultiplayer)
+        {
+            var pt = PlayerTarget.Instance;
+            return pt?.GetUnit();
+        }
+
+        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var net = u.GetComponent<Unity.Netcode.NetworkObject>();
+            if (net != null && net.IsOwner) return u;
+        }
+        return null;
     }
 }

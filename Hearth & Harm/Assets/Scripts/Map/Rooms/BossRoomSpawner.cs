@@ -7,7 +7,6 @@ public class BossRoomSpawner : MonoBehaviour
     [SerializeField] private int        footprintSize = 2;
     [SerializeField] private bool       showDebugLogs = true;
 
-    // Keep a reference so we can register it when the player actually enters
     private BossUnit pendingBoss;
     private bool     bossSpawned = false;
 
@@ -28,7 +27,6 @@ public class BossRoomSpawner : MonoBehaviour
         bossSpawned = false;
         pendingBoss = null;
 
-        // Pre-spawn the boss so it exists, but do NOT register with EnemyManager yet
         var gen      = FindAnyObjectByType<LevelGenerator>();
         var bossRoom = gen?.GetBossRoom();
         if (bossRoom == null) return;

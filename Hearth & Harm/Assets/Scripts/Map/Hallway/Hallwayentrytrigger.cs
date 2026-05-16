@@ -9,14 +9,14 @@ public class HallwayEntryTrigger : MonoBehaviour
     public LevelGenerator.PlacedRoom DestinationRoom { get; private set; }
     public LevelGenerator.Direction  EntryDirection  { get; private set; }
 
-    private HallwayWalkTrigger           pairedWalkTrigger;
-    private List<HallwayWalkTrigger>     roomBorderTriggers;
-    private bool                         cooling;
+    private HallwayWalkTrigger       pairedWalkTrigger;
+    private List<HallwayWalkTrigger> roomBorderTriggers;
+    private bool                     cooling;
 
     public void Initialize(
-        HallwayGrid                  hallway,
-        LevelGenerator.PlacedRoom    destinationRoom,
-        LevelGenerator.Direction     entryDirection)
+        HallwayGrid               hallway,
+        LevelGenerator.PlacedRoom destinationRoom,
+        LevelGenerator.Direction  entryDirection)
     {
         Hallway         = hallway;
         DestinationRoom = destinationRoom;
@@ -50,23 +50,7 @@ public class HallwayEntryTrigger : MonoBehaviour
             if (bridge == null || !bridge.IsOwner) return;
         }
 
-        // Already in the destination — nothing to do.
         if (IsOnDestinationGrid(unit)) return;
-
-        // FIX: removed the hard "must be on hallway grid" guard.
-        //
-        // Old behaviour: if the walk trigger's async HandOffAfterMove hadn't
-        // finished yet the unit was still registered on the source room grid,
-        // IsOnHallwayGrid() returned false and we silently returned — the
-        // player walked through the mouth and nothing happened.
-        //
-        // New behaviour: we allow the transition as long as the player is NOT
-        // already in the destination room. If they happen to still be on the
-        // source room grid (walk trigger mid-handoff) that's fine — we just
-        // move them into the destination anyway, which is the correct outcome.
-        //
-        // We do still reject players that are on a *different* hallway to
-        // prevent cross-hallway ghost transitions.
         if (!IsOnHallwayOrAdjacentGrid(unit)) return;
 
         StartCoroutine(TransitionAfterMove(unit));
@@ -76,8 +60,6 @@ public class HallwayEntryTrigger : MonoBehaviour
     {
         cooling = true;
 
-        // Wait for an in-progress move to finish so we don't snap the player
-        // mid-animation. Cap at 2s to avoid a permanent lock if the path stalls.
         var move = unit.GetMoveAction();
         if (move != null)
         {
@@ -86,24 +68,17 @@ public class HallwayEntryTrigger : MonoBehaviour
             while (move.IsActive)
             {
                 elapsed += Time.deltaTime;
-                if (elapsed >= timeout)
-                {
-                    Debug.LogWarning($"[HallwayEntryTrigger] Move timeout — forcing transition.");
-                    break;
-                }
+                if (elapsed >= timeout) break;
                 yield return null;
             }
         }
 
         yield return new WaitForSeconds(0.05f);
 
-        // Re-check: another trigger may have handled this while we waited.
         if (IsOnDestinationGrid(unit)) { cooling = false; yield break; }
 
         GridPosition spawnPos = GetDestinationSpawnPos();
 
-        // Briefly disable all walk triggers so the position change doesn't
-        // immediately rubber-band the player back into the hallway.
         HallwayWalkTrigger[] allWalkTriggers =
             FindObjectsByType<HallwayWalkTrigger>(FindObjectsSortMode.None);
         foreach (var wt in allWalkTriggers)
@@ -145,29 +120,17 @@ public class HallwayEntryTrigger : MonoBehaviour
         return current.gameObject.name == DestinationRoom.roomGrid.gameObject.name;
     }
 
-    // FIX: replaces the old strict IsOnHallwayGrid check.
-    // Returns true when the unit is on:
-    //   • this hallway's grid (the normal case), OR
-    //   • the room on the OTHER side of this hallway (walk trigger mid-handoff), OR
-    //   • null (unit hasn't been placed yet — let it through).
-    // Returns false only when the unit is already on a completely unrelated grid
-    // (prevents ghost transitions through walls or into wrong hallways).
     private bool IsOnHallwayOrAdjacentGrid(Unit unit)
     {
         var current = unit.GetCurrentRoomGrid();
-
-        // No grid yet — allow through (handles spawn edge cases).
         if (current == null) return true;
 
-        // On this hallway — normal path.
         if (Hallway?.RoomGrid != null)
         {
             if (current == Hallway.RoomGrid) return true;
             if (current.gameObject.name == Hallway.RoomGrid.gameObject.name) return true;
         }
 
-        // Still on RoomA or RoomB of this hallway (walk trigger mid-handoff).
-        // We identify those rooms via the HallwayGrid's stored references.
         if (Hallway != null)
         {
             var roomA = Hallway.RoomA?.roomGrid;
@@ -198,12 +161,10 @@ public class HallwayEntryTrigger : MonoBehaviour
 
     private static bool LockRoomAndSpawnEnemies(
         LevelGenerator.PlacedRoom room,
-        HallwayEntryTrigger triggerForCallback)
+        HallwayEntryTrigger       triggerForCallback)
     {
         if (room?.connector == null) return false;
-
         if (room.prefabData.roomType == LevelGenerator.RoomType.Start) return false;
-
         if (EnemyManager.Instance == null) return false;
 
         bool alreadyHasEnemies =
@@ -289,6 +250,15 @@ public class HallwayEntryTrigger : MonoBehaviour
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnRoomCleared -= HandleRoomCleared;
 
+        // ── Unlock walk triggers ───────────────────────────────────────────
+        if (roomBorderTriggers != null)
+        {
+            foreach (var wt in roomBorderTriggers)
+                wt?.SetLocked(false);
+            roomBorderTriggers.Clear();
+        }
+
+        // ── Open doors via LevelGenerator connection data ──────────────────
         var gen = FindAnyObjectByType<LevelGenerator>();
         if (gen != null)
         {
@@ -303,17 +273,33 @@ public class HallwayEntryTrigger : MonoBehaviour
                     System.Enum.GetValues(typeof(LevelGenerator.Direction)))
                 {
                     if (gen.GetConnectedRoom(placed, dir) != null)
+                    {
+                        placed.roomGrid.SetDoorState(dir, true);
                         placed.connector.SetDoorOpen(dir, true);
+                    }
                 }
                 break;
             }
         }
 
-        if (roomBorderTriggers != null)
+        var unit = FindLocalUnit();
+        unit?.GetMoveAction()?.InvalidateCache();
+
+        Debug.Log($"[HallwayEntryTrigger] Room cleared — doors opened and cache invalidated.");
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static Unit FindLocalUnit()
+    {
+        if (!GameManager.IsMultiplayer)
+            return FindAnyObjectByType<Unit>();
+
+        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
         {
-            foreach (var wt in roomBorderTriggers)
-                wt?.SetLocked(false);
-            roomBorderTriggers.Clear();
+            var net = u.GetComponent<Unity.Netcode.NetworkObject>();
+            if (net != null && net.IsOwner) return u;
         }
+        return null;
     }
 }

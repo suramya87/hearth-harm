@@ -2,7 +2,6 @@ using UnityEngine;
 
 /// <summary>
 /// Attached to the boss room's exit door strip by LevelGenerator.
-/// Stays active (blocking) until all enemies in the boss room die.
 /// </summary>
 public class BossRoomDoor : MonoBehaviour
 {

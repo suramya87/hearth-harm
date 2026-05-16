@@ -2,11 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Reads SpawnPointTile assets from the "SpawnPoints" child tilemap.
-/// Used by RoomNavigationUI to find the correct entry tile when the player
-/// moves into a room from a specific direction.
-/// </summary>
 public class RoomSpawnPointReader : MonoBehaviour
 {
     [SerializeField] private Tilemap spawnTilemap;
@@ -43,8 +38,6 @@ public class RoomSpawnPointReader : MonoBehaviour
 
             if (tile is SpawnPointTile st)
             {
-                // Store raw tilemap cell coords — TilemapRoomGrid.GetWorldPosition
-                // passes these directly into GetCellCenterWorld so NO offset needed
                 spawnPositions[st.entryDirection] = new GridPosition(pos.x, pos.y);
                 Debug.Log($"[RoomSpawnPointReader] ✓ {st.entryDirection} → cell {pos} → GridPosition ({pos.x},{pos.y})");
             }

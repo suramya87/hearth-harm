@@ -25,7 +25,6 @@ public class MinimapUI : MonoBehaviour
     [SerializeField] private Color tintFog          = new(0.1f, 0.1f, 0.1f, 0.4f);
 
     [Header("Fog of War")]
-    [Tooltip("How many rooms away from the current room are fully visible. 0 = current room only.")]
     [SerializeField] private int viewRadius = 2;
 
     [Header("Navigation Buttons")]
@@ -40,7 +39,7 @@ public class MinimapUI : MonoBehaviour
     private readonly HashSet<LevelGenerator.PlacedRoom>           discovered = new();
     private readonly HashSet<LevelGenerator.PlacedRoom>           cleared    = new();
     private readonly Dictionary<LevelGenerator.PlacedRoom, Image> dots       = new();
-    private readonly HashSet<LevelGenerator.PlacedRoom> glimpsed = new();
+    private readonly HashSet<LevelGenerator.PlacedRoom>           glimpsed   = new();
     private bool _revealAll = false;
 
     // ── Unity lifecycle ────────────────────────────────────────────────────
@@ -57,6 +56,7 @@ public class MinimapUI : MonoBehaviour
     {
         LevelGenerator.OnLevelReady  += OnLevelReady;
         RoomManager.OnAnyRoomChanged += OnRoomChanged;
+        RoomManager.OnRoomCleared    += OnRoomClearedCallback;
 
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyListChanged += Refresh;
@@ -68,6 +68,7 @@ public class MinimapUI : MonoBehaviour
     {
         LevelGenerator.OnLevelReady  -= OnLevelReady;
         RoomManager.OnAnyRoomChanged -= OnRoomChanged;
+        RoomManager.OnRoomCleared    -= OnRoomClearedCallback;
 
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyListChanged -= Refresh;
@@ -82,9 +83,22 @@ public class MinimapUI : MonoBehaviour
         gen = FindAnyObjectByType<LevelGenerator>();
         discovered.Clear();
         cleared.Clear();
-        glimpsed.Clear();  
+        glimpsed.Clear();
         _revealAll = false;
         BuildMinimap();
+
+        // The start room is always considered discovered and cleared.
+        if (gen != null)
+        {
+            var startRoom = gen.GetAllRooms()
+                ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
+            if (startRoom != null)
+            {
+                discovered.Add(startRoom);
+                cleared.Add(startRoom);
+            }
+        }
+
         Refresh();
     }
 
@@ -94,35 +108,33 @@ public class MinimapUI : MonoBehaviour
     {
         if (room != null)
         {
+            // Always mark as discovered when entered.
             discovered.Add(room);
 
-            if (EnemyManager.Instance == null ||
-                EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count == 0)
+            bool hasEnemies = EnemyManager.Instance != null &&
+                              EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
+
+            if (!hasEnemies)
                 cleared.Add(room);
         }
 
         Refresh();
     }
 
+    // ── Room cleared callback (fired by RoomManager.NotifyRoomCleared) ─────
+
+    private void OnRoomClearedCallback(LevelGenerator.PlacedRoom room)
+    {
+        if (room == null) return;
+        cleared.Add(room);
+        Refresh();
+    }
+
     // ── Public fog controls ────────────────────────────────────────────────
 
-    public void SetViewRadius(int radius)
-    {
-        viewRadius = Mathf.Max(0, radius);
-        Refresh();
-    }
-
-    public void RevealAll()
-    {
-        _revealAll = true;
-        Refresh();
-    }
-
-    public void HideFog()
-    {
-        _revealAll = false;
-        Refresh();
-    }
+    public void SetViewRadius(int radius) { viewRadius = Mathf.Max(0, radius); Refresh(); }
+    public void RevealAll()  { _revealAll = true;  Refresh(); }
+    public void HideFog()    { _revealAll = false; Refresh(); }
 
     // ── Build minimap ──────────────────────────────────────────────────────
 
@@ -146,14 +158,17 @@ public class MinimapUI : MonoBehaviour
             maxY = Mathf.Max(maxY, r.gridPosition.y);
         }
 
-        minimapContainer.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, minimapDisplaySize.x);
-        minimapContainer.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,   minimapDisplaySize.y);
+        minimapContainer.SetSizeWithCurrentAnchors(
+            RectTransform.Axis.Horizontal, minimapDisplaySize.x);
+        minimapContainer.SetSizeWithCurrentAnchors(
+            RectTransform.Axis.Vertical, minimapDisplaySize.y);
 
         float gridW         = maxX - minX + 1;
         float gridH         = maxY - minY + 1;
-        float availableStep = Mathf.Min(minimapDisplaySize.x / gridW, minimapDisplaySize.y / gridH);
-        float usedStep      = Mathf.Min(dotSize + dotSpacing, availableStep);
-        float usedDotSize   = usedStep - dotSpacing;
+        float availableStep = Mathf.Min(
+            minimapDisplaySize.x / gridW, minimapDisplaySize.y / gridH);
+        float usedStep    = Mathf.Min(dotSize + dotSpacing, availableStep);
+        float usedDotSize = usedStep - dotSpacing;
 
         foreach (var room in rooms)
         {
@@ -169,7 +184,7 @@ public class MinimapUI : MonoBehaviour
             rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, usedDotSize);
             rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,   usedDotSize);
 
-            var img    = dot.GetComponent<Image>();
+            var img = dot.GetComponent<Image>();
             img.sprite = room.prefabData.roomType switch
             {
                 LevelGenerator.RoomType.Start   => spriteStart,
@@ -194,20 +209,19 @@ public class MinimapUI : MonoBehaviour
 
         var currentRoom = RoomManager.Instance?.GetCurrentRoom();
 
-        if (!_revealAll)
+        // Expand fog-of-war glimpse radius around current room.
+        if (!_revealAll && currentRoom != null)
         {
             foreach (var (room, _) in dots)
-            {
                 if (IsInRange(room, currentRoom))
                     glimpsed.Add(room);
-            }
         }
 
         foreach (var (room, img) in dots)
         {
             if (img == null) continue;
 
-            bool inRange    = _revealAll || IsInRange(room, currentRoom);
+            bool inRange     = _revealAll || IsInRange(room, currentRoom);
             bool wasGlimpsed = glimpsed.Contains(room);
 
             if (!inRange && !wasGlimpsed)
@@ -216,9 +230,9 @@ public class MinimapUI : MonoBehaviour
                 continue;
             }
 
-            img.color = room == currentRoom        ? tintCurrent
-                    : discovered.Contains(room)  ? tintVisited
-                    :                              tintUndiscovered;
+            img.color = room == currentRoom       ? tintCurrent
+                      : discovered.Contains(room) ? tintVisited
+                      :                             tintUndiscovered;
         }
 
         UpdateButtons(currentRoom);
@@ -226,13 +240,13 @@ public class MinimapUI : MonoBehaviour
 
     // ── Fog range check ────────────────────────────────────────────────────
 
-    private bool IsInRange(LevelGenerator.PlacedRoom room, LevelGenerator.PlacedRoom currentRoom)
+    private bool IsInRange(
+        LevelGenerator.PlacedRoom room,
+        LevelGenerator.PlacedRoom currentRoom)
     {
         if (currentRoom == null) return false;
-
         int dx = Mathf.Abs(room.gridPosition.x - currentRoom.gridPosition.x);
         int dy = Mathf.Abs(room.gridPosition.y - currentRoom.gridPosition.y);
-
         return (dx + dy) <= viewRadius;
     }
 
@@ -270,26 +284,28 @@ public class MinimapUI : MonoBehaviour
                 continue;
             }
 
-            bool neighbourCleared = cleared.Contains(neighbour);
-            btn.interactable = neighbourCleared;
+            bool isDiscovered = discovered.Contains(neighbour);
+            bool isCleared    = cleared.Contains(neighbour);
+
+            btn.interactable = true;
             if (lbl)
             {
-                lbl.text = neighbourCleared
-                    ? $"{dir}\n{neighbour.prefabData.roomType}"
-                    : $"{dir}\n?";
+                lbl.text = isCleared    ? $"{dir}\n{neighbour.prefabData.roomType}"
+                         : isDiscovered ? $"{dir}\n?"
+                         :               $"{dir}\n{neighbour.prefabData.roomType}";
             }
         }
     }
 
-    private (Button btn, TextMeshProUGUI lbl) GetButtonAndLabel(LevelGenerator.Direction dir) =>
-        dir switch
-        {
-            LevelGenerator.Direction.North => (northButton, northLabel),
-            LevelGenerator.Direction.South => (southButton, southLabel),
-            LevelGenerator.Direction.East  => (eastButton,  eastLabel),
-            LevelGenerator.Direction.West  => (westButton,  westLabel),
-            _                              => (null, null)
-        };
+    private (Button btn, TextMeshProUGUI lbl) GetButtonAndLabel(
+        LevelGenerator.Direction dir) => dir switch
+    {
+        LevelGenerator.Direction.North => (northButton, northLabel),
+        LevelGenerator.Direction.South => (southButton, southLabel),
+        LevelGenerator.Direction.East  => (eastButton,  eastLabel),
+        LevelGenerator.Direction.West  => (westButton,  westLabel),
+        _                              => (null, null)
+    };
 
     // ── Travel ─────────────────────────────────────────────────────────────
 
@@ -307,14 +323,15 @@ public class MinimapUI : MonoBehaviour
         var target = gen?.GetConnectedRoom(current, dir);
         if (target == null) return;
 
-        if (!cleared.Contains(target)) return;
-
         if (GameManager.IsMultiplayer)
         {
-            foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
+            foreach (var bridge in
+                FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
             {
                 if (!bridge.IsOwner) continue;
-                bridge.TransitionToRoom(target.roomGrid, GetSpawnPos(target, gen.GetOppositeDirection(dir)));
+                bridge.TransitionToRoom(
+                    target.roomGrid,
+                    GetSpawnPos(target, gen.GetOppositeDirection(dir)));
                 break;
             }
         }
@@ -323,12 +340,34 @@ public class MinimapUI : MonoBehaviour
             var player = FindAnyObjectByType<Unit>();
             if (player == null) return;
 
+            SpawnEnemiesViaButton(target);
+
             RoomManager.Instance.SetCurrentRoom(target);
-            player.PlaceInRoom(target.roomGrid, GetSpawnPos(target, gen.GetOppositeDirection(dir)));
+            player.PlaceInRoom(
+                target.roomGrid,
+                GetSpawnPos(target, gen.GetOppositeDirection(dir)));
             CameraController2D.Instance?.SnapToTarget();
         }
 
         Refresh();
+    }
+
+    private static void SpawnEnemiesViaButton(LevelGenerator.PlacedRoom room)
+    {
+        if (room == null) return;
+        if (room.prefabData.roomType == LevelGenerator.RoomType.Start) return;
+        if (room.roomGrid.HasBeenCleared) return;
+        if (EnemyManager.Instance == null) return;
+        if (EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0) return;
+
+        var spawner = FindAnyObjectByType<EnemySpawner>();
+        spawner?.SpawnForRoom(room);
+
+        // Lock doors if enemies spawned.
+        bool hasEnemies =
+            EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
+        if (hasEnemies)
+            room.connector?.CloseAllDoors();
     }
 
     private static GridPosition GetSpawnPos(
@@ -339,7 +378,8 @@ public class MinimapUI : MonoBehaviour
         if (reader != null && reader.HasSpawnPoint(entry))
             return reader.GetSpawnPosition(entry, room.roomGrid);
 
-        return new GridPosition(room.roomGrid.GetWidth() / 2,
-                                room.roomGrid.GetHeight() / 2);
+        return new GridPosition(
+            room.roomGrid.GetWidth()  / 2,
+            room.roomGrid.GetHeight() / 2);
     }
 }

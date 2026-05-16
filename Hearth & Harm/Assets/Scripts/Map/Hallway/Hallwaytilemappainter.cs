@@ -2,35 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Procedurally paints hallway tiles into a HallwayGrid with full
-/// directional wall support.
-///
-/// WALL ASSIGNMENT RULES
-///   Straight segments:
-///     Horizontal corridor (East/West travel):
-///       • Cells one above the floor strip → WallTop    (north-facing wall)
-///       • Cells one below the floor strip → WallBottom (south-facing wall)
-///       • Leftmost column, one beyond end → CapLeft
-///       • Rightmost column, one beyond end→ CapRight
-///     Vertical corridor (North/South travel):
-///       • Cells one right of floor strip  → WallRight  (east-facing wall)
-///       • Cells one left  of floor strip  → WallLeft   (west-facing wall)
-///       • Top row, one beyond end         → CapTop
-///       • Bottom row, one beyond end      → CapBottom
-///
-///   Junctions (where two perpendicular segments meet):
-///     Four outer corners → Convex_NE / NW / SE / SW
-///     One inner corner   → Concave_NE / NW / SE / SW (determined by bend direction)
-///     Exposed straight edges inherit the correct directional wall tile.
-///
-/// FALLBACK
-///   Every directional slot falls back through the HallwayTileSet accessor
-///   chain to WallSideTile so the painter works with just one tile assigned.
-/// </summary>
+ 
 public static class HallwayTilemapPainter
 {
-    // ── Public entry point ─────────────────────────────────────────────────
 
     public static void Paint(
         HallwayGrid hallway,
@@ -54,8 +28,6 @@ public static class HallwayTilemapPainter
         Vector3Int exitCell  = floor.WorldToCell(exitWorld);
         Vector3Int entryCell = floor.WorldToCell(entryWorld);
 
-        // Reverting to the original trim. 
-        // If trimTiles is 1, the hallway starts exactly on the threshold of the room.
         int trim = Mathf.Max(0, trimTiles);
 
         Vector3Int exitTrimmed  = TrimCell(exitCell,  dirAtoB,           trim);
@@ -70,8 +42,6 @@ public static class HallwayTilemapPainter
         for (int i = 0; i < segments.Count - 1; i++)
             PaintJunction(floor, walls, segments[i], segments[i + 1], tiles);
 
-        // We leave PaintEndCap out. 
-        // This allows the floor tiles to meet the room floor tiles without a wall blocking them.
     }
 
     // ── Width helpers ──────────────────────────────────────────────────────
@@ -179,11 +149,9 @@ public static class HallwayTilemapPainter
 
             for (int y = yMin; y <= yMax; y++)
             {
-                // Floor strip - Always paints the full length
                 for (int p = pMin; p <= pMax; p++)
                     SetFloor(floor, new Vector3Int(cx + p, y, 0), PickFloor(tiles, cx + p, y));
 
-                // Walls - Only paint if NOT at the very start or very end of the segment
                 if (y > yMin && y < yMax)
                 {
                     SetWall(walls, floor, new Vector3Int(cx + pMax + 1, y, 0), tiles.GetWallRight());
@@ -195,12 +163,6 @@ public static class HallwayTilemapPainter
 
     // ── End cap painting ───────────────────────────────────────────────────
 
-    /// <summary>
-    /// Paints cap tiles across the open end of the first or last segment.
-    /// Caps close off the corridor mouth visually.
-    /// isStart=true  → paint at seg.Start (exit mouth)
-    /// isStart=false → paint at seg.End   (entry mouth)
-    /// </summary>
     private static void PaintEndCap(
         Tilemap walls, Tilemap floor, Segment seg, bool isStart, HallwayTileSet tiles)
     {
@@ -209,14 +171,12 @@ public static class HallwayTilemapPainter
 
         if (seg.Horizontal)
         {
-            // Cap tile goes one cell to the LEFT of start, or one cell to the RIGHT of end
             int capX = isStart ? pivot.x - 1 : pivot.x + 1;
             TileBase capTile = isStart ? tiles.GetCapLeft() : tiles.GetCapRight();
 
             for (int p = pMin; p <= pMax; p++)
                 SetWall(walls, floor, new Vector3Int(capX, pivot.y + p, 0), capTile);
 
-            // Corner convex tiles at cap edges
             SetWall(walls, floor, new Vector3Int(capX, pivot.y + pMax + 1, 0),
                 isStart ? tiles.GetConvex_NW() : tiles.GetConvex_NE());
             SetWall(walls, floor, new Vector3Int(capX, pivot.y + pMin - 1, 0),
@@ -224,7 +184,6 @@ public static class HallwayTilemapPainter
         }
         else
         {
-            // Cap tile goes one cell BELOW start, or one cell ABOVE end
             int capY = isStart ? pivot.y - 1 : pivot.y + 1;
             TileBase capTile = isStart ? tiles.GetCapBottom() : tiles.GetCapTop();
 
@@ -291,13 +250,8 @@ public static class HallwayTilemapPainter
         }
 
         // ── Inner concave corner ───────────────────────────────────────────
-        // The single corner that faces INTO the bend — only present when the
-        // two segments are perpendicular.
         if (segA.Horizontal != segB.Horizontal)
         {
-            // Determine which quadrant the concave corner occupies.
-            // It is always on the "back" side of segA's travel direction
-            // and the "back" side of segB's travel direction.
             bool aGoesRight = segA.End.x >= segA.Start.x;
             bool bGoesUp    = segB.End.y >= segB.Start.y;
             bool aGoesUp    = segA.End.y >= segA.Start.y;
@@ -308,9 +262,6 @@ public static class HallwayTilemapPainter
 
             if (segA.Horizontal)
             {
-                // segA is H → segB is V
-                // Concave corner is behind segA (left if going right, right if going left)
-                // and behind segB (below if going up, above if going down)
                 icx = aGoesRight ? xMin - 1 : xMax + 1;
                 icy = bGoesUp    ? yMin - 1 : yMax + 1;
 
@@ -327,7 +278,6 @@ public static class HallwayTilemapPainter
             }
             else
             {
-                // segA is V → segB is H
                 icx = bGoesRight ? xMin - 1 : xMax + 1;
                 icy = aGoesUp    ? yMin - 1 : yMax + 1;
 
@@ -406,14 +356,10 @@ public static class HallwayTilemapPainter
         if (tile != null) floor.SetTile(cell, tile);
     }
 
-    /// <summary>
-    /// Sets a wall tile only if the cell is not already a floor tile.
-    /// Prevents walls from overwriting corridor floor in junction overlap zones.
-    /// </summary>
     private static void SetWall(Tilemap walls, Tilemap floor, Vector3Int cell, TileBase tile)
     {
         if (tile == null) return;
-        if (floor.HasTile(cell)) return; // never overwrite floor with a wall
+        if (floor.HasTile(cell)) return; 
         walls.SetTile(cell, tile);
     }
 }

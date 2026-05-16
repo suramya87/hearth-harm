@@ -55,7 +55,7 @@ public class UnitActionSystem : MonoBehaviour
         if (GameManager.IsMultiplayer)
         {
             float waited = 0f;
-            while (waited < 8f) 
+            while (waited < 8f)
             {
                 waited += Time.deltaTime;
                 var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
@@ -91,23 +91,10 @@ public class UnitActionSystem : MonoBehaviour
         }
     }
 
-    // private void UnitActionSystem_OnBusyChanged(object sender, bool isBusy)
-    // {
-    //     isSystemBusy = isBusy;
-    //     if (isBusy)
-    //     {
-    //         SafeClear(); // Wipe the tiles immediately when movement starts
-    //     }
-    // }
-
     // ── Update ─────────────────────────────────────────────────────────────
 
     private void Update()
     {
-
-        if (selectedAction is MoveAction move) {
-        move.HandleActionInput();
-    }
         if (selectedUnit == null)
         {
             TrySelectOwnedUnit();
@@ -117,9 +104,7 @@ public class UnitActionSystem : MonoBehaviour
         if (GameManager.IsMultiplayer && localBridge != null)
             ReconcileRoomFromBridge();
 
-        if (isBusy) return;
-
-       
+        // ── Turn guard — must come before ANY input handling ───────────────
         if (GameManager.IsMultiplayer)
         {
             if (NetworkedTurnSystem.Instance != null && !NetworkedTurnSystem.Instance.IsPlayerPhase)
@@ -131,7 +116,18 @@ public class UnitActionSystem : MonoBehaviour
                 return;
         }
 
+        // ── Busy guard ─────────────────────────────────────────────────────
+        if (isBusy) return;
+
+        // ── UI guard ───────────────────────────────────────────────────────
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
+
+        // ── Per-action input ───────────────────────────────────────────────
+        if (selectedAction is MoveAction moveAction)
+        {
+            moveAction.HandleActionInput();
+            return; // move action owns the click; don't also run HandleInput
+        }
 
         HandleInput();
     }
@@ -194,10 +190,7 @@ public class UnitActionSystem : MonoBehaviour
         OnSelectedActionChange?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetSelectedAction(BaseAction action)
-    {
-        SetSelectedAction(action, true);
-    }
+    public void SetSelectedAction(BaseAction action) => SetSelectedAction(action, true);
 
     // ── Room reconciliation ────────────────────────────────────────────────
 
@@ -222,7 +215,6 @@ public class UnitActionSystem : MonoBehaviour
 
         if (targetPlaced == null) return;
 
-        // ── Fix RoomManager if it's pointing at the wrong room ─────────────
         var current = RoomManager.Instance?.GetCurrentRoom();
         bool roomManagerWrong = current == null ||
                                 current.roomInstance == null ||
@@ -247,53 +239,45 @@ public class UnitActionSystem : MonoBehaviour
         }
     }
 
-    // ── Input handling ─────────────────────────────────────────────────────
 
     private void HandleInput()
     {
         if (!Input.GetMouseButtonDown(0)) return;
 
-        var room = RoomManager.Instance?.GetCurrentRoomGrid();
-        if (room == null) return;
+        var unitGrid = selectedUnit?.GetCurrentRoomGrid();
+        if (unitGrid == null) return;
 
         Vector3      mouseWorld = MouseWorld2D.GetPosition();
-        GridPosition mouseGP    = room.GetGridPosition(mouseWorld);
+        GridPosition mouseGP    = unitGrid.GetGridPosition(mouseWorld);
 
-        EnemyUnit clickedEnemy = room.GetEnemyAtGridPosition(mouseGP);
-        if (clickedEnemy != null && selectedAction is CombatAction ca)
+        // Combat action: check for enemy click first.
+        if (selectedAction is CombatAction ca)
         {
+            EnemyUnit clickedEnemy = unitGrid.GetEnemyAtGridPosition(mouseGP);
+            if (clickedEnemy != null)
+            {
+                if (ca.CanAfford() && ca.IsValidTarget(mouseGP))
+                {
+                    SetBusy();
+                    PerformAttack(ca, mouseGP, clickedEnemy);
+                }
+                else
+                {
+                    SelectEnemy(clickedEnemy);
+                }
+                return;
+            }
+
             if (ca.CanAfford() && ca.IsValidTarget(mouseGP))
             {
                 SetBusy();
-                PerformAttack(ca, mouseGP, clickedEnemy);
-            }
-            else
-            {
-                SelectEnemy(clickedEnemy);
+                PerformAttack(ca, mouseGP, null);
             }
             return;
-        }
-
-        switch (selectedAction)
-        {
-            case MoveAction move when move.IsValidTarget(mouseGP):
-                SetBusy();
-                PerformMove(move, mouseGP);
-                break;
-
-            case CombatAction combat when combat.CanAfford() && combat.IsValidTarget(mouseGP):
-                SetBusy();
-                PerformAttack(combat, mouseGP, null);
-                break;
         }
     }
 
     // ── Action execution ───────────────────────────────────────────────────
-
-    private void PerformMove(MoveAction move, GridPosition targetGP)
-    {
-        move.Move(targetGP, ClearBusy);
-    }
 
     private void PerformAttack(CombatAction combat, GridPosition targetGP, EnemyUnit directTarget)
     {
@@ -317,26 +301,22 @@ public class UnitActionSystem : MonoBehaviour
 
     // ── Busy state ─────────────────────────────────────────────────────────
 
-    private void SetBusy()   
-    { 
-        isBusy = true;  
-        OnBusyChanged?.Invoke(this, true);  
+    private void SetBusy()
+    {
+        isBusy = true;
+        OnBusyChanged?.Invoke(this, true);
     }
-    
-    private void ClearBusy() 
-    { 
-        isBusy = false; 
 
-        // Re-select the action. This forces OnSelectedActionChange to fire,
-        // which tells the TilemapHighlighter to recalculate valid positions
-        // from the unit's NEW grid position.
+    private void ClearBusy()
+    {
+        isBusy = false;
+
         if (selectedAction != null)
-        {
             SetSelectedAction(selectedAction);
-        }
 
-        OnBusyChanged?.Invoke(this, false); 
+        OnBusyChanged?.Invoke(this, false);
     }
+
     // ── Public getters ─────────────────────────────────────────────────────
 
     public Unit       GetSelectedUnit()   => selectedUnit;

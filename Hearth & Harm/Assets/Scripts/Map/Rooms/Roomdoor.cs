@@ -1,20 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Placed in room prefabs. Handles click-based room transition.
-///
-/// In multiplayer, routes through NetworkedPlayerBridge so all peers
-/// see the room change and RoomManager is updated everywhere.
-///
-/// KEY FIX: FindLocalUnit() searches for the NetworkObject.IsOwner unit
-/// instead of FindAnyObjectByType<Unit>() which could return any player
-/// (including remote ones) causing IsOwner to be false and the transition
-/// to silently do nothing.
-///
-/// DOOR STATE FIX: RestoreDoorState() is called on every Initialize() so
-/// that doors which were closed at generation time (e.g. boss-to-end) remain
-/// closed when the player re-enters the room instead of resetting to open.
-/// </summary>
 public class RoomDoor : MonoBehaviour
 {
     private LevelGenerator.PlacedRoom ownerRoom;
@@ -35,23 +20,17 @@ public class RoomDoor : MonoBehaviour
     public void Initialize(LevelGenerator.PlacedRoom owner)
     {
         ownerRoom = owner;
-        gen = FindAnyObjectByType<LevelGenerator>();
-        doorDir = DetermineDirection(owner);
+        gen       = FindAnyObjectByType<LevelGenerator>();
+        doorDir   = DetermineDirection(owner);
 
-        // 1. Check logical connection
         connectedRoom = gen?.GetConnectedRoom(owner, doorDir);
-        
-        // 2. Consult the RoomGrid memory
-        // If the grid says this isn't an open door, we visually close the strip.
+
         if (owner.roomGrid != null)
         {
             bool isDoorOpen = owner.roomGrid.GetDoorState(doorDir);
-            
-            // Apply the saved visual state
             if (owner.connector != null)
                 owner.connector.SetDoorOpen(doorDir, isDoorOpen);
 
-            // If there's no connection OR the door is a wall, disable interaction
             if (connectedRoom == null)
             {
                 this.enabled = false;
@@ -62,15 +41,13 @@ public class RoomDoor : MonoBehaviour
         ready = connectedRoom != null;
     }
 
-
-
     private void OnMouseDown()
     {
         if (!ready || connectedRoom == null)
         {
-            gen = FindAnyObjectByType<LevelGenerator>();
+            gen           = FindAnyObjectByType<LevelGenerator>();
             connectedRoom = gen?.GetConnectedRoom(ownerRoom, doorDir);
-            ready = connectedRoom != null;
+            ready         = connectedRoom != null;
             if (!ready) return;
         }
 
@@ -89,27 +66,39 @@ public class RoomDoor : MonoBehaviour
                 connectedRoom.roomGrid.GetWidth()  / 2,
                 connectedRoom.roomGrid.GetHeight() / 2);
 
+        SpawnEnemiesViaButton(connectedRoom);
+
         if (GameManager.IsMultiplayer)
         {
             var bridge = player.GetComponent<NetworkedPlayerBridge>();
             if (bridge == null || !bridge.IsOwner) return;
-
             bridge.TransitionToRoom(connectedRoom.roomGrid, spawnPos);
             return;
         }
 
-        // Single-player path
         RoomManager.Instance?.SetCurrentRoom(connectedRoom);
         player.PlaceInRoom(connectedRoom.roomGrid, spawnPos);
         CameraController2D.Instance?.SnapToTarget();
+
+        player.GetMoveAction()?.InvalidateCache();
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
+    private static void SpawnEnemiesViaButton(LevelGenerator.PlacedRoom room)
+    {
+        if (room == null) return;
+        if (room.prefabData.roomType == LevelGenerator.RoomType.Start) return;
+        if (room.roomGrid.HasBeenCleared) return;
+        if (EnemyManager.Instance == null) return;
+        if (EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0) return;
 
-    /// <summary>
-    /// In multiplayer: returns the Unit whose NetworkObject.IsOwner == true.
-    /// In single-player: returns the first Unit found.
-    /// </summary>
+        var spawner = FindAnyObjectByType<EnemySpawner>();
+        spawner?.SpawnForRoom(room);
+
+        bool hasEnemies = EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
+        if (hasEnemies)
+            room.connector?.CloseAllDoors();
+    }
+
     private Unit FindLocalUnit()
     {
         if (!GameManager.IsMultiplayer)
@@ -118,23 +107,15 @@ public class RoomDoor : MonoBehaviour
         foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
         {
             var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
-            if (netObj != null && netObj.IsOwner)
-                return u;
+            if (netObj != null && netObj.IsOwner) return u;
         }
         return null;
     }
 
-    /// <summary>
-    /// Checks that the player's current room matches the door's owner room
-    /// so clients can't trigger doors in rooms they haven't entered.
-    /// </summary>
     private bool PlayerIsInThisRoom(Unit player)
     {
         var currentRoom = player.GetCurrentRoomGrid();
         if (currentRoom == null || ownerRoom?.roomGrid == null) return false;
-
-        // Compare by name since client/host may have different object references
-        // for the same logical room.
         return currentRoom.gameObject.name == ownerRoom.roomGrid.gameObject.name;
     }
 

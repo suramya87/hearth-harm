@@ -38,8 +38,8 @@ public class CombatActionData : ScriptableObject
     public bool requiresEnoughStamina = true;
 
     [Header("Visual Feedback")]
-    public Color aoeHighlightColor   = new(1f, 0.25f, 0.25f, 1f);
-    public Color rangeHighlightColor = new(1f, 0.8f,  0.2f,  1f);
+    public Color aoeHighlightColor   = new(1f, 0.25f, 0.25f, 0.3f);
+    public Color rangeHighlightColor = new(1f, 0.8f,  0.2f,  0.3f);
     [Tooltip("Show hit sprite on every tile instead of only the target.")]
     public bool showSpritePerTile = false;
 

@@ -74,91 +74,82 @@ public class LevelGenerator : MonoBehaviour
         Invoke(nameof(GenerateLevel), 0.1f);
     }
 
-        public void GenerateLevel()
+    public void GenerateLevel() 
     {
-        // STEP 0: UnifiedWorldGrid must exist before anything else runs.
         EnsureUnifiedWorldGrid();
- 
+
         ClearLevel();
- 
+
         placedRooms    = new();
         roomLayoutGrid = new();
         connections    = new();
- 
-        if (!GenerateLayout()) { Debug.LogError("[LevelGenerator] Layout failed."); return; }
- 
+
+        if (!GenerateLayout()) 
+        { 
+            Debug.LogError("[LevelGenerator] Layout failed."); 
+            return; 
+        }
+
         ConfigureDoors();
-        InitRoomGrids();        // builds room grids, does NOT register yet
+        InitRoomGrids();        
         InitDoors();
-        BuildHallways();        // builds hallway tiles, does NOT register yet
-        RegisterAllTilemaps();  // ONE clean pass: register everything now that all tiles exist
- 
-        PlacedRoom start = placedRooms.Find(r =>
-            r.prefabData.roomType == RoomType.Start
-            && r.roomGrid != null
+        BuildHallways();        
+
+        RegisterAllTilemaps();
+
+        PlacedRoom start = placedRooms.Find(r => 
+            r.prefabData.roomType == RoomType.Start 
+            && r.roomGrid != null 
             && r.roomGrid.IsInitialized());
- 
+
         if (start == null)
         {
             Debug.LogError("[LevelGenerator] No valid start room — retrying.");
             GenerateLevel();
             return;
         }
- 
+
         if (spawnPlayerOnGenerate && playerPrefabs != null && playerPrefabs.Count > 0)
+        {
             SpawnPlayer(start);
- 
+        }
+
         Debug.Log($"[LevelGenerator] {placedRooms.Count} rooms + {spawnedHallways.Count} hallways. " +
-                  $"UnifiedWorldGrid cells: {UnifiedWorldGrid.Instance?.AllCells.Count ?? 0}");
- 
+                $"UnifiedWorldGrid cells: {UnifiedWorldGrid.Instance?.AllCells.Count ?? 0}");
+                
         OnLevelReady?.Invoke();
     }
  
-    // ── Replaced: no longer registers with UnifiedWorldGrid ───────────────
- 
-    // ── Replaced: no longer registers with UnifiedWorldGrid ───────────────
  
     private void InitRoomGrids()
     {
         foreach (PlacedRoom room in placedRooms)
         {
             var setup = room.roomInstance.GetComponent<RoomTilemapSetup>()
-                     ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
- 
-            // Initialize() builds the RoomGrid/TilemapRoomGrid structures.
-            // It does NOT register with UnifiedWorldGrid — that is done below
-            // in RegisterAllTilemaps() after hallways are also built.
+                    ?? room.roomInstance.AddComponent<RoomTilemapSetup>();
+
             setup.Initialize();
- 
+
             room.roomGrid = room.roomInstance.GetComponent<RoomGrid>();
- 
+
             var spawnReader = room.roomInstance.GetComponent<RoomSpawnPointReader>()
-                           ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
+                        ?? room.roomInstance.AddComponent<RoomSpawnPointReader>();
             spawnReader.Initialize();
         }
- 
+
         RecordDoorStates();
     }
  
-    // ── New: single-pass registration after ALL tiles exist ───────────────
  
-    /// <summary>
-    /// Registers every room and hallway into UnifiedWorldGrid in one pass,
-    /// called after BuildHallways() so all tilemaps are fully painted.
-    ///
-    /// This is the ONLY place RegisterTilemap is called. RoomTilemapSetup
-    /// and HallwayGrid.Initialize() deliberately do NOT call it anymore.
-    /// </summary>
     private void RegisterAllTilemaps()
     {
         var uwg = UnifiedWorldGrid.Instance;
         if (uwg == null)
         {
-            Debug.LogError("[LevelGenerator] UnifiedWorldGrid missing — cannot register tilemaps!");
+            Debug.LogError("[LevelGenerator] UnifiedWorldGrid missing!");
             return;
         }
  
-        // Full clear so a regenerated level doesn't accumulate stale cells.
         uwg.Clear();
  
         int roomCount    = 0;
@@ -183,22 +174,21 @@ public class LevelGenerator : MonoBehaviour
             hallwayCount++;
         }
  
+        foreach (PlacedRoom room in placedRooms)
+        {
+            if (room.connector != null && room.roomGrid != null)
+                room.connector.InitBlockers(room.roomGrid);
+        }
+ 
         Debug.Log($"[LevelGenerator] RegisterAllTilemaps: " +
                   $"{roomCount} rooms + {hallwayCount} hallways = " +
-                  $"{uwg.AllCells.Count} total cells in UnifiedWorldGrid.");
+                  $"{uwg.AllCells.Count} total cells. Door blockers wired.");
     }
 
 
 
-    // ── UnifiedWorldGrid bootstrap ─────────────────────────────────────────
 
-    /// <summary>
-    /// Creates the UnifiedWorldGrid singleton if it doesn't already exist,
-    /// then clears it so stale cells from a previous level aren't left behind.
-    ///
-    /// Must be called at the very start of GenerateLevel(), before any room
-    /// or hallway is initialised.
-    /// </summary>
+
     private static void EnsureUnifiedWorldGrid()
     {
         if (UnifiedWorldGrid.Instance == null)
@@ -209,7 +199,6 @@ public class LevelGenerator : MonoBehaviour
         }
         else
         {
-            // Clear stale data from the previous level.
             UnifiedWorldGrid.Instance.Clear();
             Debug.Log("[LevelGenerator] Cleared UnifiedWorldGrid for new level.");
         }

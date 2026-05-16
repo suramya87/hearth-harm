@@ -39,9 +39,6 @@ public class RoomTilemapSetup : MonoBehaviour
         roomGrid.Initialize(walls, floor);
         initialized = true;
 
-        // NOTE: Registration into UnifiedWorldGrid is intentionally NOT done here.
-        // LevelGenerator.RegisterAllTilemaps() handles it after all rooms AND
-        // hallways are fully built, guaranteeing correct timing.
     }
 
     public bool IsInitialized => initialized;

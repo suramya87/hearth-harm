@@ -4,16 +4,6 @@ using UnityEngine.Tilemaps;
 
 /// <summary>
 /// Singleton flat walkability graph spanning every room and hallway.
-///
-/// KEY FIX: The previous WorldKey used Mathf.RoundToInt() which breaks when
-/// Unity's Grid places cell centres at X.5 offsets (e.g. 0.5, 1.5, 2.5).
-/// RoundToInt(0.5f) is ambiguous due to banker's rounding, causing ~50% of
-/// cells to be stored under the wrong key, so the unit's position is never
-/// found and BFS returns empty.
-///
-/// FIX: Multiply world pos by 2 then FloorToInt. Both integer-centre grids
-/// (cells at 0,1,2…) and half-integer-centre grids (cells at 0.5,1.5,2.5…)
-/// map to distinct stable integers. Neighbours differ by exactly 2 (Steps[]).
 /// </summary>
 public class UnifiedWorldGrid : MonoBehaviour
 {
@@ -27,7 +17,10 @@ public class UnifiedWorldGrid : MonoBehaviour
     }
 
     private readonly Dictionary<Vector3Int, CellData>         cells          = new();
-    private readonly Dictionary<Tilemap, HashSet<Vector3Int>> registeredKeys = new();
+    private readonly Dictionary<Tilemap,    HashSet<Vector3Int>> registeredKeys = new();
+
+    // Individual wall cells added by DoorStripBlocker (keyed by world key).
+    private readonly HashSet<Vector3Int> doorWallKeys = new();
 
     private void Awake()
     {
@@ -38,7 +31,7 @@ public class UnifiedWorldGrid : MonoBehaviour
 
     private void OnDestroy() { if (Instance == this) Instance = null; }
 
-    // ── Registration ───────────────────────────────────────────────────────
+    // ── Tilemap registration ───────────────────────────────────────────────
 
     public void RegisterTilemap(Tilemap floorTilemap, RoomGrid ownerGrid,
                                 Tilemap wallsTilemap = null)
@@ -76,7 +69,8 @@ public class UnifiedWorldGrid : MonoBehaviour
 
         registeredKeys[floorTilemap] = keys;
         Debug.Log($"[UnifiedWorldGrid] +{keys.Count} cells from " +
-                  $"'{floorTilemap.transform.parent?.name ?? floorTilemap.name}'. Total: {cells.Count}");
+                  $"'{floorTilemap.transform.parent?.name ?? floorTilemap.name}'. " +
+                  $"Total: {cells.Count}");
     }
 
     public void Unregister(Tilemap tm)
@@ -86,7 +80,61 @@ public class UnifiedWorldGrid : MonoBehaviour
         registeredKeys.Remove(tm);
     }
 
-    public void Clear() { cells.Clear(); registeredKeys.Clear(); }
+    public void Clear()
+    {
+        cells.Clear();
+        registeredKeys.Clear();
+        doorWallKeys.Clear();
+    }
+
+    // ── Door wall cell registration ────────────────────────────────────────
+
+    public void RegisterWallCell(Vector3 worldPos, RoomGrid ownerGrid)
+    {
+        var key = WorldKey(worldPos);
+        doorWallKeys.Add(key);
+
+        // Override existing entry or add a new wall entry.
+        cells[key] = new CellData
+        {
+            OwnerGrid   = ownerGrid,
+            WorldCentre = new Vector3(
+                Mathf.Round(worldPos.x * 2f) * 0.5f,
+                Mathf.Round(worldPos.y * 2f) * 0.5f,
+                0f),
+            IsFloor = false   
+        };
+    }
+
+    public void UnregisterWallCell(Vector3 worldPos)
+    {
+        var key = WorldKey(worldPos);
+        if (!doorWallKeys.Contains(key)) return;
+
+        doorWallKeys.Remove(key);
+        cells.Remove(key);
+
+        foreach (var kvp in registeredKeys)
+        {
+            if (!kvp.Value.Contains(key)) continue;
+
+            Tilemap tm = kvp.Key;
+            if (tm == null) continue;
+
+            Vector3Int localCell = tm.WorldToCell(worldPos);
+            if (!tm.HasTile(localCell)) continue;
+
+            Vector3 centre = tm.GetCellCenterWorld(localCell);
+
+            cells[key] = new CellData
+            {
+                OwnerGrid   = GetOwnerAt(worldPos) ?? FindAnyRoomGrid(),
+                WorldCentre = centre,
+                IsFloor     = true   // floor is being restored
+            };
+            break;
+        }
+    }
 
     // ── Query ──────────────────────────────────────────────────────────────
 
@@ -112,8 +160,7 @@ public class UnifiedWorldGrid : MonoBehaviour
 
     public IReadOnlyDictionary<Vector3Int, CellData> AllCells => cells;
 
-    // ── Neighbours ────────────────────────────────────────────────────────
-    // Steps are ±2 because keys are in doubled (×2) coordinate space.
+    // ── Neighbours ─────────────────────────────────────────────────────────
     private static readonly Vector3Int[] Steps =
     {
         new( 2,  0, 0), new(-2,  0, 0),
@@ -134,15 +181,15 @@ public class UnifiedWorldGrid : MonoBehaviour
         return result;
     }
 
-    // ── Key ───────────────────────────────────────────────────────────────
+    // ── Key ────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Multiply by 2 then floor — works for both integer and half-integer
-    /// cell-centre grids without rounding ambiguity.
-    /// Small epsilon (+0.01) avoids the -0 / 0 split at exact integer inputs.
-    /// </summary>
     public static Vector3Int WorldKey(Vector3 w) =>
         new(Mathf.FloorToInt(w.x * 2f + 0.01f),
             Mathf.FloorToInt(w.y * 2f + 0.01f),
             0);
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static RoomGrid FindAnyRoomGrid()
+        => Object.FindAnyObjectByType<RoomGrid>();
 }

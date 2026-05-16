@@ -59,7 +59,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HealthComponent
   damageNumberPrefab: {fileID: 5794558428634855770, guid: d4a5670d4a79972499664c1786a8364f, type: 3}
-  damageNumberOffset: {x: 0, y: 0.6, z: 0}
+  damageNumberOffset: {x: 0, y: 0.6, z: 3}
   damageFlashObject: {fileID: 4102994723265086380}
   flashDuration: 0.15
   flashCount: 1
@@ -405,7 +405,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 2
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 49de831515273884aa0bfc1b0c32f2d7, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}

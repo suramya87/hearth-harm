@@ -5,11 +5,6 @@ using UnityEngine.Tilemaps;
 /// <summary>
 /// Thin adapter component that lives on every room prefab root.
 /// Delegates all real work to TilemapRoomGrid.
-///
-/// CHANGES FROM PREVIOUS VERSION
-///   • IsWalkableAtWorld() — new convenience method used by UnifiedWorldGrid
-///     to delegate occupancy checks without needing a GridPosition.
-///   • No other changes — all existing callers compile unchanged.
 /// </summary>
 [RequireComponent(typeof(TilemapRoomGrid))]
 public class RoomGrid : MonoBehaviour
@@ -60,10 +55,6 @@ public class RoomGrid : MonoBehaviour
     public bool IsWalkableIgnoreOccupancy(GridPosition gp) => tilemapGrid.IsWalkableIgnoreOccupancy(gp);
     public bool IsWall(GridPosition gp)                    => tilemapGrid.IsWall(gp);
 
-    /// <summary>
-    /// World-space convenience used by UnifiedWorldGrid to check occupancy
-    /// without the caller needing to know this grid's local coordinate system.
-    /// </summary>
     public bool IsWalkableAtWorld(Vector3 worldPos)
     {
         if (tilemapGrid == null) return false;

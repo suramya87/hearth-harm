@@ -1,13 +1,6 @@
 using System;
 using UnityEngine;
 
-/// <summary>
-/// Single-player turn system.
-/// Player calls NextTurn() → enemies run → stamina restored → player's turn again.
-///
-/// Multiplayer: replace with MultiplayerTurnSystem (same events, different impl).
-/// The GameManager.IsMultiplayer flag tells UI which system to subscribe to.
-/// </summary>
 public class TurnSystem : MonoBehaviour
 {
     public static TurnSystem Instance { get; private set; }
@@ -17,8 +10,8 @@ public class TurnSystem : MonoBehaviour
     public event Action OnEnemyPhaseBegin;
     public event Action OnEnemyPhaseEnd;
 
-    private int  turnNumber  = 1;
-    private bool playerTurn  = true;
+    private int  turnNumber = 1;
+    private bool playerTurn = true;
 
     public bool IsPlayerTurn => playerTurn;
     public int  TurnNumber   => turnNumber;
@@ -47,36 +40,23 @@ public class TurnSystem : MonoBehaviour
     {
         if (!playerTurn) return;
 
-        Debug.LogWarning("[TurnSystem] NextTurn clicked. Checking stamina before enemy phase.");
-
-        Unit selectedUnit = UnitActionSystem.Instance != null
-            ? UnitActionSystem.Instance.GetSelectedUnit()
-            : null;
-
-        if (selectedUnit != null)
-        {
-            PlayerStats stats = selectedUnit.GetComponent<PlayerStats>();
-            if (stats != null)
-                Debug.LogWarning($"[TurnSystem] BEFORE enemy phase stamina: {stats.currentStamina}/{stats.maxStamina}", stats);
-        }
-
         playerTurn = false;
         turnNumber++;
         OnTurnChanged?.Invoke(this, EventArgs.Empty);
         BeginEnemyPhase();
     }
 
-    /// <summary>Called on room transition to bypass the enemy phase entirely.</summary>
     public void ForcePlayerTurn()
     {
         playerTurn = true;
+        InvalidateMoveCache();
         OnEnemyPhaseEnd?.Invoke();
         OnTurnChanged?.Invoke(this, EventArgs.Empty);
         OnPlayerTurnBegin?.Invoke();
         Debug.Log("[TurnSystem] Player turn forced.");
     }
 
-    public int GetTrunNumber() => turnNumber;   // keep old typo for UI compat
+    public int GetTrunNumber() => turnNumber;
 
     // ── Private ────────────────────────────────────────────────────────────
 
@@ -95,7 +75,9 @@ public class TurnSystem : MonoBehaviour
     {
         playerTurn = true;
 
-        RecoverPlayerStaminaForNewTurn();
+        RecoverPlayerStamina();
+
+        InvalidateMoveCache();
 
         OnEnemyPhaseEnd?.Invoke();
         OnTurnChanged?.Invoke(this, EventArgs.Empty);
@@ -104,22 +86,24 @@ public class TurnSystem : MonoBehaviour
         Debug.Log($"[TurnSystem] Player turn {turnNumber} begins.");
     }
 
-    private void RecoverPlayerStaminaForNewTurn()
+    private static void RecoverPlayerStamina()
     {
-        Unit selectedUnit = UnitActionSystem.Instance != null
-            ? UnitActionSystem.Instance.GetSelectedUnit()
-            : null;
+        var unit = UnitActionSystem.Instance?.GetSelectedUnit();
+        if (unit == null) return;
 
-        if (selectedUnit == null)
-            return;
-
-        PlayerStats stats = selectedUnit.GetComponent<PlayerStats>();
-
-        if (stats == null)
-            return;
+        var stats = unit.GetComponent<PlayerStats>();
+        if (stats == null) return;
 
         int recovered = stats.RollStaminaRecovery();
+        Debug.Log($"[TurnSystem] Recovered {recovered} stamina.");
+    }
 
-        Debug.Log($"[TurnSystem] Recovered {recovered} stamina at start of player turn.");
+    private static void InvalidateMoveCache()
+    {
+        var unit = UnitActionSystem.Instance?.GetSelectedUnit();
+        if (unit == null) return;
+
+        var move = unit.GetMoveAction();
+        move?.InvalidateCache();
     }
 }
