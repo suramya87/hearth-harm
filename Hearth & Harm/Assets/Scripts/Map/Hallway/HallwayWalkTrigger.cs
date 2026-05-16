@@ -1,7 +1,5 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.Tilemaps;
-
 
 [RequireComponent(typeof(Collider2D))]
 public class HallwayWalkTrigger : MonoBehaviour
@@ -43,8 +41,6 @@ public class HallwayWalkTrigger : MonoBehaviour
         if (!other.CompareTag("Player")) return;
         if (hallway == null || !hallway.IsReady) return;
 
-        // Only update camera — do NOT touch unit grid registration.
-        // MoveAction.MoveAlongWorldPath handles grid transitions.
         ApplyHallwayCameraBounds();
         RoomManager.Instance?.SetInHallway();
     }
@@ -58,8 +54,10 @@ public class HallwayWalkTrigger : MonoBehaviour
         if (floor == null) return;
 
         var     cb       = floor.cellBounds;
-        Vector3 worldMin = floor.GetCellCenterWorld(new Vector3Int(cb.xMin,     cb.yMin,     0));
-        Vector3 worldMax = floor.GetCellCenterWorld(new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
+        Vector3 worldMin = floor.GetCellCenterWorld(
+            new Vector3Int(cb.xMin,     cb.yMin,     0));
+        Vector3 worldMax = floor.GetCellCenterWorld(
+            new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
 
         Vector3 center = (worldMin + worldMax) * 0.5f;
         float   width  = Mathf.Abs(worldMax.x - worldMin.x);
@@ -68,6 +66,7 @@ public class HallwayWalkTrigger : MonoBehaviour
         float finalWidth  = Mathf.Max(width  + 64f, 32f);
         float finalHeight = Mathf.Max(height + 64f, 10f);
 
-        cam.SetRoomBounds(new Bounds(center, new Vector3(finalWidth, finalHeight, 10f)));
+        cam.SetRoomBounds(new Bounds(center,
+            new Vector3(finalWidth, finalHeight, 10f)));
     }
 }

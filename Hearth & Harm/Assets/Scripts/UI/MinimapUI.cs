@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -7,8 +8,8 @@ public class MinimapUI : MonoBehaviour
 {
     [Header("Minimap")]
     [SerializeField] private RectTransform minimapContainer;
-    [SerializeField] private float dotSize    = 14f;
-    [SerializeField] private float dotSpacing = 4f;
+    [SerializeField] private float dotSize           = 14f;
+    [SerializeField] private float dotSpacing        = 4f;
     [SerializeField] private Vector2 minimapDisplaySize = new(200f, 200f);
 
     [Header("Room Sprites")]
@@ -22,6 +23,7 @@ public class MinimapUI : MonoBehaviour
     [SerializeField] private Color tintUndiscovered = new(0.3f, 0.3f, 0.3f, 1f);
     [SerializeField] private Color tintVisited      = new(1f,   1f,   1f,   1f);
     [SerializeField] private Color tintCurrent      = new(0.6f, 1f,   0.6f, 1f);
+    [SerializeField] private Color tintCleared      = new(0.6f, 0.8f, 1f,   1f);
     [SerializeField] private Color tintFog          = new(0.1f, 0.1f, 0.1f, 0.4f);
 
     [Header("Fog of War")]
@@ -38,11 +40,11 @@ public class MinimapUI : MonoBehaviour
     private LevelGenerator                                        gen;
     private readonly HashSet<LevelGenerator.PlacedRoom>           discovered = new();
     private readonly HashSet<LevelGenerator.PlacedRoom>           cleared    = new();
-    private readonly Dictionary<LevelGenerator.PlacedRoom, Image> dots       = new();
     private readonly HashSet<LevelGenerator.PlacedRoom>           glimpsed   = new();
+    private readonly Dictionary<LevelGenerator.PlacedRoom, Image> dots       = new();
     private bool _revealAll = false;
 
-    // ── Unity lifecycle ────────────────────────────────────────────────────
+    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Awake()
     {
@@ -61,7 +63,7 @@ public class MinimapUI : MonoBehaviour
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyListChanged += Refresh;
         if (TurnSystem.Instance != null)
-            TurnSystem.Instance.OnTurnChanged += (_, __) => Refresh();
+            TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
     }
 
     private void OnDisable()
@@ -73,8 +75,10 @@ public class MinimapUI : MonoBehaviour
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyListChanged -= Refresh;
         if (TurnSystem.Instance != null)
-            TurnSystem.Instance.OnTurnChanged -= (_, __) => Refresh();
+            TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
     }
+
+    private void OnTurnChanged(object sender, EventArgs e) => Refresh();
 
     // ── Level ready ────────────────────────────────────────────────────────
 
@@ -87,16 +91,12 @@ public class MinimapUI : MonoBehaviour
         _revealAll = false;
         BuildMinimap();
 
-        // The start room is always considered discovered and cleared.
-        if (gen != null)
+        var startRoom = gen?.GetAllRooms()
+            ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
+        if (startRoom != null)
         {
-            var startRoom = gen.GetAllRooms()
-                ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
-            if (startRoom != null)
-            {
-                discovered.Add(startRoom);
-                cleared.Add(startRoom);
-            }
+            discovered.Add(startRoom);
+            cleared.Add(startRoom);
         }
 
         Refresh();
@@ -108,12 +108,10 @@ public class MinimapUI : MonoBehaviour
     {
         if (room != null)
         {
-            // Always mark as discovered when entered.
             discovered.Add(room);
 
             bool hasEnemies = EnemyManager.Instance != null &&
                               EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
-
             if (!hasEnemies)
                 cleared.Add(room);
         }
@@ -121,11 +119,16 @@ public class MinimapUI : MonoBehaviour
         Refresh();
     }
 
-    // ── Room cleared callback (fired by RoomManager.NotifyRoomCleared) ─────
+    // ── Room cleared callback ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Called by RoomManager.NotifyRoomCleared, which is triggered from
+    /// HallwayEntryTrigger.HandleRoomCleared after the last enemy dies.
+    /// </summary>
     private void OnRoomClearedCallback(LevelGenerator.PlacedRoom room)
     {
         if (room == null) return;
+        discovered.Add(room);  // should already be there, but be safe
         cleared.Add(room);
         Refresh();
     }
@@ -209,7 +212,7 @@ public class MinimapUI : MonoBehaviour
 
         var currentRoom = RoomManager.Instance?.GetCurrentRoom();
 
-        // Expand fog-of-war glimpse radius around current room.
+        // Expand glimpse radius around current room.
         if (!_revealAll && currentRoom != null)
         {
             foreach (var (room, _) in dots)
@@ -230,15 +233,21 @@ public class MinimapUI : MonoBehaviour
                 continue;
             }
 
-            img.color = room == currentRoom       ? tintCurrent
-                      : discovered.Contains(room) ? tintVisited
-                      :                             tintUndiscovered;
+            // Priority: current > cleared > visited > undiscovered
+            if (room == currentRoom)
+                img.color = tintCurrent;
+            else if (cleared.Contains(room))
+                img.color = tintCleared;
+            else if (discovered.Contains(room))
+                img.color = tintVisited;
+            else
+                img.color = tintUndiscovered;
         }
 
         UpdateButtons(currentRoom);
     }
 
-    // ── Fog range check ────────────────────────────────────────────────────
+    // ── Fog range ─────────────────────────────────────────────────────────
 
     private bool IsInRange(
         LevelGenerator.PlacedRoom room,
@@ -250,7 +259,7 @@ public class MinimapUI : MonoBehaviour
         return (dx + dy) <= viewRadius;
     }
 
-    // ── Travel buttons ─────────────────────────────────────────────────────
+    // ── Navigation buttons ─────────────────────────────────────────────────
 
     private void UpdateButtons(LevelGenerator.PlacedRoom currentRoom)
     {
@@ -284,15 +293,14 @@ public class MinimapUI : MonoBehaviour
                 continue;
             }
 
-            bool isDiscovered = discovered.Contains(neighbour);
-            bool isCleared    = cleared.Contains(neighbour);
-
             btn.interactable = true;
             if (lbl)
             {
-                lbl.text = isCleared    ? $"{dir}\n{neighbour.prefabData.roomType}"
-                         : isDiscovered ? $"{dir}\n?"
-                         :               $"{dir}\n{neighbour.prefabData.roomType}";
+                lbl.text = cleared.Contains(neighbour)
+                    ? $"{dir}\n{neighbour.prefabData.roomType}"
+                    : discovered.Contains(neighbour)
+                    ? $"{dir}\n?"
+                    : $"{dir}\n{neighbour.prefabData.roomType}";
             }
         }
     }
@@ -347,6 +355,8 @@ public class MinimapUI : MonoBehaviour
                 target.roomGrid,
                 GetSpawnPos(target, gen.GetOppositeDirection(dir)));
             CameraController2D.Instance?.SnapToTarget();
+
+            player.GetMoveAction()?.InvalidateCache();
         }
 
         Refresh();
@@ -363,7 +373,6 @@ public class MinimapUI : MonoBehaviour
         var spawner = FindAnyObjectByType<EnemySpawner>();
         spawner?.SpawnForRoom(room);
 
-        // Lock doors if enemies spawned.
         bool hasEnemies =
             EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
         if (hasEnemies)
