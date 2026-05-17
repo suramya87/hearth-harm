@@ -8,8 +8,6 @@ using UnityEngine.Tilemaps;
 /// per direction — not just one.  Used by the hallway PCG system to
 /// measure mouth width and find the centre of each door opening.
 ///
-/// This is intentionally separate from RoomSpawnPointReader so that
-/// class's existing single-GridPosition API is unchanged.
 /// </summary>
 public class HallwaySpawnPointScanner : MonoBehaviour
 {
@@ -51,14 +49,11 @@ public class HallwaySpawnPointScanner : MonoBehaviour
             tilesByDirection[st.entryDirection].Add(pos);
         }
 
-        // Sort each direction's tiles so width/centre are deterministic
         foreach (var dir in tilesByDirection.Keys.ToList())
         {
             bool horizontal = dir == LevelGenerator.Direction.East
                            || dir == LevelGenerator.Direction.West;
 
-            // Sort along the axis perpendicular to travel so tile[0] is always
-            // the "lower" tile (south-most for H doors, west-most for V doors).
             tilesByDirection[dir].Sort((a, b) =>
                 horizontal ? a.y.CompareTo(b.y) : a.x.CompareTo(b.x));
         }

@@ -116,21 +116,31 @@ public class UnifiedWorldGrid : MonoBehaviour
 
         foreach (var kvp in registeredKeys)
         {
-            if (!kvp.Value.Contains(key)) continue;
-
             Tilemap tm = kvp.Key;
             if (tm == null) continue;
 
             Vector3Int localCell = tm.WorldToCell(worldPos);
             if (!tm.HasTile(localCell)) continue;
 
-            Vector3 centre = tm.GetCellCenterWorld(localCell);
+            Vector3    centre     = tm.GetCellCenterWorld(localCell);
+            Vector3Int restoredKey = WorldKey(centre);   
 
-            cells[key] = new CellData
+            if (!kvp.Value.Contains(restoredKey)) continue;  
+
+            RoomGrid owner = null;
+            foreach (var cell in cells.Values)
             {
-                OwnerGrid   = GetOwnerAt(worldPos) ?? FindAnyRoomGrid(),
+                if (cell.OwnerGrid != null &&
+                    cell.OwnerGrid.GetFloorTilemap() == tm)
+                { owner = cell.OwnerGrid; break; }
+            }
+            owner ??= FindAnyRoomGrid();
+
+            cells[restoredKey] = new CellData
+            {
+                OwnerGrid   = owner,
                 WorldCentre = centre,
-                IsFloor     = true   // floor is being restored
+                IsFloor     = true
             };
             break;
         }

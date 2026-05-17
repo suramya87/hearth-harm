@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -10,19 +11,21 @@ public class DoorStripBlocker : MonoBehaviour
              "SpriteRenderer, or BoxCollider2D on this GameObject.")]
     [SerializeField] private Vector2Int[] manualCells; 
 
-    private RoomGrid ownerGrid;
+    // private RoomGrid ownerGrid;
 
     private bool registered;
 
     // ── Public API ─────────────────────────────────────────────────────────
 
+    private RoomGrid ownerGrid;
+    private Tilemap  ownerFloorTilemap;   
+
     public void SetOwnerGrid(RoomGrid grid)
     {
-        ownerGrid = grid;
-        if (gameObject.activeInHierarchy)
-            Register();
-        else
-            Unregister();
+        ownerGrid        = grid;
+        ownerFloorTilemap = grid?.GetFloorTilemap();   
+        if (gameObject.activeInHierarchy) Register();
+        else Unregister();
     }
 
     // ── Unity messages ─────────────────────────────────────────────────────
@@ -65,13 +68,16 @@ public class DoorStripBlocker : MonoBehaviour
             uwg.UnregisterWallCell(worldPos);
 
         registered = false;
+
+        foreach (var ma in Object.FindObjectsByType<MoveAction>(FindObjectsSortMode.None))
+            ma.InvalidateCache();
     }
 
     // ── Cell detection ─────────────────────────────────────────────────────
 
-    private System.Collections.Generic.List<Vector3> GetBlockedWorldPositions()
+    private List<Vector3> GetBlockedWorldPositions()
     {
-        var positions = new System.Collections.Generic.List<Vector3>();
+        var positions = new List<Vector3>();
 
         if (manualCells != null && manualCells.Length > 0)
         {
@@ -86,7 +92,7 @@ public class DoorStripBlocker : MonoBehaviour
             foreach (var cell in tm.cellBounds.allPositionsWithin)
             {
                 if (!tm.HasTile(cell)) continue;
-                positions.Add(tm.GetCellCenterWorld(cell));
+                positions.Add(tm.GetCellCenterWorld(cell));  
             }
             return positions;
         }
@@ -95,9 +101,21 @@ public class DoorStripBlocker : MonoBehaviour
         if (sr != null)
         {
             var b = sr.bounds;
-            for (float x = b.min.x + 0.5f; x < b.max.x; x += 1f)
-            for (float y = b.min.y + 0.5f; y < b.max.y; y += 1f)
-                positions.Add(new Vector3(x, y, 0f));
+            if (ownerFloorTilemap != null)
+            {
+                for (float x = b.min.x; x < b.max.x; x += 1f)
+                for (float y = b.min.y; y < b.max.y; y += 1f)
+                {
+                    var cell   = ownerFloorTilemap.WorldToCell(new Vector3(x, y, 0f));
+                    positions.Add(ownerFloorTilemap.GetCellCenterWorld(cell));
+                }
+            }
+            else
+            {
+                for (float x = b.min.x + 0.5f; x < b.max.x; x += 1f)
+                for (float y = b.min.y + 0.5f; y < b.max.y; y += 1f)
+                    positions.Add(new Vector3(x, y, 0f));
+            }
             return positions;
         }
 
@@ -105,17 +123,35 @@ public class DoorStripBlocker : MonoBehaviour
         if (col != null)
         {
             var b = col.bounds;
-            for (float x = b.min.x + 0.5f; x < b.max.x; x += 1f)
-            for (float y = b.min.y + 0.5f; y < b.max.y; y += 1f)
-                positions.Add(new Vector3(x, y, 0f));
+            if (ownerFloorTilemap != null)
+            {
+                for (float x = b.min.x; x < b.max.x; x += 1f)
+                for (float y = b.min.y; y < b.max.y; y += 1f)
+                {
+                    var cell   = ownerFloorTilemap.WorldToCell(new Vector3(x, y, 0f));
+                    positions.Add(ownerFloorTilemap.GetCellCenterWorld(cell));
+                }
+            }
+            else
+            {
+                for (float x = b.min.x + 0.5f; x < b.max.x; x += 1f)
+                for (float y = b.min.y + 0.5f; y < b.max.y; y += 1f)
+                    positions.Add(new Vector3(x, y, 0f));
+            }
             return positions;
         }
 
-        positions.Add(new Vector3(
-            Mathf.Floor(transform.position.x) + 0.5f,
-            Mathf.Floor(transform.position.y) + 0.5f,
-            0f));
-
+        if (ownerFloorTilemap != null)
+        {
+            var cell = ownerFloorTilemap.WorldToCell(transform.position);
+            positions.Add(ownerFloorTilemap.GetCellCenterWorld(cell));
+        }
+        else
+        {
+            positions.Add(new Vector3(
+                Mathf.Floor(transform.position.x) + 0.5f,
+                Mathf.Floor(transform.position.y) + 0.5f, 0f));
+        }
         return positions;
     }
 }

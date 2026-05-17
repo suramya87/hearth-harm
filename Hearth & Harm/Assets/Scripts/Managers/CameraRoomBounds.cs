@@ -1,21 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Defines the camera pan limits for a room.
 ///
 /// TWO MODES — pick one per room prefab:
 ///
-///   Auto-size  (default)
-///     Leave boundsOverride at zero. The bounds are calculated from the
-///     Floor tilemap's cell bounds + padding. No collider needed.
-///
-///   Manual override
-///     Set boundsOverride to a non-zero size to use that instead.
-///     Still no collider needed.
-///
-///   Collider (legacy)
-///     Attach a BoxCollider2D and set useCollider = true if you prefer
-///     the old collider-driven approach.
 /// </summary>
 public class CameraRoomBounds : MonoBehaviour
 {
