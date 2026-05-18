@@ -224,19 +224,7 @@ public class MoveAction : BaseAction
                 SetFacingToward(prevGrid.GetGridPosition(prev.WorldPos), stepGP);
             }
 
-            // Grid registration when crossing into a different grid.
-            if (stepGrid != null && stepGrid != unit.GetCurrentRoomGrid())
-            {
-                var oldGrid = unit.GetCurrentRoomGrid();
-                var oldGP   = unit.GetGridPosition();
-                oldGrid?.RemoveUnitAtGridPosition(oldGP, unit);
-
-                unit.IsSyncingFromNetwork = true;
-                unit.PlaceInRoom(stepGrid, stepGP);
-                unit.IsSyncingFromNetwork = false;
-
-                stepGrid.AddUnitAtGridPosition(stepGP, unit);
-            }
+           
 
             var visualTarget = new Vector3(
                 step.WorldPos.x + visualOff.x,
@@ -249,7 +237,11 @@ public class MoveAction : BaseAction
                     transform.position, visualTarget, moveSpeed * Time.deltaTime);
                 yield return null;
             }
+
             transform.position = visualTarget;
+
+            
+
             stamSpent++;
         }
 
@@ -276,6 +268,9 @@ public class MoveAction : BaseAction
             if (bridge != null && bridge.IsOwner)
                 bridge.SyncGridPosition(finalGrid, finalGP);
         }
+
+        CameraController2D.Instance?.StopFollow();
+        onComplete?.Invoke();
 
         onComplete?.Invoke();
     }
@@ -456,13 +451,12 @@ private void RebuildReachableCache()
     /// </summary>
     private Vector3 GetUnitCellCentreWorld()
     {
-        var room = unit.GetCurrentRoomGrid();
-        if (room != null) return room.GetWorldPosition(unit.GetGridPosition());
-
         Vector2 vo = unit.GetVisualOffset();
+
         return new Vector3(
             transform.position.x - vo.x,
             transform.position.y - vo.y,
-            0f);
+            0f
+        );
     }
 }
