@@ -1,14 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// AnalyticsEvents.cs
-//
-// Single static class that owns every custom event fired in the game.
-// Nothing in here touches game logic — it only reads data passed to it
-// and sends it to UGS Analytics.
-//
-// ADDING A NEW EVENT:
-//   1. Add a static method here.
-//   2. Call it from the observer component that detects the thing.
-// ─────────────────────────────────────────────────────────────────────────────
  
 using System.Collections.Generic;
 using UnityEngine;
@@ -28,16 +17,58 @@ public static class AnalyticsEvents
  
         AnalyticsService.Instance.RecordEvent(new CustomEvent("session_started")
         {
-            { "platform",        Application.platform.ToString()              },
-            { "is_web_build",    Application.platform == RuntimePlatform.WebGLPlayer },
-            { "screen_width",    Screen.width                                 },
-            { "screen_height",   Screen.height                                },
-            { "device_model",    SystemInfo.deviceModel                       },
-            { "os",              SystemInfo.operatingSystem                   },
-            { "app_version",     Application.version                          },
+            { "platform",     Application.platform.ToString()                        },
+            { "IsWebBuild", Application.platform == RuntimePlatform.WebGLPlayer   },
+            { "screen_width", Screen.width                                           },
+            { "screen_height",Screen.height                                          },
+            { "device_model", SystemInfo.deviceModel                                 },
+            { "os",           SystemInfo.operatingSystem                             },
+            { "app_version",  Application.version                                    },
         });
  
         Debug.Log("[Analytics] session_started");
+    }
+ 
+    // ── Load times ─────────────────────────────────────────────────────────
+ 
+    /// <summary>
+    /// Fire after a scene finishes loading.
+    /// Call from AnalyticsLoadTracker via SceneManager.sceneLoaded.
+    /// </summary>
+    public static void SceneLoadTime(string sceneName, float seconds, bool isWebBuild)
+    {
+        if (!GameManager.AnalyticsReady) return;
+ 
+        float rounded = Mathf.Round(seconds * 100f) / 100f;
+ 
+        AnalyticsService.Instance.RecordEvent(new CustomEvent("scene_load_time")
+        {
+            { "scene_name",   sceneName   },
+            { "seconds",      rounded     },
+            { "IsWebBuild", isWebBuild  },
+        });
+ 
+        Debug.Log($"[Analytics] scene_load_time | scene:{sceneName} time:{rounded}s web:{isWebBuild}");
+    }
+ 
+    /// <summary>
+    /// Fire when a room GameObject finishes activating.
+    /// Measured from SetActive(true) to the end of the first frame it's alive.
+    /// </summary>
+    public static void RoomLoadTime(string roomName, float seconds, bool isWebBuild)
+    {
+        if (!GameManager.AnalyticsReady) return;
+ 
+        float rounded = Mathf.Round(seconds * 100f) / 100f;
+ 
+        AnalyticsService.Instance.RecordEvent(new CustomEvent("room_load_time")
+        {
+            { "room_name",    roomName    },
+            { "seconds",      rounded     },
+            { "IsWebBuild", isWebBuild  },
+        });
+ 
+        Debug.Log($"[Analytics] room_load_time | room:{roomName} time:{rounded}s web:{isWebBuild}");
     }
  
     // ── Rooms ──────────────────────────────────────────────────────────────
@@ -69,33 +100,31 @@ public static class AnalyticsEvents
     }
  
     /// <summary>
-    /// Fire when the player leaves a room (or it deactivates).
-    /// secondsSpent is a float — round it to 1 decimal in the dashboard if desired.
-    /// wasCleared lets you filter "time in rooms players beat" vs "rooms they fled".
+    /// Fire when the player leaves a room.
+    /// Now includes FPS data sampled during the room stay.
+    /// avg_fps / min_fps let you correlate lag with room difficulty or clear rate.
     /// </summary>
-    public static void RoomTimeSpent(string roomName, float secondsSpent, bool wasCleared)
+    public static void RoomTimeSpent(string roomName, float secondsSpent, bool wasCleared,
+                                     float avgFps, float minFps)
     {
         if (!GameManager.AnalyticsReady) return;
  
-        // Round to one decimal place to keep the data tidy
-        float rounded = Mathf.Round(secondsSpent * 10f) / 10f;
- 
         AnalyticsService.Instance.RecordEvent(new CustomEvent("room_time_spent")
         {
-            { "room_name",       roomName    },
-            { "seconds_spent",   rounded     },
-            { "was_cleared",     wasCleared  },
+            { "room_name",     roomName                                   },
+            { "seconds_spent", Mathf.Round(secondsSpent * 10f) / 10f     },
+            { "was_cleared",   wasCleared                                 },
+            { "avg_fps",       Mathf.Round(avgFps)                        },
+            { "min_fps",       Mathf.Round(minFps)                        },
         });
  
-        Debug.Log($"[Analytics] room_time_spent | room:{roomName} time:{rounded}s cleared:{wasCleared}");
+        Debug.Log($"[Analytics] room_time_spent | room:{roomName} time:{secondsSpent:F1}s " +
+                  $"cleared:{wasCleared} avgFPS:{avgFps:F0} minFPS:{minFps:F0}");
     }
  
     // ── Character selection ────────────────────────────────────────────────
  
-    /// <summary>
-    /// Fire when a character is selected — from the main menu OR a cheat button.
-    /// source: "menu" | "cheat"
-    /// </summary>
+
     public static void CharacterSelected(string characterName, string source = "menu")
     {
         if (!GameManager.AnalyticsReady) return;
@@ -111,10 +140,6 @@ public static class AnalyticsEvents
  
     // ── Unclickable / invalid clicks ───────────────────────────────────────
  
-    /// <summary>
-    /// Fire when a player clicks something tagged as unclickable.
-    /// objectLabel: the label you set on the AnalyticsClickTracker component.
-    /// </summary>
     public static void UnclickableClicked(string objectLabel)
     {
         if (!GameManager.AnalyticsReady) return;
@@ -127,13 +152,8 @@ public static class AnalyticsEvents
         Debug.Log($"[Analytics] unclickable_clicked | label:{objectLabel}");
     }
  
-    // ── Generic labelled click (for any tracked object) ────────────────────
+    // ── Generic labelled click ─────────────────────────────────────────────
  
-    /// <summary>
-    /// Fire when a player clicks any object that has a tracker on it.
-    /// Use this for things you want to count but aren't specifically
-    /// rooms, characters, or invalid targets.
-    /// </summary>
     public static void TrackedObjectClicked(string objectLabel)
     {
         if (!GameManager.AnalyticsReady) return;

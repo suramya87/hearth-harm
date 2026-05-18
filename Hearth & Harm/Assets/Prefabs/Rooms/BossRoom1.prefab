@@ -2587,6 +2587,7 @@ MonoBehaviour:
   roomName: Bossroom
   autoTrackOnEnable: 1
   autoTrackCleared: 1
+  fpsSampleInterval: 0.5
 --- !u!156049354 &3494027564167055290
 Grid:
   m_ObjectHideFlags: 0

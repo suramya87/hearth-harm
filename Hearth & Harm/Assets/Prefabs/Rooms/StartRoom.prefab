@@ -1736,6 +1736,7 @@ MonoBehaviour:
   roomName: StartRoom
   autoTrackOnEnable: 1
   autoTrackCleared: 1
+  fpsSampleInterval: 0.5
 --- !u!1 &2373199557613229004
 GameObject:
   m_ObjectHideFlags: 0

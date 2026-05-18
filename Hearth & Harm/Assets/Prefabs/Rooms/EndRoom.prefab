@@ -5346,6 +5346,7 @@ MonoBehaviour:
   roomName: EndRoom
   autoTrackOnEnable: 1
   autoTrackCleared: 1
+  fpsSampleInterval: 0.5
 --- !u!1 &5582255633244136532
 GameObject:
   m_ObjectHideFlags: 0

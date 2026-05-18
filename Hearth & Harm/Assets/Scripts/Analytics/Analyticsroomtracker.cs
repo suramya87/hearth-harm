@@ -1,24 +1,6 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// AnalyticsRoomTracker.cs
-//
-// SETUP
-//   1. Attach to each room prefab (or the room root GameObject).
-//   2. Set roomName in the Inspector, e.g. "TreasureRoom", "BossRoom".
-//      If left blank it falls back to the GameObject's name.
-//   3. Call MarkVisited() and MarkCleared() from wherever your room system
-//      already handles those events — OR enable the auto-detect options below
-//      to have this component listen to existing events itself.
-//
-// TIME TRACKING
-//   - The timer starts automatically when MarkVisited() is first called.
-//   - It stops and fires room_time_spent when:
-//       • OnDisable() fires (room deactivates / player leaves)
-//       • The component is destroyed
-//   - You can also call StopTimer() manually if needed.
-//
-// ZERO game logic is touched. This is observe-only.
-// ─────────────────────────────────────────────────────────────────────────────
  
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
  
 public class AnalyticsRoomTracker : MonoBehaviour
@@ -27,31 +9,61 @@ public class AnalyticsRoomTracker : MonoBehaviour
              "Leave blank to use the GameObject name.")]
     [SerializeField] private string roomName = "";
  
-    [Tooltip("If true, fires room_visited automatically when this GameObject becomes active.\n" +
-             "Useful if rooms are activated/deactivated as the player moves between them.")]
+    [Tooltip("If true, fires room_visited automatically when this GameObject becomes active.")]
     [SerializeField] private bool autoTrackOnEnable = false;
  
-    [Tooltip("If true, subscribes to EnemyManager to detect when all enemies in this\n" +
-             "room are gone and fires room_cleared automatically.")]
+    [Tooltip("If true, subscribes to EnemyManager to detect when all enemies are gone.")]
     [SerializeField] private bool autoTrackCleared = false;
+ 
+    [Tooltip("How often (seconds) to sample FPS while the player is in this room.")]
+    [SerializeField] private float fpsSampleInterval = 0.5f;
  
     private bool visited;
     private bool cleared;
  
     // ── Time tracking ──────────────────────────────────────────────────────
-    private float enterTime  = -1f;   // Time.time when the player entered
+    private float enterTime    = -1f;
     private bool  timerRunning = false;
  
+    // ── FPS sampling ───────────────────────────────────────────────────────
+    // Samples are collected every fpsSampleInterval seconds.
+    // We store a rolling list and compute avg + min when the room ends.
+    private List<float> fpsSamples   = new List<float>();
+    private Coroutine   fpsCoroutine = null;
+ 
+    // ── Load time ──────────────────────────────────────────────────────────
+    private float activateTime = -1f; // realtimeSinceStartup when OnEnable fires
+    private bool  loadTracked  = false;
+ 
     private string RoomName => string.IsNullOrEmpty(roomName) ? gameObject.name : roomName;
+    private bool   IsWeb    => Application.platform == RuntimePlatform.WebGLPlayer;
+ 
+    // ── Unity lifecycle ────────────────────────────────────────────────────
  
     private void OnEnable()
     {
+        // Record when this room object became active (for load time)
+        activateTime = Time.realtimeSinceStartup;
+ 
         if (autoTrackOnEnable) MarkVisited();
+    }
+ 
+    private void Start()
+    {
+        // Measure room activation: time from OnEnable to end of first frame
+        if (!loadTracked)
+        {
+            loadTracked = true;
+            float loadSeconds = Time.realtimeSinceStartup - activateTime;
+            AnalyticsEvents.RoomLoadTime(RoomName, loadSeconds, IsWeb);
+        }
+ 
+        if (autoTrackCleared)
+            StartCoroutine(WatchForClear());
     }
  
     private void OnDisable()
     {
-        // Room deactivated — player left or scene is unloading
         StopTimer();
     }
  
@@ -60,23 +72,20 @@ public class AnalyticsRoomTracker : MonoBehaviour
         StopTimer();
     }
  
-    private void Start()
-    {
-        if (autoTrackCleared)
-            StartCoroutine(WatchForClear());
-    }
- 
-    // ── Public API — call these from your room system ──────────────────────
+    // ── Public API ─────────────────────────────────────────────────────────
  
     /// <summary>Call when the player enters this room.</summary>
     public void MarkVisited()
     {
-        if (visited) return; // only track first visit
+        if (visited) return;
         visited = true;
  
-        // Start the room timer
-        enterTime     = Time.time;
-        timerRunning  = true;
+        enterTime    = Time.time;
+        timerRunning = true;
+ 
+        // Start FPS sampling coroutine
+        fpsSamples.Clear();
+        fpsCoroutine = StartCoroutine(SampleFps());
  
         AnalyticsEvents.RoomVisited(RoomName);
     }
@@ -90,37 +99,72 @@ public class AnalyticsRoomTracker : MonoBehaviour
     }
  
     /// <summary>
-    /// Stops the room timer and fires room_time_spent.
-    /// Called automatically on OnDisable/OnDestroy, but you can call it
-    /// manually if your room system has an explicit "player exited" event.
+    /// Stops the room timer and FPS sampler, then fires room_time_spent.
+    /// Called automatically on OnDisable/OnDestroy.
     /// </summary>
     public void StopTimer()
     {
         if (!timerRunning) return;
         timerRunning = false;
  
+        // Stop FPS sampling
+        if (fpsCoroutine != null)
+        {
+            StopCoroutine(fpsCoroutine);
+            fpsCoroutine = null;
+        }
+ 
         float secondsSpent = Time.time - enterTime;
-        AnalyticsEvents.RoomTimeSpent(RoomName, secondsSpent, cleared);
+        float avgFps       = ComputeAvgFps();
+        float minFps       = ComputeMinFps();
+ 
+        AnalyticsEvents.RoomTimeSpent(RoomName, secondsSpent, cleared, avgFps, minFps);
+    }
+ 
+    // ── FPS sampling ───────────────────────────────────────────────────────
+ 
+    private IEnumerator SampleFps()
+    {
+        while (true)
+        {
+            // deltaTime can be 0 on the very first frame — guard against divide by zero
+            if (Time.deltaTime > 0f)
+                fpsSamples.Add(1f / Time.deltaTime);
+ 
+            yield return new WaitForSeconds(fpsSampleInterval);
+        }
+    }
+ 
+    private float ComputeAvgFps()
+    {
+        if (fpsSamples.Count == 0) return 0f;
+        float sum = 0f;
+        foreach (float s in fpsSamples) sum += s;
+        return sum / fpsSamples.Count;
+    }
+ 
+    private float ComputeMinFps()
+    {
+        if (fpsSamples.Count == 0) return 0f;
+        float min = float.MaxValue;
+        foreach (float s in fpsSamples) if (s < min) min = s;
+        return min;
     }
  
     // ── Auto-clear detection ───────────────────────────────────────────────
  
-    private System.Collections.IEnumerator WatchForClear()
+    private IEnumerator WatchForClear()
     {
-        // Wait until EnemyManager exists and the room has enemies
         while (EnemyManager.Instance == null) yield return null;
  
-        // Find the RoomGrid on this GameObject or a parent
         var roomGrid = GetComponent<RoomGrid>() ?? GetComponentInParent<RoomGrid>();
         if (roomGrid == null)
         {
             Debug.LogWarning($"[AnalyticsRoomTracker] autoTrackCleared=true but no RoomGrid " +
-                             $"found on {gameObject.name} or its parents. Disable autoTrackCleared " +
-                             $"and call MarkCleared() manually instead.");
+                             $"found on {gameObject.name}. Call MarkCleared() manually instead.");
             yield break;
         }
  
-        // Wait until the room actually has enemies (give spawners time to run)
         yield return new WaitForSeconds(1f);
  
         bool hadEnemies = false;
@@ -132,15 +176,13 @@ public class AnalyticsRoomTracker : MonoBehaviour
             if (enemies != null && enemies.Count > 0)
                 hadEnemies = true;
  
-            // Room is cleared only if it had enemies and now has none
             if (hadEnemies && (enemies == null || enemies.Count == 0))
             {
                 MarkCleared();
                 yield break;
             }
  
-            yield return new WaitForSeconds(0.5f); // poll every half second
+            yield return new WaitForSeconds(0.5f);
         }
     }
 }
- 
