@@ -23,6 +23,10 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     [SerializeField] private GameObject staminaNumberPrefab;
     [SerializeField] private Vector3 staminaPopupOffset = new(0f, 1f, 0f);
 
+    [Header("Progression")]
+    public int availablePerkPoints;
+    public PlayerStatType? pendingStatUpgrade;
+
     [Header("Core Stats")]
     public int strength;
     public int constitution;
@@ -219,5 +223,55 @@ public class PlayerStats : MonoBehaviour, IHasHealth
             health.SetHealth(currentHealth);
 
         Debug.Log($"[PlayerStats] Recalculated stats. HP {currentHealth}/{maxHealth}, Stamina {currentStamina}/{maxStamina}");
+    }
+
+    public void AddPerkPoint(int amount = 1)
+    {
+        availablePerkPoints += Mathf.Max(0, amount);
+        Debug.Log($"[PlayerStats] Added perk point. Available: {availablePerkPoints}");
+    }
+
+    public void PreviewStatUpgrade(PlayerStatType statType)
+    {
+        if (availablePerkPoints <= 0)
+            return;
+
+        pendingStatUpgrade = statType;
+    }
+
+    public void CancelPendingUpgrade()
+    {
+        pendingStatUpgrade = null;
+    }
+
+    public void ConfirmPendingUpgrade()
+    {
+        if (!pendingStatUpgrade.HasValue)
+            return;
+
+        if (availablePerkPoints <= 0)
+            return;
+
+        IncreaseStat(pendingStatUpgrade.Value, 1);
+        availablePerkPoints--;
+
+        pendingStatUpgrade = null;
+
+        Debug.Log($"[PlayerStats] Confirmed stat upgrade. Remaining points: {availablePerkPoints}");
+    }
+
+    public int GetStatValue(PlayerStatType statType)
+    {
+        switch (statType)
+        {
+            case PlayerStatType.Strength: return strength;
+            case PlayerStatType.Constitution: return constitution;
+            case PlayerStatType.Dexterity: return dexterity;
+            case PlayerStatType.Intelligence: return intelligence;
+            case PlayerStatType.Perception: return perception;
+            case PlayerStatType.Charisma: return charisma;
+            case PlayerStatType.Luck: return luck;
+            default: return 0;
+        }
     }
 }
