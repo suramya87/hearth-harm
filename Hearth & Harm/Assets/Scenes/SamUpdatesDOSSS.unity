@@ -439,6 +439,10 @@ PrefabInstance:
       propertyPath: overlaySortingOrder
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 2902111729046202201, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 6479582309180018011, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: m_LocalPosition.x
       value: 960
@@ -478,6 +482,10 @@ PrefabInstance:
     - target: {fileID: 6479582309180018011, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7645488314589689948, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_Enabled
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8032437583023291969, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: m_Name
