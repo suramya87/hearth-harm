@@ -35,10 +35,10 @@ public class MainMenuAnalytics : MonoBehaviour
         AnalyticsService.Instance.RecordEvent(new CustomEvent("session_started")
         {
             { "platform",        Application.platform.ToString()          },
-            { "screen_width",    Screen.width                             },
-            { "screen_height",   Screen.height                            },
-            { "device_model",    SystemInfo.deviceModel                   },
-            { "os",              SystemInfo.operatingSystem               },
+            // { "screen_width",    Screen.width                             },
+            // { "screen_height",   Screen.height                            },
+            // { "device_model",    SystemInfo.deviceModel                   },
+            // { "os",              SystemInfo.operatingSystem               },
             { "app_version",     Application.version                      },
             { "processor",       SystemInfo.processorType                 },
             { "processor_cores", SystemInfo.processorCount                },
@@ -46,6 +46,12 @@ public class MainMenuAnalytics : MonoBehaviour
             { "gpu",             SystemInfo.graphicsDeviceName            },
             { "vram_mb",         SystemInfo.graphicsMemorySize            },
             { "graphics_api",    SystemInfo.graphicsDeviceType.ToString() },
+            { "deviceModel",   SystemInfo.deviceModel           },
+            { "osVersion",     SystemInfo.operatingSystem        },
+            { "screenWidth",   Screen.width                      },
+            { "screenHeight",  Screen.height                     },
+            { "cpuType",       SystemInfo.processorType          },  
+            { "ramAvailable",  SystemInfo.systemMemorySize       },
         });
 
         AnalyticsService.Instance.Flush();
