@@ -34,13 +34,13 @@ public class MainMenuAnalytics : MonoBehaviour
         // Fire session started with hardware info
         AnalyticsService.Instance.RecordEvent(new CustomEvent("session_started")
         {
-            { "platform",        Application.platform.ToString()          },
+            // { "platform",        Application.platform.ToString()          },
             // { "screen_width",    Screen.width                             },
             // { "screen_height",   Screen.height                            },
             // { "device_model",    SystemInfo.deviceModel                   },
             // { "os",              SystemInfo.operatingSystem               },
             { "app_version",     Application.version                      },
-            { "processor",       SystemInfo.processorType                 },
+            // { "processor",       SystemInfo.processorType                 },
             { "processor_cores", SystemInfo.processorCount                },
             { "ram_mb",          SystemInfo.systemMemorySize              },
             { "gpu",             SystemInfo.graphicsDeviceName            },
@@ -51,7 +51,7 @@ public class MainMenuAnalytics : MonoBehaviour
             { "screenWidth",   Screen.width                      },
             { "screenHeight",  Screen.height                     },
             { "cpuType",       SystemInfo.processorType          },  
-            { "ramAvailable",  SystemInfo.systemMemorySize       },
+            // { "ramAvailable",  SystemInfo.systemMemorySize       },
         });
 
         AnalyticsService.Instance.Flush();
