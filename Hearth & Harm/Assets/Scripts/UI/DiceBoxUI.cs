@@ -33,7 +33,7 @@ public class DiceBoxUI : MonoBehaviour
 
     private readonly List<int> rolls = new();
     private readonly List<GameObject> pendingDiceObjects = new();
-
+    private bool preservingResolvedRoll;
     private int bonus;
 
     private void Awake()
@@ -50,10 +50,10 @@ public class DiceBoxUI : MonoBehaviour
 
     public void ShowPendingDice(CombatActionData actionData)
     {
-        Clear();
-
         if (actionData == null || !actionData.useDiceDamage || actionData.diceCount <= 0)
             return;
+        preservingResolvedRoll = false;
+        Clear();
 
         bonus = actionData.flatBonus;
 
@@ -137,6 +137,12 @@ public class DiceBoxUI : MonoBehaviour
 
     public void Clear()
     {
+        if (preservingResolvedRoll)
+        {
+            Debug.Log("[DiceBoxUI] Clear ignored because resolved roll is being preserved.");
+            return;
+        }
+
         ClearResultsOnly();
         ClearPendingDice();
 
@@ -206,6 +212,7 @@ public class DiceBoxUI : MonoBehaviour
 
     private void ShowResolvedDice(List<int> results, int flatBonus)
     {
+        preservingResolvedRoll = true;
         ClearPendingDice();
 
         rolls.Clear();
