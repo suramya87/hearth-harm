@@ -116,7 +116,8 @@ public class StatUpgradeUI : MonoBehaviour
             return;
         }
 
-        playerStats.IncreaseStat(statType, 1);
+        playerStats.PreviewStatUpgrade(statType);
+        playerStats.ConfirmPendingUpgrade();
 
         Debug.Log($"[StatUpgradeUI] Increased {statType}");
 
