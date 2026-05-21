@@ -7,6 +7,7 @@ public class HallwayWalkTrigger : MonoBehaviour
     private HallwayGrid hallway;
     private bool        locked;
     private bool        cooling;
+    private bool        applied; 
 
     public GameObject DoorStripObject { get; set; }
 
@@ -28,12 +29,30 @@ public class HallwayWalkTrigger : MonoBehaviour
     private IEnumerator TemporaryDisableRoutine(float seconds)
     {
         cooling = true;
+        applied = false; 
         yield return new WaitForSeconds(seconds);
         cooling = false;
     }
 
-    private void OnTriggerEnter2D(Collider2D other) => TryApplyCamera(other);
-    private void OnTriggerStay2D(Collider2D other)  => TryApplyCamera(other);
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        applied = false; 
+        TryApplyCamera(other);
+    }
+
+    private void OnTriggerStay2D(Collider2D other)
+    {
+        if (applied && RoomManager.Instance != null && RoomManager.Instance.IsInHallway())
+            return;
+
+        TryApplyCamera(other);
+    }
+
+    private void OnTriggerExit2D(Collider2D other)
+    {
+        if (other.CompareTag("Player"))
+            applied = false;
+    }
 
     private void TryApplyCamera(Collider2D other)
     {
@@ -43,6 +62,7 @@ public class HallwayWalkTrigger : MonoBehaviour
 
         ApplyHallwayCameraBounds();
         RoomManager.Instance?.SetInHallway();
+        applied = true;
     }
 
     private void ApplyHallwayCameraBounds()

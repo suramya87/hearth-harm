@@ -32,7 +32,7 @@ public class CameraController2D : MonoBehaviour
     [SerializeField] private float orthoMax  = 16f;
 
     [Header("Snap / Follow")]
-    [SerializeField] private float snapSmoothness   = 6f;
+    [SerializeField] private float snapSmoothness    = 6f;
     [SerializeField] private float hallwayFollowSpeed = 10f;
 
     [Header("Turn Follow")]
@@ -46,6 +46,7 @@ public class CameraController2D : MonoBehaviour
     [SerializeField] private float shakeFrequency = 25f;
 
     private bool inCombat;
+
     // ── State ──────────────────────────────────────────────────────────────
 
     private Transform followTarget;
@@ -59,8 +60,8 @@ public class CameraController2D : MonoBehaviour
     private Vector2 lastMouse;
 
     private Bounds roomBounds;
-    private bool   hasBounds;       // false = hallway mode
-    private bool   followingPlayer; // true = continuously follow local player
+    private bool   hasBounds;        // false = hallway mode
+    private bool   followingPlayer;  // true = continuously follow local player
 
     private float shakeTime, shakeDur, shakeAmp;
 
@@ -152,13 +153,18 @@ public class CameraController2D : MonoBehaviour
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /// <summary>Enter room mode: apply bounds and snap once to player.</summary>
+    /// <summary>
+    /// Enter room mode: apply bounds, stop hallway follow, and snap to player.
+    /// Always snaps regardless of combat state so the camera never stays
+    /// locked on the previous room's bounds after a transition.
+    /// </summary>
     public void SetRoomBounds(Bounds b)
     {
         roomBounds      = b;
         hasBounds       = true;
-        followingPlayer = false;
-        snapping        = true;
+        followingPlayer = false;  // exit hallway follow mode immediately
+        followTarget    = null;   // clear any enemy-turn follow target
+        snapping        = true;   // always snap to player when bounds change
     }
 
     /// <summary>
@@ -169,13 +175,18 @@ public class CameraController2D : MonoBehaviour
         hasBounds       = false;
         followingPlayer = true;
         snapping        = false;
+        followTarget    = null;
     }
 
-    /// <summary>One-shot snap toward the player (room mode only).</summary>
+    /// <summary>
+    /// One-shot snap toward the player (room mode only).
+    /// No-ops in hallway mode since follow is already continuous.
+    /// </summary>
     public void SnapToTarget()
     {
-        if (followingPlayer) return; // hallway mode already follows continuously
-        snapping = true;
+        if (followingPlayer) return;
+        snapping     = true;
+        followTarget = null; // don't let an enemy-follow target fight the snap
     }
 
     public void TriggerShake(float amplitude, float duration)
@@ -192,6 +203,36 @@ public class CameraController2D : MonoBehaviour
         cameraInputLocked  = false;
         unlockWhenCentered = true;
         snapping           = false;
+    }
+
+    /// <summary>
+    /// Called after room transition when combat state is known.
+    /// In combat: snap to player and lock panning.
+    /// Out of combat: snap to player and allow panning.
+    /// Does NOT re-enter hallway mode — bounds must already be set.
+    /// </summary>
+    public void SetCombatState(bool combat)
+    {
+        inCombat        = combat;
+        followingPlayer = false;  // always room mode when this is called
+        followTarget    = null;
+        snapping        = true;   // snap to player in both combat and non-combat
+    }
+
+    public void FollowUntilArrived(Transform target)
+    {
+        if (target == null) return;
+        followTarget       = target;
+        cameraInputLocked  = true;
+        unlockWhenCentered = false;
+        snapping           = false;
+    }
+
+    public void StopFollow()
+    {
+        followTarget       = null;
+        cameraInputLocked  = false;
+        unlockWhenCentered = false;
     }
 
     // ── Hallway continuous follow ──────────────────────────────────────────
@@ -343,28 +384,4 @@ public class CameraController2D : MonoBehaviour
         var pt = PlayerTarget.Instance;
         return pt != null ? pt.transform : null;
     }
-
-    public void SetCombatState(bool combat)
-    {
-        followingPlayer = false;
-
-        if (combat)
-            snapping = true;
-    }
-    public void FollowUntilArrived(Transform target)
-    {
-        if (target == null) return;
-
-        followTarget = target;
-        cameraInputLocked = true;
-        unlockWhenCentered = false;
-        snapping = false;
-    }
-
-    public void StopFollow()
-{
-    followTarget = null;
-    cameraInputLocked = false;
-    unlockWhenCentered = false;
-}
 }
