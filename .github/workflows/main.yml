@@ -2,6 +2,9 @@ name: HeartAndHarm
 
 on: [push, pull_request]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   buildForAllSupportedPlatforms:
     name: Build for ${{ matrix.targetPlatform }}
@@ -10,13 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         targetPlatform:
-          - StandaloneOSX # Builds macOS (Architecture is determined by your Unity project settings)
-          # - StandaloneWindows # Build a Windows standalone.
-          - StandaloneWindows64 # Build a Windows 64-bit standalone.
-          # - StandaloneLinux64 # Build a Linux 64-bit standalone.
-          # - iOS # Build an iOS player.
-          # - Android # Build an Android .apk standalone app.
-          # - WebGL # WebGL.
+          - StandaloneOSX
+          - StandaloneWindows64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,9 +29,6 @@ jobs:
             Library-${{ matrix.targetPlatform }}-
             Library-
 
-      - if: matrix.targetPlatform == 'Android'
-        uses: jlumbroso/free-disk-space@v1.3.1
-
       - uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -42,7 +37,14 @@ jobs:
         with:
           targetPlatform: ${{ matrix.targetPlatform }}
 
+      - if: matrix.targetPlatform == 'StandaloneOSX'
+        name: Pack Mac Build Securely
+        run: |
+          cd build/StandaloneOSX
+          zip -r ../../HeartAndHarm-Mac-Universal.zip .
+          
       - uses: actions/upload-artifact@v4
         with:
-          name: HeartAndHarm-${{ matrix.targetPlatform }} 
-          path: build/${{ matrix.targetPlatform }}
+          name: HeartAndHarm-${{ matrix.targetPlatform }}
+          path: |
+            ${{ matrix.targetPlatform == 'StandaloneOSX' && 'HeartAndHarm-Mac-Universal.zip' || 'build/StandaloneWindows64' }}
