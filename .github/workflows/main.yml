@@ -1,6 +1,9 @@
-name: Actions
+name: Actions 
 
 on: [push, pull_request]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   tests:
@@ -27,15 +30,17 @@ jobs:
           git lfs pull
           git checkout .
 
+      # Crucial: Cache the Library inside your main folder
       - name: Cache Unity Library folder
         uses: actions/cache@v4
         with:
-          path: Library
-          key: Library-Tests-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          path: Heart & Harm/Library
+          key: Library-Tests-${{ hashFiles('Heart & Harm/Assets/**', 'Heart & Harm/Packages/**', 'Heart & Harm/ProjectSettings/**') }}
           restore-keys: |
             Library-Tests-
             Library-
 
+      # Tells the Test Runner to step into your big folder first
       - name: Run tests
         uses: game-ci/unity-test-runner@v4
         env:
@@ -43,10 +48,10 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
+          projectPath: Heart & Harm
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
   # --- BUILD JOB ---
-  # This builds Windows and Mac targets in parallel
   build:
     name: Build for ${{ matrix.targetPlatform }} 
     needs: tests
@@ -55,8 +60,8 @@ jobs:
       fail-fast: false
       matrix:
         targetPlatform:
-          - StandaloneWindows64 
-          - StandaloneOSX       
+          - StandaloneWindows64
+          - StandaloneOSX
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -81,8 +86,8 @@ jobs:
       - name: Cache Unity Library folder
         uses: actions/cache@v4
         with:
-          path: Library
-          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          path: Heart & Harm/Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Heart & Harm/Assets/**', 'Heart & Harm/Packages/**', 'Heart & Harm/ProjectSettings/**') }}
           restore-keys: |
             Library-${{ matrix.targetPlatform }}-
             Library-
@@ -94,10 +99,11 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
+          projectPath: Heart & Harm
           targetPlatform: ${{ matrix.targetPlatform }}
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Build-${{ matrix.targetPlatform }}
-          path: build/${{ matrix.targetPlatform }}
+          path: Heart & Harm/build/${{ matrix.targetPlatform }}
