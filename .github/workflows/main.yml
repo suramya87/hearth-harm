@@ -1,32 +1,42 @@
-name: Build project
+name: Test and Build project
 
 on: [push, pull_request]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   buildForAllSupportedPlatforms:
+    permissions:
+      checks: write
     name: Build for ${{ matrix.targetPlatform }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         targetPlatform:
-          - StandaloneOSX # Build a macOS standalone (Intel 64-bit).
-          # - StandaloneWindows # Build a Windows standalone.
-          - StandaloneWindows64 # Build a Windows 64-bit standalone.
-          - StandaloneLinux64 # Build a Linux 64-bit standalone.
-          # - iOS # Build an iOS player.
-          # - Android # Build an Android .apk standalone app.
-          # - WebGL # WebGL.
+          - StandaloneOSX       # Builds your Mac Universal app (Intel + M-chips combined)
+          - StandaloneWindows64 # Builds Windows 64-bit
+          
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           lfs: true
-      - uses: actions/cache@v3
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d-%H-%M-%S')" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
         with:
           path: Library
-          key: Library-${{ matrix.targetPlatform }}
-          restore-keys: Library-
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-${{ matrix.targetPlatform }}-
+            Library-
+
       - uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -34,8 +44,16 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           targetPlatform: ${{ matrix.targetPlatform }}
-          buildName: HeartAndHarm
+          buildName: HearthAndHarm
+
+      - if: matrix.targetPlatform == 'StandaloneOSX'
+        name: Pack Mac Build Securely
+        run: |
+          cd build/StandaloneOSX
+          zip -r ../../HearthAndHarm-Mac-Universal.zip .
+
       - uses: actions/upload-artifact@v4
         with:
-          name: HeartAndHarm-${{ matrix.targetPlatform }}
-          path: build/${{ matrix.targetPlatform }}
+          name: HearthAndHarm-${{ matrix.targetPlatform }}-${{ env.date }}
+          path: |
+            ${{ matrix.targetPlatform == 'StandaloneOSX' && 'HearthAndHarm-Mac-Universal.zip' || 'build/StandaloneWindows64' }}
