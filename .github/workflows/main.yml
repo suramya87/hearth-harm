@@ -30,7 +30,7 @@ jobs:
       - name: Cache Unity Library folder
         uses: actions/cache@v4
         with:
-          path: Hearth-Harm/HearthAndHarm/Library
+          path: Library
           key: Library-${{ matrix.targetPlatform }}
           restore-keys: Library-
 
@@ -49,4 +49,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hearth&Harm-${{ matrix.targetPlatform }}-${{ env.date }}
-          path: Hearth-Harm/HearthAndHarm/build/${{ matrix.targetPlatform }}
+          path: build/${{ matrix.targetPlatform }}
