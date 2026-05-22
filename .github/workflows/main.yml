@@ -30,17 +30,15 @@ jobs:
           git lfs pull
           git checkout .
 
-      # Crucial: Cache the Library inside your main folder
       - name: Cache Unity Library folder
         uses: actions/cache@v4
         with:
-          path: HeartAndHarm/Library
-          key: Library-Tests-${{ hashFiles('HeartAndHarm/Assets/**', 'HeartAndHarm/Packages/**', 'HeartAndHarm/ProjectSettings/**') }}
+          path: Hearth-Harm/HearthAndHarm/Library
+          key: Library-Tests-${{ hashFiles('Hearth-Harm/HearthAndHarm/Assets/**', 'Hearth-Harm/HearthAndHarm/Packages/**', 'Hearth-Harm/HearthAndHarm/ProjectSettings/**') }}
           restore-keys: |
             Library-Tests-
             Library-
 
-      # Tells the Test Runner to step into your big folder first
       - name: Run tests
         uses: game-ci/unity-test-runner@v4
         env:
@@ -48,10 +46,9 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          projectPath: HeartAndHarm
+          projectPath: Hearth-Harm/HearthAndHarm
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
-  # --- BUILD JOB ---
   build:
     name: Build for ${{ matrix.targetPlatform }} 
     needs: tests
@@ -86,8 +83,8 @@ jobs:
       - name: Cache Unity Library folder
         uses: actions/cache@v4
         with:
-          path: HeartAndHarm/Library
-          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('HeartAndHarm/Assets/**', 'HeartAndHarm/Packages/**', 'HeartAndHarm/ProjectSettings/**') }}
+          path: Hearth-Harm/HearthAndHarm/Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Hearth-Harm/HearthAndHarm/Assets/**', 'Hearth-Harm/HearthAndHarm/Packages/**', 'Hearth-Harm/HearthAndHarm/ProjectSettings/**') }}
           restore-keys: |
             Library-${{ matrix.targetPlatform }}-
             Library-
@@ -99,11 +96,12 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          projectPath: HeartAndHarm
+          projectPath: Hearth-Harm/HearthAndHarm
           targetPlatform: ${{ matrix.targetPlatform }}
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Build-${{ matrix.targetPlatform }}
-          path: HeartAndHarm/build/${{ matrix.targetPlatform }}
+          # --- FIXED: Output target destination ---
+          path: Hearth-Harm/HearthAndHarm/build/${{ matrix.targetPlatform }}
