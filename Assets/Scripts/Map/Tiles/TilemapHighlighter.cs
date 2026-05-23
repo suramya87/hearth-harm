@@ -2,6 +2,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
+/// <summary>
+/// Paints movement/attack highlight tiles in the overlay tilemap.
+/// In multiplayer only highlights for the locally owned unit.
+/// </summary>
 public class TilemapHighlighter : MonoBehaviour
 {
     public static TilemapHighlighter Instance { get; private set; }
@@ -66,8 +70,8 @@ public class TilemapHighlighter : MonoBehaviour
         if (overlayRoot != null) Destroy(overlayRoot);
     }
 
-    private void OnLevelReady()                                    => SafeClear();
-    private void OnRoomChanged(LevelGenerator.PlacedRoom _)        => SafeClear();
+    private void OnLevelReady()                             => SafeClear();
+    private void OnRoomChanged(LevelGenerator.PlacedRoom _) => SafeClear();
 
     // ── Overlay ────────────────────────────────────────────────────────────
 
@@ -84,7 +88,6 @@ public class TilemapHighlighter : MonoBehaviour
             if (overlayTilemap != null) return;
             Destroy(existing);
         }
-
         BuildOverlay();
     }
 
@@ -123,6 +126,7 @@ public class TilemapHighlighter : MonoBehaviour
 
         GridCostVisualizer.Instance?.ClearAll();
 
+        // Always use LOCAL owned unit for highlights.
         var unit     = FindLocalUnit();
         var unitGrid = unit?.GetCurrentRoomGrid();
 
@@ -138,6 +142,16 @@ public class TilemapHighlighter : MonoBehaviour
 
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
+
+        // In multiplayer only highlight for our own action.
+        if (GameManager.IsMultiplayer)
+        {
+            var actionUnit = action.GetUnit();
+            var netObj = actionUnit != null
+                ? actionUnit.GetComponent<Unity.Netcode.NetworkObject>()
+                : null;
+            if (netObj == null || !netObj.IsOwner) return;
+        }
 
         Vector3 mouseWorld = GetMouseWorldRaw();
 
@@ -211,7 +225,7 @@ public class TilemapHighlighter : MonoBehaviour
             Mathf.FloorToInt(worldPos.y), 0);
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
+    // ── Public API ─────────────────────────────────────────────────────────
 
     private static Vector3 GetMouseWorldRaw()
     {
@@ -252,7 +266,9 @@ public class TilemapHighlighter : MonoBehaviour
 
     private static Unit FindLocalUnit()
     {
-        if (!GameManager.IsMultiplayer) return FindAnyObjectByType<Unit>();
+        if (!GameManager.IsMultiplayer)
+            return FindAnyObjectByType<Unit>();
+
         foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
         {
             var net = u.GetComponent<Unity.Netcode.NetworkObject>();

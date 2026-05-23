@@ -18,8 +18,7 @@ public class MoveAction : BaseAction
     private List<Vector3>      cachedReachableWorld;
     private List<GridPosition> cachedReachableGP;
     private bool               cacheDirty = true;
-
-    private RoomGrid cachedForGrid;
+    private RoomGrid           cachedForGrid;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -41,7 +40,6 @@ public class MoveAction : BaseAction
 
     private void OnRoomChanged(LevelGenerator.PlacedRoom room)
     {
-        // Only invalidate when arriving at a real room, not mid-hallway.
         if (room == null) return;
         InvalidateCache();
     }
@@ -65,8 +63,15 @@ public class MoveAction : BaseAction
 
     // ── Input ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Called every frame by UnitActionSystem.Update().
+    /// Only the owning client processes mouse input.
+    /// </summary>
     public void HandleActionInput()
     {
+        // OWNERSHIP GUARD — clients must not move units they don't own.
+        if (!CanExecuteLocally()) return;
+
         if (!Input.GetMouseButtonDown(0)) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
@@ -87,7 +92,6 @@ public class MoveAction : BaseAction
             }
 
             var reachable = GetValidActionWorldPositions();
-
             if (reachable.Count == 0)
             {
                 Debug.LogWarning("[MoveAction] Reachable list is empty.");
@@ -95,11 +99,11 @@ public class MoveAction : BaseAction
             }
 
             float cellSize = 1f;
-            var roomForSize = unit.GetCurrentRoomGrid();
+            var   roomForSize = unit.GetCurrentRoomGrid();
             if (roomForSize != null)
             {
                 var setup = roomForSize.GetComponent<RoomTilemapSetup>()
-                        ?? roomForSize.GetComponentInParent<RoomTilemapSetup>();
+                         ?? roomForSize.GetComponentInParent<RoomTilemapSetup>();
                 if (setup != null) cellSize = setup.GetCellSize();
             }
 
@@ -114,12 +118,9 @@ public class MoveAction : BaseAction
 
             if (bestDist < cellSize * 0.75f)
             {
-                Move(best, () => Debug.Log("[MoveAction] Move Complete."));
+                Move(best, () => Debug.Log("[MoveAction] Move complete."));
                 return;
             }
-
-            Debug.Log($"<color=red>[MoveAction] No reachable cell near {mouseWorld} " +
-                      $"(closest {bestDist:F2} away, threshold {cellSize * 0.75f:F2})</color>");
             return;
         }
 
@@ -128,7 +129,7 @@ public class MoveAction : BaseAction
         if (room == null) return;
         GridPosition gp = room.GetGridPosition(mouseWorld);
         if (IsValidTarget(gp))
-            Move(gp, () => Debug.Log("[MoveAction] Move Complete."));
+            Move(gp, () => Debug.Log("[MoveAction] Move complete."));
     }
 
     public void RefreshValidTargets()
@@ -148,8 +149,13 @@ public class MoveAction : BaseAction
         newGrid.AddUnitAtGridPosition(newPos, unit);
     }
 
+    // ── Move(worldPos) ─────────────────────────────────────────────────────
+
     public void Move(Vector3 targetWorld, Action onComplete)
     {
+        // OWNERSHIP GUARD
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
+
         if (isActive) { onComplete?.Invoke(); return; }
 
         if (UnifiedWorldGrid.Instance == null)
@@ -171,8 +177,12 @@ public class MoveAction : BaseAction
         StartCoroutine(MoveAlongWorldPath(usedPath, onComplete));
     }
 
+    // ── Move(gridPos) ──────────────────────────────────────────────────────
+
     public void Move(GridPosition target, Action onComplete)
     {
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
+
         var room = unit.GetCurrentRoomGrid();
         if (room == null || isActive) { onComplete?.Invoke(); return; }
 
@@ -202,10 +212,7 @@ public class MoveAction : BaseAction
         foreach (var gp in usedPath)
         {
             var wp = room.GetWorldPosition(gp);
-            waypoints.Add(new Vector3(
-                wp.x + visualOff.x,
-                wp.y + visualOff.y,
-                transform.position.z));
+            waypoints.Add(new Vector3(wp.x + visualOff.x, wp.y + visualOff.y, transform.position.z));
         }
 
         SetFacingToward(startPos, usedPath[0]);
@@ -215,6 +222,8 @@ public class MoveAction : BaseAction
         InvalidateCache();
         StartCoroutine(MoveAlongLocalPath(waypoints, usedPath, finalPos, room, onComplete));
     }
+
+    // ── World-path coroutine ───────────────────────────────────────────────
 
     private IEnumerator MoveAlongWorldPath(
         List<UnifiedPathfinder.WorldStep> path, Action onComplete)
@@ -286,6 +295,7 @@ public class MoveAction : BaseAction
         }
         else
         {
+            // Tell server + other clients where we ended up.
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null && bridge.IsOwner)
                 bridge.SyncGridPosition(finalGrid, finalGP);
@@ -293,6 +303,8 @@ public class MoveAction : BaseAction
 
         onComplete?.Invoke();
     }
+
+    // ── Local-path coroutine ───────────────────────────────────────────────
 
     private IEnumerator MoveAlongLocalPath(
         List<Vector3> waypoints, List<GridPosition> gridPath,
@@ -313,7 +325,6 @@ public class MoveAction : BaseAction
 
         unitAnimator?.SetMoving(false);
         isActive = false;
-
         InvalidateCache();
 
         if (unit.GetCurrentRoomGrid() == startingGrid)
@@ -330,6 +341,8 @@ public class MoveAction : BaseAction
         CameraController2D.Instance?.StopFollow();
         onComplete?.Invoke();
     }
+
+    // ── Cache rebuild ──────────────────────────────────────────────────────
 
     private void RebuildReachableCache()
     {
@@ -391,9 +404,6 @@ public class MoveAction : BaseAction
             cachedReachableWorld.Add(cellData.WorldCentre);
             cachedReachableGP.Add(cellData.OwnerGrid.GetGridPosition(cellData.WorldCentre));
         }
-
-        Debug.Log($"[MoveAction] BFS: {cachedReachableWorld.Count} reachable cells " +
-                  $"from key {startKey} (world {unitWorld}).");
     }
 
     private void LocalBFS()
@@ -418,7 +428,7 @@ public class MoveAction : BaseAction
         }
     }
 
-    // ── Public query API ───────────────────────────────────────────────────
+    // ── Query API ──────────────────────────────────────────────────────────
 
     public List<Vector3> GetValidActionWorldPositions()
     {
@@ -468,7 +478,6 @@ public class MoveAction : BaseAction
     {
         var room = unit.GetCurrentRoomGrid();
         if (room != null) return room.GetWorldPosition(unit.GetGridPosition());
-
         Vector2 vo = unit.GetVisualOffset();
         return new Vector3(
             transform.position.x - vo.x,

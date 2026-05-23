@@ -51,8 +51,7 @@ public class Unit : MonoBehaviour
 
     /// <summary>
     /// Waits until the room grid is fully initialized then places the unit.
-    /// Use this for initial spawn to avoid timing issues where the grid
-    /// isn't ready yet when the level first loads.
+    /// Use this for initial spawn.
     /// </summary>
     public void PlaceInRoomWhenReady(RoomGrid room, GridPosition pos)
     {
@@ -60,20 +59,18 @@ public class Unit : MonoBehaviour
     }
 
     public void PlaceInRoomNoMove(RoomGrid room, GridPosition newPos)
-        {
-            if (room == null) return;
- 
-            if (currentRoomGrid != null && isInitialized)
-                currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
- 
-            currentRoomGrid = room;
-            gridPosition    = newPos;
-            isInitialized   = true;
- 
-            room.AddUnitAtGridPosition(newPos, this);
-            // deliberately no transform.position change — MoveAction owns the visual position
-        }
+    {
+        if (room == null) return;
 
+        if (currentRoomGrid != null && isInitialized)
+            currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
+
+        currentRoomGrid = room;
+        gridPosition    = newPos;
+        isInitialized   = true;
+
+        room.AddUnitAtGridPosition(newPos, this);
+    }
 
     private IEnumerator WaitAndPlace(RoomGrid room, GridPosition pos)
     {
@@ -96,15 +93,18 @@ public class Unit : MonoBehaviour
             yield return null;
         }
 
-        // One extra frame so TilemapRoomGrid cell bounds are fully settled
         yield return null;
 
         PlaceInRoom(room, pos);
+
+        // After placement, register with local-player systems if we are the owner.
+        RegisterWithLocalSystems();
+
         Debug.Log($"[Unit] Placed in {room.gameObject.name} at {pos} after grid ready.");
     }
 
     /// <summary>
-    /// Immediately places the unit in a room. The room must already be initialized.
+    /// Immediately places the unit in a room. Room must already be initialized.
     /// For initial spawn use PlaceInRoomWhenReady instead.
     /// </summary>
     public void PlaceInRoom(RoomGrid room, GridPosition newPos)
@@ -116,12 +116,8 @@ public class Unit : MonoBehaviour
         }
 
         if (!room.IsInitialized())
-        {
-            Debug.LogWarning($"[Unit] PlaceInRoom called on uninitialized grid " +
-                             $"{room.gameObject.name}. Use PlaceInRoomWhenReady for initial spawn.");
-        }
+            Debug.LogWarning($"[Unit] PlaceInRoom called on uninitialized grid {room.gameObject.name}.");
 
-        // Remove from old cell
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
 
@@ -149,12 +145,40 @@ public class Unit : MonoBehaviour
         }
     }
 
+    // ── Local systems registration ─────────────────────────────────────────
+
+    /// <summary>
+    /// Register this unit with PlayerTarget and UnitActionSystem when it is
+    /// the locally owned player unit (or the only unit in singleplayer).
+    /// </summary>
+    private void RegisterWithLocalSystems()
+    {
+        bool isLocalOwner;
+
+        if (!GameManager.IsMultiplayer)
+        {
+            isLocalOwner = true;
+        }
+        else
+        {
+            var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+            isLocalOwner = netObj != null && netObj.IsOwner;
+        }
+
+        if (!isLocalOwner) return;
+
+        // Register with PlayerTarget so enemies and camera find us.
+        if (PlayerTarget.Instance != null)
+            PlayerTarget.Instance.Register(this);
+
+        // Register with UnitActionSystem so input reaches us.
+        if (UnitActionSystem.Instance != null)
+            UnitActionSystem.Instance.SetSelectedUnit(this);
+    }
+
     // ── Turn events ────────────────────────────────────────────────────────
 
-    private void OnTurnChanged(object sender, EventArgs e)
-    {
-        
-    }
+    private void OnTurnChanged(object sender, EventArgs e) { }
 
     // ── Accessors ──────────────────────────────────────────────────────────
 
@@ -163,5 +187,5 @@ public class Unit : MonoBehaviour
     public bool          IsInitialized()      => isInitialized;
     public MoveAction    GetMoveAction()      => moveAction;
     public BaseAction[]  GetBaseActionArray() => allActions;
-    public Vector2 GetVisualOffset() => visualOffset;
+    public Vector2       GetVisualOffset()    => visualOffset;
 }

@@ -21,7 +21,7 @@ public class CombatAction : BaseAction
     private Vector2Int         currentFacing = new(0, 1);
     private List<GridPosition> lastPreview   = new();
 
-    public CombatActionData ActionData     => actionData;
+    public CombatActionData ActionData       => actionData;
     public void SetActionData(CombatActionData d) => actionData = d;
 
     public override string GetActionName() =>
@@ -38,7 +38,6 @@ public class CombatAction : BaseAction
     public List<GridPosition> GetPreviewPositions(GridPosition mouseGP)
     {
         if (actionData == null) return new();
-
         var unitGP = unit.GetGridPosition();
         if (actionData.rotatesToFacing)
             currentFacing = ApplyCorrection(FacingToward(unitGP, mouseGP));
@@ -55,18 +54,16 @@ public class CombatAction : BaseAction
 
     // ── Execution ──────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Main entry point. Automatically routes damage through NetworkedHealthBridge
-    /// when running in multiplayer — no need to call PerformAttackNetworked separately.
-    /// </summary>
     public void PerformAttack(GridPosition targetGP, Action onComplete)
     {
+        // OWNERSHIP GUARD — only the owning client triggers the attack flow.
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
         ExecuteAttackFlow(targetGP, onComplete);
     }
 
-    /// <summary>Explicit networked variant kept for API compatibility.</summary>
     public void PerformAttackNetworked(GridPosition targetGP, Action onComplete)
     {
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
         ExecuteAttackFlow(targetGP, onComplete);
     }
 
@@ -77,11 +74,7 @@ public class CombatAction : BaseAction
 
     private IEnumerator ExecuteAttackFlowRoutine(GridPosition targetGP, Action onComplete)
     {
-        if (actionData == null)
-        {
-            onComplete?.Invoke();
-            yield break;
-        }
+        if (actionData == null) { onComplete?.Invoke(); yield break; }
 
         onActionComplete = onComplete;
         isActive = true;
@@ -102,32 +95,31 @@ public class CombatAction : BaseAction
 
         SpendStamina();
 
-        int finalDamage = 0;
+        int finalDamage  = 0;
         bool diceFinished = false;
 
         if (diceBox != null && actionData.useDiceDamage)
         {
-            int strengthBonus = playerStats != null ? playerStats.strength : 0;
+            int strengthBonus  = playerStats != null ? playerStats.strength : 0;
             int totalFlatBonus = actionData.flatBonus + strengthBonus;
 
             yield return diceBox.PlayPhysicsD6Roll(actionData.diceCount, totalFlatBonus, (result) =>
             {
-                finalDamage = Mathf.Max(1, Mathf.RoundToInt(result * actionData.damageMultiplier));
+                finalDamage  = Mathf.Max(1, Mathf.RoundToInt(result * actionData.damageMultiplier));
                 diceFinished = true;
             });
         }
         else
         {
-            List<int> rolls = RollDamageDice();
-            finalDamage = CalculateDamage(rolls);
+            var rolls  = RollDamageDice();
+            finalDamage  = CalculateDamage(rolls);
             diceFinished = true;
         }
 
-        // Wait safety (in case)
-        while (!diceFinished)
-            yield return null;
+        while (!diceFinished) yield return null;
 
-        // 💥 STEP 3: Apply damage AFTER dice animation
+        // Route damage through the networked bridge in multiplayer so the
+        // server authoritatively applies it on all peers.
         if (GameManager.IsMultiplayer)
             ApplyDamageWithValueNetworked(hitPositions, finalDamage);
         else
@@ -137,17 +129,16 @@ public class CombatAction : BaseAction
 
         isActive = false;
         SelectMoveAction();
-
         onActionComplete?.Invoke();
     }
 
-    // ── Damage Application ─────────────────────────────────────────────────
+    // ── Damage application ─────────────────────────────────────────────────
+
     private void ApplyDamageWithValue(List<GridPosition> positions, int dmg)
     {
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
 
-        // Track already-hit enemies this attack to avoid multi-cell boss double hits
         var hitEnemies = new HashSet<EnemyUnit>();
         var hitUnits   = new HashSet<Unit>();
 
@@ -158,13 +149,11 @@ public class CombatAction : BaseAction
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
-                if (!hitEnemies.Add(enemy)) continue; // already hit this enemy
+                if (!hitEnemies.Add(enemy)) continue;
 
                 var interceptor = enemy.GetComponent<BossDamageInterceptor>();
-                if (interceptor != null)
-                    interceptor.TakeDamage(dmg);
-                else
-                    enemy.Health.TakeDamage(dmg);
+                if (interceptor != null) interceptor.TakeDamage(dmg);
+                else                     enemy.Health.TakeDamage(dmg);
 
                 DamageNumber.Spawn(damageNumberPrefab, enemy.transform.position, dmg);
             }
@@ -172,8 +161,7 @@ public class CombatAction : BaseAction
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
-                if (!hitUnits.Add(target)) continue; // already hit this unit
-
+                if (!hitUnits.Add(target)) continue;
                 target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
                 DamageNumber.Spawn(damageNumberPrefab, target.transform.position, dmg);
             }
@@ -198,17 +186,14 @@ public class CombatAction : BaseAction
                 if (!hitEnemies.Add(enemy)) continue;
 
                 var interceptor = enemy.GetComponent<BossDamageInterceptor>();
-                if (interceptor != null)
-                    interceptor.TakeDamage(dmg);
-                else
-                    NetworkedHealthBridge.TakeDamage(enemy.gameObject, dmg);
+                if (interceptor != null) interceptor.TakeDamage(dmg);
+                else                     NetworkedHealthBridge.TakeDamage(enemy.gameObject, dmg);
             }
 
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
                 if (!hitUnits.Add(target)) continue;
-
                 NetworkedHealthBridge.TakeDamage(target.gameObject, dmg);
             }
         }
@@ -234,7 +219,6 @@ public class CombatAction : BaseAction
                 int d = Mathf.Abs(dx) + Mathf.Abs(dy);
                 if (d < actionData.minRange || d > actionData.maxRange) continue;
                 if (d == 0 && !actionData.canTargetSelf) continue;
-
                 var c = new GridPosition(unitGP.x + dx, unitGP.y + dy);
                 if (room.IsValidGridPosition(c)) valid.Add(c);
             }
@@ -256,13 +240,8 @@ public class CombatAction : BaseAction
     public bool CanAfford()
     {
         if (actionData == null) return false;
-
-        if (!actionData.requiresEnoughStamina)
-            return true;
-
-        if (playerStats == null)
-            return false;
-
+        if (!actionData.requiresEnoughStamina) return true;
+        if (playerStats == null) return false;
         return playerStats.currentStamina >= actionData.staminaCost;
     }
 
@@ -308,10 +287,8 @@ public class CombatAction : BaseAction
     {
         if (!actionData.useDiceDamage)
             return new List<int> { actionData.baseDamage };
-
         if (actionData.diceCount <= 0)
             return new List<int>();
-
         return DiceRoller.RollMultiple(actionData.dieType, actionData.diceCount);
     }
 
@@ -323,10 +300,7 @@ public class CombatAction : BaseAction
             : actionData.baseDamage + strengthBonus;
 
         if (actionData.useDiceDamage)
-        {
-            foreach (int r in rolls)
-                total += r;
-        }
+            foreach (int r in rolls) total += r;
 
         return Mathf.Max(1, Mathf.RoundToInt(total * actionData.damageMultiplier));
     }

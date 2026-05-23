@@ -5,7 +5,6 @@ using UnityEngine;
 public class UnitActionSystemUI : MonoBehaviour
 {
     [SerializeField] private Transform actionButtonPrefab;
-
     [Tooltip("The container transform that holds the action buttons.")]
     [SerializeField] private Transform actionButtonContainerTransform;
 
@@ -13,15 +12,13 @@ public class UnitActionSystemUI : MonoBehaviour
 
     private void Start()
     {
-        // Subscribe to whichever action system is present
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChanged   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChanged += OnSelectedActionChanged;
         }
         else
         {
-            // Retry on level ready in case the system isn't initialised yet
             LevelGenerator.OnLevelReady += OnLevelReady;
         }
 
@@ -35,8 +32,8 @@ public class UnitActionSystemUI : MonoBehaviour
 
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   -= OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange -= OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChanged   -= OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChanged -= OnSelectedActionChanged;
         }
     }
 
@@ -46,8 +43,8 @@ public class UnitActionSystemUI : MonoBehaviour
 
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChanged   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChanged += OnSelectedActionChanged;
         }
 
         CreateUnitActionButtons();
@@ -68,6 +65,7 @@ public class UnitActionSystemUI : MonoBehaviour
 
         foreach (Transform child in actionButtonContainerTransform)
             Destroy(child.gameObject);
+
         actionButtonUIList.Clear();
 
         Unit unit = UnitActionSystem.Instance?.GetSelectedUnit();
@@ -75,7 +73,7 @@ public class UnitActionSystemUI : MonoBehaviour
 
         foreach (BaseAction action in unit.GetBaseActionArray())
         {
-            Transform t  = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
+            Transform t    = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
             ActionButtonUI ui = t.GetComponent<ActionButtonUI>();
             if (ui != null)
             {
