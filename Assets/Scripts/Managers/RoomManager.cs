@@ -33,7 +33,7 @@ public class RoomManager : MonoBehaviour
     {
         currentRoom      = room;
         inHallway        = false;
-        transitionLocked = false; // entering a room always clears the lock
+        transitionLocked = false;
 
         OnRoomChanged?.Invoke(room);
         OnAnyRoomChanged?.Invoke(room);
@@ -48,8 +48,6 @@ public class RoomManager : MonoBehaviour
                       $"({room.gridPosition.x}, {room.gridPosition.y})</color> " +
                       $"({room.roomInstance?.name ?? "unknown"})");
 
-            // Set combat camera state AFTER enemies are spawned — called
-            // again from HallwayEntryTrigger once enemy count is known.
             if (CurrentRoomHasEnemies())
                 CameraController2D.Instance?.SetCombatState(true);
             else
@@ -59,9 +57,6 @@ public class RoomManager : MonoBehaviour
 
     public void SetInHallway()
     {
-        // If a room transition is in progress, ignore this completely.
-        // HallwayWalkTrigger fires OnTriggerStay2D every frame and would
-        // overwrite SetCurrentRoom if we don't guard here.
         if (transitionLocked)
         {
             Debug.Log("<color=#B800FF>[RoomManager]</color> SetInHallway suppressed " +
@@ -69,9 +64,14 @@ public class RoomManager : MonoBehaviour
             return;
         }
 
+        if (inHallway) return;
+
         currentRoom = null;
         inHallway   = true;
+
         OnRoomChanged?.Invoke(null);
+
+        CameraController2D.Instance?.ClearRoomBounds();
 
         Debug.Log("<color=#B800FF>[RoomManager -> Tracker]</color> Player stepped into " +
                   "a <color=#E066FF>HALLWAY</color>.");
@@ -113,9 +113,31 @@ public class RoomManager : MonoBehaviour
 
         var bounds = room.roomInstance.GetComponentInChildren<CameraRoomBounds>();
         if (bounds != null)
+        {
             cam.SetRoomBounds(bounds.GetBounds());
+        }
         else
-            cam.ClearRoomBounds();
+        {
+            var floor = room.roomGrid?.GetFloorTilemap();
+            if (floor != null)
+            {
+                var     cb       = floor.cellBounds;
+                Vector3 worldMin = floor.GetCellCenterWorld(
+                    new Vector3Int(cb.xMin,     cb.yMin,     0));
+                Vector3 worldMax = floor.GetCellCenterWorld(
+                    new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
+
+                Vector3 center = (worldMin + worldMax) * 0.5f;
+                float   width  = Mathf.Abs(worldMax.x - worldMin.x) + 8f;
+                float   height = Mathf.Abs(worldMax.y - worldMin.y) + 8f;
+
+                cam.SetRoomBounds(new Bounds(center, new Vector3(width, height, 10f)));
+            }
+            else
+            {
+                cam.ClearRoomBounds();
+            }
+        }
 
         cam.SnapToTarget();
     }

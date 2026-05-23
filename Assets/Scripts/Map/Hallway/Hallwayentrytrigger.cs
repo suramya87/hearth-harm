@@ -12,6 +12,7 @@ public class HallwayEntryTrigger : MonoBehaviour
     private HallwayWalkTrigger       pairedWalkTrigger;
     private List<HallwayWalkTrigger> roomBorderTriggers;
     private bool                     cooling;
+    private bool                     transitionCompleted = false;
 
     public void Initialize(
         HallwayGrid               hallway,
@@ -53,14 +54,54 @@ public class HallwayEntryTrigger : MonoBehaviour
         }
 
         if (transitionCompleted) return;
-
         if (!IsOnHallwayOrAdjacentGrid(unit)) return;
+
+        if (!IsMovingTowardDestination(unit)) return;
 
         RoomManager.Instance?.SetTransitionLocked(true);
         StartCoroutine(TransitionAfterMove(unit));
     }
 
-    private bool transitionCompleted = false;
+    // ── Direction guard ────────────────────────────────────────────────────
+
+    private bool IsMovingTowardDestination(Unit unit)
+    {
+        var current = unit.GetCurrentRoomGrid();
+        if (current == null) return true; 
+
+        if (current == DestinationRoom.roomGrid) return false;
+        if (current.gameObject.name == DestinationRoom.roomGrid.gameObject.name) return false;
+
+        return true;
+    }
+
+    // ── Grid identity ──────────────────────────────────────────────────────
+
+    private bool IsOnHallwayOrAdjacentGrid(Unit unit)
+    {
+        var current = unit.GetCurrentRoomGrid();
+        if (current == null) return true;
+
+        if (Hallway?.RoomGrid != null)
+        {
+            if (current == Hallway.RoomGrid) return true;
+            if (current.gameObject.name == Hallway.RoomGrid.gameObject.name) return true;
+        }
+
+        if (Hallway != null)
+        {
+            var roomA = Hallway.RoomA?.roomGrid;
+            var roomB = Hallway.RoomB?.roomGrid;
+            if (roomA != null && (current == roomA || current.gameObject.name == roomA.gameObject.name))
+                return true;
+            if (roomB != null && (current == roomB || current.gameObject.name == roomB.gameObject.name))
+                return true;
+        }
+
+        return false;
+    }
+
+    // ── Transition ─────────────────────────────────────────────────────────
 
     private IEnumerator TransitionAfterMove(Unit unit)
     {
@@ -148,40 +189,6 @@ public class HallwayEntryTrigger : MonoBehaviour
         cooling = false;
     }
 
-    // ── Grid identity ──────────────────────────────────────────────────────
-
-    private bool IsOnDestinationGrid(Unit unit)
-    {
-        var current = unit.GetCurrentRoomGrid();
-        if (current == null) return false;
-        if (current == DestinationRoom.roomGrid) return true;
-        return current.gameObject.name == DestinationRoom.roomGrid.gameObject.name;
-    }
-
-    private bool IsOnHallwayOrAdjacentGrid(Unit unit)
-    {
-        var current = unit.GetCurrentRoomGrid();
-        if (current == null) return true;
-
-        if (Hallway?.RoomGrid != null)
-        {
-            if (current == Hallway.RoomGrid) return true;
-            if (current.gameObject.name == Hallway.RoomGrid.gameObject.name) return true;
-        }
-
-        if (Hallway != null)
-        {
-            var roomA = Hallway.RoomA?.roomGrid;
-            var roomB = Hallway.RoomB?.roomGrid;
-            if (roomA != null && (current == roomA || current.gameObject.name == roomA.gameObject.name))
-                return true;
-            if (roomB != null && (current == roomB || current.gameObject.name == roomB.gameObject.name))
-                return true;
-        }
-
-        return false;
-    }
-
     // ── Spawn position ─────────────────────────────────────────────────────
 
     private static Vector3 GetUnitCellCentreWorld(Unit unit)
@@ -190,7 +197,6 @@ public class HallwayEntryTrigger : MonoBehaviour
         if (grid != null)
             return grid.GetWorldPosition(unit.GetGridPosition());
 
-        // Fallback: strip visual offset from transform manually.
         Vector2 vo = unit.GetVisualOffset();
         return new Vector3(
             unit.transform.position.x - vo.x,
@@ -231,8 +237,8 @@ public class HallwayEntryTrigger : MonoBehaviour
 
             Vector3 gpWorld = grid.GetWorldPosition(gp);
             float   d       = Vector2.Distance(
-                new Vector2(worldPos.x,  worldPos.y),
-                new Vector2(gpWorld.x,   gpWorld.y));
+                new Vector2(worldPos.x, worldPos.y),
+                new Vector2(gpWorld.x,  gpWorld.y));
 
             if (d < bestDist) { bestDist = d; best = gp; }
         }
@@ -292,7 +298,6 @@ public class HallwayEntryTrigger : MonoBehaviour
             }
         }
 
-        // Unlock walk triggers
         if (roomBorderTriggers != null)
         {
             foreach (var wt in roomBorderTriggers)
@@ -324,11 +329,8 @@ public class HallwayEntryTrigger : MonoBehaviour
         }
 
         CameraController2D.Instance?.SetCombatState(false);
-
         StartCoroutine(InvalidateCacheAfterDoorsOpen());
-
         clearedRoom.MarkCleared();
-
         RoomManager.Instance?.NotifyRoomCleared(DestinationRoom);
 
         Debug.Log($"[HallwayEntryTrigger] Room cleared — doors opened, triggers reset.");
