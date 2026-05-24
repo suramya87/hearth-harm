@@ -11,16 +11,16 @@ public class UnitActionSystem : MonoBehaviour
 {
     public static UnitActionSystem Instance { get; private set; }
 
-    public event EventHandler OnSelectedUnitChanged;
-    public event EventHandler OnSelectedActionChanged;
+    public event EventHandler       OnSelectedUnitChanged;
+    public event EventHandler       OnSelectedActionChanged;
     public event EventHandler<bool> OnBusyChanged;
-    public event EventHandler OnActionStarted;
+    public event EventHandler       OnActionStarted;
 
-    [SerializeField] private Unit selectedUnit;
+    [SerializeField] private Unit      selectedUnit;
     [SerializeField] private LayerMask unitLayerMask;
 
     private BaseAction selectedAction;
-    private bool isBusy;
+    private bool       isBusy;
 
     public bool IsBusy => isBusy;
 
@@ -32,22 +32,19 @@ public class UnitActionSystem : MonoBehaviour
 
     private void Start()
     {
-        // In singleplayer find the unit immediately.
-        // In multiplayer we wait — the local player's Unit spawns after the level is ready.
         if (!GameManager.IsMultiplayer)
         {
             SetSelectedUnit(selectedUnit != null ? selectedUnit : FindAnyObjectByType<Unit>());
         }
         else
         {
-            // Poll until we find our owned unit.
             StartCoroutine(FindOwnedUnitCoroutine());
         }
     }
 
     private System.Collections.IEnumerator FindOwnedUnitCoroutine()
     {
-        Unit owned = null;
+        Unit  owned   = null;
         float timeout = 30f;
         float elapsed = 0f;
 
@@ -78,7 +75,7 @@ public class UnitActionSystem : MonoBehaviour
         if (!IsLocalPlayerTurn()) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
-        // In multiplayer, re-validate that we still have our owned unit selected.
+        // In multiplayer, re-validate ownership every frame.
         if (GameManager.IsMultiplayer)
         {
             if (selectedUnit == null || !IsOwnedByLocalPlayer(selectedUnit))
@@ -90,17 +87,21 @@ public class UnitActionSystem : MonoBehaviour
             }
         }
 
+        // Route input to the currently selected action.
         if (selectedAction is MoveAction moveAction)
         {
             moveAction.HandleActionInput();
         }
+        else if (selectedAction is CombatAction combatAction)
+        {
+            combatAction.HandleActionInput();
+        }
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    // ---- Public API ----
 
     public void SetSelectedUnit(Unit unit)
     {
-        // In multiplayer never let a client select a unit it doesn't own.
         if (GameManager.IsMultiplayer && unit != null && !IsOwnedByLocalPlayer(unit))
         {
             Debug.LogWarning($"[UnitActionSystem] Refused to select non-owned unit {unit.name}.");
@@ -127,6 +128,10 @@ public class UnitActionSystem : MonoBehaviour
     public Unit       GetSelectedUnit()   => selectedUnit;
     public BaseAction GetSelectedAction() => selectedAction;
 
+    /// <summary>
+    /// Executes an action. The action is expected to have already stored any
+    /// target information it needs (e.g. CombatAction stores pendingTargetGP).
+    /// </summary>
     public void TakeAction(BaseAction action, Action onComplete)
     {
         if (!IsLocalPlayerTurn()) return;
@@ -157,12 +162,8 @@ public class UnitActionSystem : MonoBehaviour
         OnBusyChanged?.Invoke(this, false);
     }
 
-    // ── Ownership helpers ──────────────────────────────────────────────────
+    // ---- Ownership helpers ----
 
-    /// <summary>
-    /// Returns the Unit owned by the local player (the one whose NetworkObject.IsOwner is true),
-    /// or any Unit in singleplayer.
-    /// </summary>
     public static Unit FindLocalOwnedUnit()
     {
         if (!GameManager.IsMultiplayer)
@@ -179,12 +180,11 @@ public class UnitActionSystem : MonoBehaviour
     {
         if (unit == null) return false;
         if (!GameManager.IsMultiplayer) return true;
-
         var netObj = unit.GetComponent<Unity.Netcode.NetworkObject>();
         return netObj != null && netObj.IsOwner;
     }
 
-    // ── Turn helpers ───────────────────────────────────────────────────────
+    // ---- Turn helpers ----
 
     private static bool IsLocalPlayerTurn()
     {

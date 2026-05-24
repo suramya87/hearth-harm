@@ -10,6 +10,11 @@ public class UnitActionSystemUI : MonoBehaviour
 
     private readonly List<ActionButtonUI> actionButtonUIList = new();
 
+    // Cached so we can unsubscribe from stamina events when the unit changes.
+    private PlayerStats subscribedStats;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+
     private void Start()
     {
         if (UnitActionSystem.Instance != null)
@@ -29,6 +34,7 @@ public class UnitActionSystemUI : MonoBehaviour
     private void OnDestroy()
     {
         LevelGenerator.OnLevelReady -= OnLevelReady;
+        UnsubscribeStamina();
 
         if (UnitActionSystem.Instance != null)
         {
@@ -51,8 +57,6 @@ public class UnitActionSystemUI : MonoBehaviour
         UpdateSelectedVisual();
     }
 
-    private void Update() => UpdateSelectedVisual();
-
     // ── Button creation ────────────────────────────────────────────────────
 
     private void CreateUnitActionButtons()
@@ -65,15 +69,21 @@ public class UnitActionSystemUI : MonoBehaviour
 
         foreach (Transform child in actionButtonContainerTransform)
             Destroy(child.gameObject);
-
         actionButtonUIList.Clear();
+
+        UnsubscribeStamina();
 
         Unit unit = UnitActionSystem.Instance?.GetSelectedUnit();
         if (unit == null) return;
 
+        // Subscribe to stamina changes so affordability updates in real time.
+        subscribedStats = unit.GetComponent<PlayerStats>();
+        if (subscribedStats != null)
+            subscribedStats.OnStaminaChanged += OnStaminaChanged;
+
         foreach (BaseAction action in unit.GetBaseActionArray())
         {
-            Transform t    = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
+            Transform      t  = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
             ActionButtonUI ui = t.GetComponent<ActionButtonUI>();
             if (ui != null)
             {
@@ -89,6 +99,20 @@ public class UnitActionSystemUI : MonoBehaviour
             btn?.UpdateSelectedVisual();
     }
 
+    // ── Stamina subscription ───────────────────────────────────────────────
+
+    private void UnsubscribeStamina()
+    {
+        if (subscribedStats != null)
+            subscribedStats.OnStaminaChanged -= OnStaminaChanged;
+        subscribedStats = null;
+    }
+
+    private void OnStaminaChanged(int current, int max)
+    {
+        UpdateSelectedVisual();
+    }
+
     // ── Events ─────────────────────────────────────────────────────────────
 
     private void OnSelectedUnitChanged(object sender, EventArgs e)
@@ -97,5 +121,8 @@ public class UnitActionSystemUI : MonoBehaviour
         UpdateSelectedVisual();
     }
 
-    private void OnSelectedActionChanged(object sender, EventArgs e) => UpdateSelectedVisual();
+    private void OnSelectedActionChanged(object sender, EventArgs e)
+    {
+        UpdateSelectedVisual();
+    }
 }
