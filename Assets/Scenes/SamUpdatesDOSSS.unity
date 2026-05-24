@@ -439,6 +439,26 @@ PrefabInstance:
       propertyPath: overlaySortingOrder
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: spriteEnd
+      value: 
+      objectReference: {fileID: 503088723, guid: cfbabcca48792234e89c252a30ce4c29, type: 3}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: spriteBoss
+      value: 
+      objectReference: {fileID: -1469393323, guid: cfbabcca48792234e89c252a30ce4c29, type: 3}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: spriteStart
+      value: 
+      objectReference: {fileID: -2278566297644842510, guid: cfbabcca48792234e89c252a30ce4c29, type: 3}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: spriteDefault
+      value: 
+      objectReference: {fileID: -1903729651, guid: cfbabcca48792234e89c252a30ce4c29, type: 3}
+    - target: {fileID: 6111345872895916054, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: spriteSpecial
+      value: 
+      objectReference: {fileID: 1021528191, guid: cfbabcca48792234e89c252a30ce4c29, type: 3}
     - target: {fileID: 6479582309180018011, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: m_LocalPosition.x
       value: 960
