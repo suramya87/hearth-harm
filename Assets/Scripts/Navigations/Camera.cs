@@ -8,7 +8,10 @@ using UnityEngine.EventSystems;
 ///   Room mode   (hasBounds = true)  — camera is clamped within room bounds.
 ///                                     Player can pan freely within bounds.
 ///   Hallway mode (hasBounds = false) — camera continuously follows the player.
-///                                     No clamping, no manual pan (player is moving anyway).
+///                                     No clamping, no manual pan.
+///
+/// MULTIPLAYER: Always follows the LOCAL owned player via PlayerTarget.Instance,
+/// which only registers the owned NetworkObject on each client.
 /// </summary>
 public class CameraController2D : MonoBehaviour
 {
@@ -32,7 +35,7 @@ public class CameraController2D : MonoBehaviour
     [SerializeField] private float orthoMax  = 16f;
 
     [Header("Snap / Follow")]
-    [SerializeField] private float snapSmoothness    = 6f;
+    [SerializeField] private float snapSmoothness     = 6f;
     [SerializeField] private float hallwayFollowSpeed = 10f;
 
     [Header("Turn Follow")]
@@ -60,8 +63,8 @@ public class CameraController2D : MonoBehaviour
     private Vector2 lastMouse;
 
     private Bounds roomBounds;
-    private bool   hasBounds;        // false = hallway mode
-    private bool   followingPlayer;  // true = continuously follow local player
+    private bool   hasBounds;
+    private bool   followingPlayer;
 
     private float shakeTime, shakeDur, shakeAmp;
 
@@ -80,8 +83,16 @@ public class CameraController2D : MonoBehaviour
     {
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyTurnStarted += HandleEnemyTurnStarted;
+
+        // Subscribe to both turn systems so it works in SP and MP.
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnPlayerTurnBegin += HandlePlayerTurnBegin;
+
+        if (NetworkedTurnSystem.Instance != null)
+            NetworkedTurnSystem.Instance.OnPlayerTurnBegin += HandlePlayerTurnBegin;
+
+        // Wait for the local player to spawn then snap to it.
+        StartCoroutine(SnapWhenPlayerReady());
     }
 
     private void OnDestroy()
@@ -90,13 +101,44 @@ public class CameraController2D : MonoBehaviour
             EnemyManager.Instance.OnEnemyTurnStarted -= HandleEnemyTurnStarted;
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnPlayerTurnBegin -= HandlePlayerTurnBegin;
+        if (NetworkedTurnSystem.Instance != null)
+            NetworkedTurnSystem.Instance.OnPlayerTurnBegin -= HandlePlayerTurnBegin;
+    }
+
+    /// <summary>
+    /// Poll until the local player appears then snap the camera to it.
+    /// Needed in multiplayer where the player spawns several frames after
+    /// the level is ready.
+    /// </summary>
+    private System.Collections.IEnumerator SnapWhenPlayerReady()
+    {
+        float timeout = 30f;
+        float elapsed = 0f;
+
+        while (elapsed < timeout)
+        {
+            var player = FindLocalPlayer();
+            if (player != null)
+            {
+                Vector3 target = player.position;
+                target.z = basePos.z;
+                basePos  = target;
+                transform.position = basePos;
+                snapping = false;
+                Debug.Log($"[CameraController2D] Snapped to local player at {target}");
+                yield break;
+            }
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        Debug.LogWarning("[CameraController2D] Timed out waiting for local player.");
     }
 
     // ── Update ─────────────────────────────────────────────────────────────
 
     private void Update()
     {
-        // ── Hallway follow mode — overrides everything else ────────────────
         if (followingPlayer)
         {
             FollowLocalPlayer();
@@ -105,7 +147,6 @@ public class CameraController2D : MonoBehaviour
             return;
         }
 
-        // ── Normal room mode ───────────────────────────────────────────────
         if (followTarget != null)
         {
             if (!cameraInputLocked && HasManualInput())
@@ -116,7 +157,6 @@ public class CameraController2D : MonoBehaviour
             else
             {
                 DoFollowTarget();
-
                 if (unlockWhenCentered && IsCenteredOnFollowTarget())
                 {
                     followTarget       = null;
@@ -136,11 +176,8 @@ public class CameraController2D : MonoBehaviour
                 DoPan();
         }
 
-        if (!cameraInputLocked)
-            DoZoom();
-
-        if (hasBounds)
-            ClampToRoom();
+        if (!cameraInputLocked) DoZoom();
+        if (hasBounds)          ClampToRoom();
 
         transform.position = basePos;
     }
@@ -153,23 +190,15 @@ public class CameraController2D : MonoBehaviour
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Enter room mode: apply bounds, stop hallway follow, and snap to player.
-    /// Always snaps regardless of combat state so the camera never stays
-    /// locked on the previous room's bounds after a transition.
-    /// </summary>
     public void SetRoomBounds(Bounds b)
     {
         roomBounds      = b;
         hasBounds       = true;
-        followingPlayer = false;  // exit hallway follow mode immediately
-        followTarget    = null;   // clear any enemy-turn follow target
-        snapping        = true;   // always snap to player when bounds change
+        followingPlayer = false;
+        followTarget    = null;
+        snapping        = true;
     }
 
-    /// <summary>
-    /// Enter hallway mode: clear bounds and continuously follow the player.
-    /// </summary>
     public void ClearRoomBounds()
     {
         hasBounds       = false;
@@ -178,15 +207,11 @@ public class CameraController2D : MonoBehaviour
         followTarget    = null;
     }
 
-    /// <summary>
-    /// One-shot snap toward the player (room mode only).
-    /// No-ops in hallway mode since follow is already continuous.
-    /// </summary>
     public void SnapToTarget()
     {
         if (followingPlayer) return;
         snapping     = true;
-        followTarget = null; // don't let an enemy-follow target fight the snap
+        followTarget = null;
     }
 
     public void TriggerShake(float amplitude, float duration)
@@ -205,18 +230,12 @@ public class CameraController2D : MonoBehaviour
         snapping           = false;
     }
 
-    /// <summary>
-    /// Called after room transition when combat state is known.
-    /// In combat: snap to player and lock panning.
-    /// Out of combat: snap to player and allow panning.
-    /// Does NOT re-enter hallway mode — bounds must already be set.
-    /// </summary>
     public void SetCombatState(bool combat)
     {
         inCombat        = combat;
-        followingPlayer = false;  // always room mode when this is called
+        followingPlayer = false;
         followTarget    = null;
-        snapping        = true;   // snap to player in both combat and non-combat
+        snapping        = true;
     }
 
     public void FollowUntilArrived(Transform target)
@@ -235,13 +254,12 @@ public class CameraController2D : MonoBehaviour
         unlockWhenCentered = false;
     }
 
-    // ── Hallway continuous follow ──────────────────────────────────────────
+    // ── Hallway follow ─────────────────────────────────────────────────────
 
     private void FollowLocalPlayer()
     {
         var player = FindLocalPlayer();
         if (player == null) return;
-
         Vector3 target = player.position;
         target.z = basePos.z;
         basePos  = Vector3.Lerp(basePos, target, hallwayFollowSpeed * Time.deltaTime);
@@ -296,7 +314,6 @@ public class CameraController2D : MonoBehaviour
     {
         var player = FindLocalPlayer();
         if (player == null) { snapping = false; return; }
-
         Vector3 target = player.position;
         target.z = basePos.z;
         basePos  = Vector3.Lerp(basePos, target, snapSmoothness * Time.deltaTime);
@@ -379,9 +396,30 @@ public class CameraController2D : MonoBehaviour
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Always returns the LOCAL player's transform — the one this client owns.
+    /// In singleplayer returns the only player. In multiplayer returns the
+    /// owned NetworkObject's transform.
+    /// </summary>
     private static Transform FindLocalPlayer()
     {
+        // PlayerTarget.Instance is set only by the owned player prefab instance.
         var pt = PlayerTarget.Instance;
-        return pt != null ? pt.transform : null;
+        if (pt != null) return pt.transform;
+
+        // Fallback: search directly (singleplayer safety net).
+        if (!GameManager.IsMultiplayer)
+        {
+            var unit = Object.FindAnyObjectByType<Unit>();
+            return unit != null ? unit.transform : null;
+        }
+
+        // Multiplayer fallback: find by NetworkObject ownership.
+        foreach (var u in Object.FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        {
+            var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
+            if (netObj != null && netObj.IsOwner) return u.transform;
+        }
+        return null;
     }
 }

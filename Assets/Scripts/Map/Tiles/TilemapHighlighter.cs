@@ -2,15 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Paints movement/attack highlight tiles in the overlay tilemap.
-/// In multiplayer only highlights for the locally owned unit.
-/// </summary>
 public class TilemapHighlighter : MonoBehaviour
 {
     public static TilemapHighlighter Instance { get; private set; }
 
-    [Header("Overlay tile — plain white 1×1 sprite TileBase")]
+    [Header("Overlay tile — plain white 1x1 sprite TileBase")]
     [SerializeField] private TileBase overlayTile;
 
     [Header("Highlight colours")]
@@ -35,7 +31,7 @@ public class TilemapHighlighter : MonoBehaviour
     private void Awake()
     {
         Instance = this;
-        EnsureOverlay();
+        BuildOverlay(); // always build fresh — no DontDestroyOnLoad
     }
 
     private void OnEnable()
@@ -70,31 +66,17 @@ public class TilemapHighlighter : MonoBehaviour
         if (overlayRoot != null) Destroy(overlayRoot);
     }
 
-    private void OnLevelReady()                             => SafeClear();
-    private void OnRoomChanged(LevelGenerator.PlacedRoom _) => SafeClear();
+    private void OnLevelReady()                              => SafeClear();
+    private void OnRoomChanged(LevelGenerator.PlacedRoom _)  => SafeClear();
 
     // ── Overlay ────────────────────────────────────────────────────────────
 
-    private void EnsureOverlay()
-    {
-        if (overlayRoot != null && overlayTilemap != null) return;
-
-        var existing = GameObject.Find("__HighlightOverlay__");
-        if (existing != null)
-        {
-            overlayRoot    = existing;
-            overlayGrid    = existing.GetComponent<Grid>();
-            overlayTilemap = existing.GetComponentInChildren<Tilemap>();
-            if (overlayTilemap != null) return;
-            Destroy(existing);
-        }
-        BuildOverlay();
-    }
-
     private void BuildOverlay()
     {
+        if (overlayRoot != null) Destroy(overlayRoot);
+
         overlayRoot = new GameObject("__HighlightOverlay__");
-        DontDestroyOnLoad(overlayRoot);
+        // Do NOT DontDestroyOnLoad — each scene/client gets its own overlay.
 
         overlayGrid          = overlayRoot.AddComponent<Grid>();
         overlayGrid.cellSize = new Vector3(1f, 1f, 0f);
@@ -111,22 +93,19 @@ public class TilemapHighlighter : MonoBehaviour
 
     private void SafeClear()
     {
-        if (overlayTilemap != null && overlayRoot != null)
-            overlayTilemap.ClearAllTiles();
+        if (overlayTilemap != null) overlayTilemap.ClearAllTiles();
     }
 
     // ── Update ─────────────────────────────────────────────────────────────
 
     private void Update()
     {
-        EnsureOverlay();
         SafeClear();
-
         if (isSystemBusy) return;
 
         GridCostVisualizer.Instance?.ClearAll();
 
-        // Always use LOCAL owned unit for highlights.
+        // Get the LOCAL player's unit — each client highlights for their own unit.
         var unit     = FindLocalUnit();
         var unitGrid = unit?.GetCurrentRoomGrid();
 
@@ -140,18 +119,14 @@ public class TilemapHighlighter : MonoBehaviour
 
         if (!IsPlayerPhaseNow()) return;
 
+        // Get the selected action for the LOCAL unit specifically.
+        // In multiplayer UnitActionSystem.selectedUnit is already the owned unit,
+        // but double-check to be safe.
         var action = UnitActionSystem.Instance?.GetSelectedAction();
         if (action == null) return;
 
-        // In multiplayer only highlight for our own action.
-        if (GameManager.IsMultiplayer)
-        {
-            var actionUnit = action.GetUnit();
-            var netObj = actionUnit != null
-                ? actionUnit.GetComponent<Unity.Netcode.NetworkObject>()
-                : null;
-            if (netObj == null || !netObj.IsOwner) return;
-        }
+        // Make sure the action belongs to our local unit.
+        if (unit != null && action.GetUnit() != unit) return;
 
         Vector3 mouseWorld = GetMouseWorldRaw();
 
@@ -189,7 +164,9 @@ public class TilemapHighlighter : MonoBehaviour
         {
             var hoverGP = hoverGrid.GetGridPosition(mouseWorld);
             if (hoverGrid.IsValidGridPosition(hoverGP))
-                PaintOverlayCell(WorldToOverlayCell(hoverGrid.GetWorldPosition(hoverGP)), hoverColor);
+                PaintOverlayCell(
+                    WorldToOverlayCell(hoverGrid.GetWorldPosition(hoverGP)),
+                    hoverColor);
         }
     }
 
@@ -229,6 +206,7 @@ public class TilemapHighlighter : MonoBehaviour
 
     private static Vector3 GetMouseWorldRaw()
     {
+        if (Camera.main == null) return Vector3.zero;
         Vector3 raw = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         return new Vector3(raw.x, raw.y, 0f);
     }
@@ -254,7 +232,7 @@ public class TilemapHighlighter : MonoBehaviour
         previewEnemyPositions = null;
     }
 
-    // ── Phase / unit helpers ───────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────────────────
 
     private static bool IsPlayerPhaseNow()
     {
@@ -264,8 +242,14 @@ public class TilemapHighlighter : MonoBehaviour
         return TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
     }
 
+    /// <summary>Returns the local client's owned Unit (singleplayer or multiplayer).</summary>
     private static Unit FindLocalUnit()
     {
+        // UnitActionSystem already tracks the owned unit — use it directly.
+        var fromActionSystem = UnitActionSystem.Instance?.GetSelectedUnit();
+        if (fromActionSystem != null) return fromActionSystem;
+
+        // Fallback: search by ownership.
         if (!GameManager.IsMultiplayer)
             return FindAnyObjectByType<Unit>();
 

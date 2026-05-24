@@ -8,9 +8,9 @@ public class MinimapUI : MonoBehaviour
 {
     [Header("Minimap")]
     [SerializeField] private RectTransform minimapContainer;
-    [SerializeField] private float dotSize           = 14f;
-    [SerializeField] private float dotSpacing        = 4f;
-    [SerializeField] private Vector2 minimapDisplaySize = new(200f, 200f);
+    [SerializeField] private float         dotSize           = 14f;
+    [SerializeField] private float         dotSpacing        = 4f;
+    [SerializeField] private Vector2       minimapDisplaySize = new(200f, 200f);
 
     [Header("Room Sprites")]
     [SerializeField] private Sprite spriteDefault;
@@ -37,11 +37,11 @@ public class MinimapUI : MonoBehaviour
 
     // ── Runtime ────────────────────────────────────────────────────────────
 
-    private LevelGenerator                                        gen;
-    private readonly HashSet<LevelGenerator.PlacedRoom>           discovered = new();
-    private readonly HashSet<LevelGenerator.PlacedRoom>           cleared    = new();
-    private readonly HashSet<LevelGenerator.PlacedRoom>           glimpsed   = new();
-    private readonly Dictionary<LevelGenerator.PlacedRoom, Image> dots       = new();
+    private LevelGenerator                                         gen;
+    private readonly HashSet<LevelGenerator.PlacedRoom>            discovered = new();
+    private readonly HashSet<LevelGenerator.PlacedRoom>            cleared    = new();
+    private readonly HashSet<LevelGenerator.PlacedRoom>            glimpsed   = new();
+    private readonly Dictionary<LevelGenerator.PlacedRoom, Image>  dots       = new();
     private bool _revealAll = false;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -54,6 +54,15 @@ public class MinimapUI : MonoBehaviour
         westButton?.onClick.AddListener(()  => Travel(LevelGenerator.Direction.West));
     }
 
+    private void Start()
+    {
+        // If the level already generated before we enabled (e.g. scene reload),
+        // try to build immediately.
+        gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen != null && gen.GetAllRooms()?.Count > 0)
+            OnLevelReady();
+    }
+
     private void OnEnable()
     {
         LevelGenerator.OnLevelReady  += OnLevelReady;
@@ -64,6 +73,8 @@ public class MinimapUI : MonoBehaviour
             EnemyManager.Instance.OnEnemyListChanged += Refresh;
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged += OnTurnChanged;
+        if (NetworkedTurnSystem.Instance != null)
+            NetworkedTurnSystem.Instance.OnTurnChanged += OnTurnChanged;
     }
 
     private void OnDisable()
@@ -76,6 +87,8 @@ public class MinimapUI : MonoBehaviour
             EnemyManager.Instance.OnEnemyListChanged -= Refresh;
         if (TurnSystem.Instance != null)
             TurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
+        if (NetworkedTurnSystem.Instance != null)
+            NetworkedTurnSystem.Instance.OnTurnChanged -= OnTurnChanged;
     }
 
     private void OnTurnChanged(object sender, EventArgs e) => Refresh();
@@ -91,6 +104,7 @@ public class MinimapUI : MonoBehaviour
         _revealAll = false;
         BuildMinimap();
 
+        // Start room is always discovered and cleared from the start.
         var startRoom = gen?.GetAllRooms()
             ?.Find(r => r.prefabData.roomType == LevelGenerator.RoomType.Start);
         if (startRoom != null)
@@ -106,24 +120,14 @@ public class MinimapUI : MonoBehaviour
 
     private void OnRoomChanged(LevelGenerator.PlacedRoom room)
     {
-        if (room != null)
-        {
-            discovered.Add(room);
-        }
-
+        if (room != null) discovered.Add(room);
         Refresh();
     }
 
-    // ── Room cleared callback ──────────────────────────────────────────────
-
-    /// <summary>
-    /// Called by RoomManager.NotifyRoomCleared, which is triggered from
-    /// HallwayEntryTrigger.HandleRoomCleared after the last enemy dies.
-    /// </summary>
     private void OnRoomClearedCallback(LevelGenerator.PlacedRoom room)
     {
         if (room == null) return;
-        discovered.Add(room);  
+        discovered.Add(room);
         cleared.Add(room);
         Refresh();
     }
@@ -144,7 +148,11 @@ public class MinimapUI : MonoBehaviour
         if (gen == null || minimapContainer == null) return;
 
         var rooms = gen.GetAllRooms();
-        if (rooms == null || rooms.Count == 0) return;
+        if (rooms == null || rooms.Count == 0)
+        {
+            Debug.LogWarning("[MinimapUI] BuildMinimap: no rooms found.");
+            return;
+        }
 
         int minX = int.MaxValue, maxX = int.MinValue;
         int minY = int.MaxValue, maxY = int.MinValue;
@@ -164,9 +172,14 @@ public class MinimapUI : MonoBehaviour
         float gridW         = maxX - minX + 1;
         float gridH         = maxY - minY + 1;
         float availableStep = Mathf.Min(
-            minimapDisplaySize.x / gridW, minimapDisplaySize.y / gridH);
+            minimapDisplaySize.x / gridW,
+            minimapDisplaySize.y / gridH);
         float usedStep    = Mathf.Min(dotSize + dotSpacing, availableStep);
         float usedDotSize = usedStep - dotSpacing;
+
+        // Pick a fallback sprite in case specific ones are missing.
+        Sprite fallback = spriteDefault != null ? spriteDefault :
+                          spriteStart   != null ? spriteStart   : null;
 
         foreach (var room in rooms)
         {
@@ -183,27 +196,45 @@ public class MinimapUI : MonoBehaviour
             rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,   usedDotSize);
 
             var img = dot.GetComponent<Image>();
-            img.sprite = room.prefabData.roomType switch
+
+            // Assign the right sprite, falling back gracefully so dots always show.
+            Sprite chosen = room.prefabData.roomType switch
             {
-                LevelGenerator.RoomType.Start   => spriteStart,
-                LevelGenerator.RoomType.End     => spriteEnd,
-                LevelGenerator.RoomType.Boss    => spriteBoss,
-                LevelGenerator.RoomType.Special => spriteSpecial,
-                _                               => spriteDefault
+                LevelGenerator.RoomType.Start   => spriteStart   ?? fallback,
+                LevelGenerator.RoomType.End     => spriteEnd     ?? fallback,
+                LevelGenerator.RoomType.Boss    => spriteBoss    ?? fallback,
+                LevelGenerator.RoomType.Special => spriteSpecial ?? fallback,
+                _                               => spriteDefault ?? fallback
             };
-            img.type           = Image.Type.Simple;
-            img.preserveAspect = true;
-            img.color          = tintFog;
+
+            if (chosen != null)
+            {
+                img.sprite         = chosen;
+                img.type           = Image.Type.Simple;
+                img.preserveAspect = true;
+            }
+            else
+            {
+                // No sprites assigned at all — use a solid white square so
+                // the dot is still visible (tint will colour it correctly).
+                img.sprite = null;
+                img.color  = Color.white;
+            }
+
+            // Start fully visible but tinted fog — Refresh() will correct it.
+            img.color = tintFog;
 
             dots[room] = img;
         }
+
+        Debug.Log($"[MinimapUI] Built minimap with {dots.Count} dots.");
     }
 
     // ── Refresh ────────────────────────────────────────────────────────────
 
     public void Refresh()
     {
-        if (gen == null) return;
+        if (gen == null || dots.Count == 0) return;
 
         var currentRoom = RoomManager.Instance?.GetCurrentRoom();
 
@@ -241,7 +272,7 @@ public class MinimapUI : MonoBehaviour
         UpdateButtons(currentRoom);
     }
 
-    // ── Fog range ─────────────────────────────────────────────────────────
+    // ── Fog range ──────────────────────────────────────────────────────────
 
     private bool IsInRange(
         LevelGenerator.PlacedRoom room,
@@ -325,15 +356,16 @@ public class MinimapUI : MonoBehaviour
         var target = gen?.GetConnectedRoom(current, dir);
         if (target == null) return;
 
+        var entryDir = gen.GetOppositeDirection(dir);
+        var spawnPos = GetSpawnPos(target, entryDir);
+
         if (GameManager.IsMultiplayer)
         {
             foreach (var bridge in
                 FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
             {
                 if (!bridge.IsOwner) continue;
-                bridge.TransitionToRoom(
-                    target.roomGrid,
-                    GetSpawnPos(target, gen.GetOppositeDirection(dir)));
+                bridge.TransitionToRoom(target.roomGrid, spawnPos);
                 break;
             }
         }
@@ -345,11 +377,8 @@ public class MinimapUI : MonoBehaviour
             SpawnEnemiesViaButton(target);
 
             RoomManager.Instance.SetCurrentRoom(target);
-            player.PlaceInRoom(
-                target.roomGrid,
-                GetSpawnPos(target, gen.GetOppositeDirection(dir)));
+            player.PlaceInRoom(target.roomGrid, spawnPos);
             CameraController2D.Instance?.SnapToTarget();
-
             player.GetMoveAction()?.InvalidateCache();
         }
 
@@ -367,9 +396,7 @@ public class MinimapUI : MonoBehaviour
         var spawner = FindAnyObjectByType<EnemySpawner>();
         spawner?.SpawnForRoom(room);
 
-        bool hasEnemies =
-            EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0;
-        if (hasEnemies)
+        if (EnemyManager.Instance.GetEnemiesInRoom(room.roomGrid).Count > 0)
             room.connector?.CloseAllDoors();
     }
 

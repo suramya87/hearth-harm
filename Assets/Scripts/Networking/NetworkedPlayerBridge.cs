@@ -3,19 +3,11 @@ using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
-/// <summary>
-/// Bridges the local Unit/RoomGrid state to all peers via NGO NetworkVariables.
-///
-/// Key rules:
-///   • Only the OWNER sends RPCs or changes NetworkVariables.
-///   • Non-owner clients receive the synced state and apply it silently.
-///   • Camera / RoomManager are updated only on the owning client.
-/// </summary>
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(Unit))]
 public class NetworkedPlayerBridge : NetworkBehaviour
 {
-    // ── Network state ──────────────────────────────────────────────────────
+    // ── Network variables ──────────────────────────────────────────────────
 
     private NetworkVariable<FixedString64Bytes> currentRoomName = new("",
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -45,16 +37,14 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridX.OnValueChanged           += OnGridPositionChanged;
         gridY.OnValueChanged           += OnGridPositionChanged;
 
-        // If the server already set position before we spawned, apply it now.
+        // Apply any position the server already set before we spawned.
         string existing = currentRoomName.Value.ToString();
         if (!string.IsNullOrEmpty(existing))
             ApplyRoomSync(existing, gridX.Value, gridY.Value);
 
-        // Only the owner needs the camera and action system wired up.
+        // Only the owner needs local systems wired up.
         if (IsOwner)
-        {
             StartCoroutine(WireUpOwnerSystems());
-        }
     }
 
     public override void OnNetworkDespawn()
@@ -67,17 +57,33 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         syncPending = false;
     }
 
-    // ── Owner setup coroutine ──────────────────────────────────────────────
+    // ── Owner setup ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// After spawn, wait for the level to be ready and then register this unit
-    /// with UnitActionSystem so the owning client can control it.
+    /// Waits until:
+    ///   1. The unit is placed in a room (isInitialized)
+    ///   2. UnitActionSystem.Instance exists
+    /// Then registers the unit so the client can move it.
     /// </summary>
     private IEnumerator WireUpOwnerSystems()
     {
-        // Wait until the unit is placed in a room.
+        // Wait for UnitActionSystem to exist (it's a scene singleton).
         float timeout = 30f;
         float elapsed = 0f;
+        while (UnitActionSystem.Instance == null && elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        if (UnitActionSystem.Instance == null)
+        {
+            Debug.LogWarning("[NetworkedPlayerBridge] UnitActionSystem never found.");
+            yield break;
+        }
+
+        // Wait for the unit to be placed in a room.
+        elapsed = 0f;
         while (!unit.IsInitialized() && elapsed < timeout)
         {
             yield return new WaitForSeconds(0.1f);
@@ -86,13 +92,29 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         if (!unit.IsInitialized())
         {
-            Debug.LogWarning("[NetworkedPlayerBridge] Unit never initialized — owner systems not wired.");
+            Debug.LogWarning("[NetworkedPlayerBridge] Unit never initialized.");
             yield break;
         }
 
-        // Register with UnitActionSystem (it may have set itself up with a different unit already).
-        if (UnitActionSystem.Instance != null)
-            UnitActionSystem.Instance.SetSelectedUnit(unit);
+        // Register with local systems.
+        UnitActionSystem.Instance.SetSelectedUnit(unit);
+
+        // Register PlayerTarget so camera and enemies use the right player.
+        var pt = GetComponent<PlayerTarget>();
+        if (pt == null) pt = gameObject.AddComponent<PlayerTarget>();
+        PlayerTarget.ForceRegister(pt, unit);
+
+        // Snap camera to our player.
+        CameraController2D.Instance?.SnapToTarget();
+
+        // Set RoomManager to our current room.
+        var roomGrid = unit.GetCurrentRoomGrid();
+        if (roomGrid != null)
+        {
+            var placed = FindPlacedRoomForGrid(roomGrid);
+            if (placed != null)
+                RoomManager.Instance?.SetCurrentRoom(placed);
+        }
 
         Debug.Log($"[NetworkedPlayerBridge] Owner systems wired for {gameObject.name}");
     }
@@ -102,16 +124,14 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     public string       GetCurrentRoomName()     => currentRoomName.Value.ToString();
     public GridPosition GetNetworkGridPosition()  => new(gridX.Value, gridY.Value);
 
-    // ── Called by MoveAction at end of move coroutine (owner only) ─────────
-
+    // Called by MoveAction at end of move coroutine (owner only).
     public void SyncGridPosition(RoomGrid room, GridPosition pos)
     {
         if (!IsOwner || isTransitioning) return;
         RequestMoveServerRpc(room.gameObject.name, pos.x, pos.y);
     }
 
-    // ── Called by NetworkedPlayerSpawner after initial spawn (server only) ─
-
+    // Called by NetworkedPlayerSpawner after initial spawn (server only).
     public void InitialPlacement(RoomGrid room, GridPosition pos)
     {
         if (!GameManager.IsMultiplayer || !IsServer) return;
@@ -130,7 +150,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         ApplyRoomSync(roomName, x, y);
 
-        // Owner: also set camera + RoomManager.
         if (IsOwner)
         {
             var room = FindRoomGridByName(roomName);
@@ -140,12 +159,11 @@ public class NetworkedPlayerBridge : NetworkBehaviour
                 if (placed != null) RoomManager.Instance?.SetCurrentRoom(placed);
             }
             CameraController2D.Instance?.SnapToTarget();
-            Debug.Log($"[NetworkedPlayerBridge] Owner placed in room {roomName} at ({x},{y})");
+            Debug.Log($"[NetworkedPlayerBridge] Owner placed in {roomName} at ({x},{y})");
         }
     }
 
-    // ── Called by RoomDoor / hallway triggers in multiplayer ──────────────
-
+    // Called by hallway triggers / minimap buttons in multiplayer.
     public void TransitionToRoom(RoomGrid newRoom, GridPosition spawnPos)
     {
         if (!GameManager.IsMultiplayer)
@@ -193,13 +211,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     [ClientRpc]
     private void BroadcastRoomTransitionClientRpc(string roomName, int spawnX, int spawnY)
     {
-        // Owner already applied locally in TransitionToRoom.
-        if (IsOwner) return;
+        if (IsOwner) return; // Owner already applied locally.
 
         ApplyRoomSync(roomName, spawnX, spawnY);
 
-        // If this happens to be our LOCAL player on a non-owning client, update camera.
-        // (Normally this doesn't happen — the owner always applies locally — but guard anyway.)
         if (IsLocalPlayer)
         {
             var room = FindRoomGridByName(roomName);
@@ -240,7 +255,7 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             ApplyRoomSync(roomName, gridX.Value, gridY.Value);
     }
 
-    // ── Core sync (visual position, no camera) ─────────────────────────────
+    // ── Core sync ──────────────────────────────────────────────────────────
 
     private void ApplyRoomSync(string roomName, int x, int y)
     {
@@ -256,7 +271,7 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         unit.IsSyncingFromNetwork = false;
     }
 
-    // ── Damage RPC (owner-initiated, server applies) ──────────────────────
+    // ── Damage RPCs ────────────────────────────────────────────────────────
 
     [ServerRpc(RequireOwnership = false)]
     public void RequestApplyDamageServerRpc(int[] posX, int[] posY, int damage)

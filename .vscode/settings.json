@@ -67,6 +67,6 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "Hearth_Harm.slnx",
+    "dotnet.defaultSolution": "Hearth-Harm.slnx",
     "dotnet.enableWorkspaceBasedDevelopment": false
 }

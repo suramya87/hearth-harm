@@ -1,16 +1,9 @@
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
-/// Tracks the player Unit that enemies should target.
-///
-/// In singleplayer this is the only Unit in the scene.
-/// In multiplayer each peer has ONE local owned Unit — enemies running on
-/// the SERVER target the nearest unit in the room, so this singleton is
-/// used only for local queries (camera follow, UI, etc.).
-///
-/// Place this component on a persistent GameObject (e.g. GameManager) or
-/// on each player prefab; in the latter case the most recently spawned
-/// owned unit wins.
+/// Lives on the player prefab. The static Instance always points to the
+/// LOCAL client's own copy — non-owned instances never register.
 /// </summary>
 public class PlayerTarget : MonoBehaviour
 {
@@ -18,14 +11,16 @@ public class PlayerTarget : MonoBehaviour
 
     private Unit trackedUnit;
 
-    private void Awake()
+    private void Start()
     {
-        if (Instance != null && Instance != this)
-        {
-            // Allow the newest instance to win (e.g. after level reload).
-            Destroy(Instance.gameObject.GetComponent<PlayerTarget>());
-        }
-        Instance = this;
+        // Only register if this is the local player's object.
+        var netObj = GetComponent<NetworkObject>();
+        bool isLocal = netObj == null || netObj.IsOwner;
+        if (!isLocal) return;
+
+        Instance    = this;
+        trackedUnit = GetComponent<Unit>();
+        Debug.Log($"[PlayerTarget] Registered local player: {gameObject.name}");
     }
 
     private void OnDestroy()
@@ -33,44 +28,27 @@ public class PlayerTarget : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
     /// <summary>
-    /// Register a unit as the local player target.
-    /// Called by the Unit itself (or NetworkedPlayerBridge) after spawn.
+    /// Called by Unit.RegisterWithLocalSystems() to force registration
+    /// immediately after placement (before Start() may run on late-spawned objects).
     /// </summary>
-    public void Register(Unit unit) => trackedUnit = unit;
-
-    /// <summary>Returns the tracked local unit, falling back to a scene search.</summary>
-    public Unit GetUnit()
+    public static void ForceRegister(PlayerTarget pt, Unit unit)
     {
-        if (trackedUnit != null) return trackedUnit;
-
-        if (!GameManager.IsMultiplayer)
-        {
-            trackedUnit = FindAnyObjectByType<Unit>();
-            return trackedUnit;
-        }
-
-        // Multiplayer: find the owned unit.
-        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
-        {
-            var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
-            if (netObj != null && netObj.IsOwner)
-            {
-                trackedUnit = u;
-                return trackedUnit;
-            }
-        }
-        return null;
+        Instance = pt;
+        pt.trackedUnit = unit;
+        Debug.Log($"[PlayerTarget] Force-registered: {unit.gameObject.name}");
     }
 
-    /// <summary>True if the tracked unit is currently in the given room.</summary>
+    // ── Public API ─────────────────────────────────────────────────────────
+
+    public Unit      GetUnit()      => trackedUnit;
+    public Transform GetTransform() => transform;
+
     public bool IsInRoom(RoomGrid room)
     {
-        var u = GetUnit();
-        if (u == null || room == null) return false;
-        return u.GetCurrentRoomGrid() == room ||
-               u.GetCurrentRoomGrid()?.gameObject.name == room.gameObject.name;
+        if (trackedUnit == null || room == null) return false;
+        var current = trackedUnit.GetCurrentRoomGrid();
+        return current == room ||
+               current?.gameObject.name == room.gameObject.name;
     }
 }
