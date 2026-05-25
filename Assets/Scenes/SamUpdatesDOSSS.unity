@@ -423,6 +423,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 299385709607248715, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 1759460082597424813, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: aoeColor.a
       value: 0.39215687
@@ -499,9 +503,17 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7278850884963630756, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8032437583023291969, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
       propertyPath: m_Name
       value: WHOLE UI
+      objectReference: {fileID: 0}
+    - target: {fileID: 9201997014884896611, guid: 399d70b87bf268d43b73c2d58aae8c02, type: 3}
+      propertyPath: m_Enabled
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
