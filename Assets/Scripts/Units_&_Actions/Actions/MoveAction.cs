@@ -8,7 +8,8 @@ public class MoveAction : BaseAction
 {
     [SerializeField] private int   maxMoveDistance = 4;
     [SerializeField] private float moveSpeed       = 8f;
-
+    public event Action<Unit, Vector3> OnWorldStepCompleted;
+    public event Action<Unit, List<Vector3>> OnWorldMoveCompleted;
     public bool IsActive => isActive;
 
     private int MoveDistance => playerStats != null
@@ -168,6 +169,7 @@ public class MoveAction : BaseAction
         var usedPath = worldPath.GetRange(0, steps);
 
         InvalidateCache();
+        CameraController2D.Instance?.FollowUntilArrived(unit.transform);
         StartCoroutine(MoveAlongWorldPath(usedPath, onComplete));
     }
 
@@ -217,27 +219,30 @@ public class MoveAction : BaseAction
     }
 
     private IEnumerator MoveAlongWorldPath(
-        List<UnifiedPathfinder.WorldStep> path, Action onComplete)
+      List<UnifiedPathfinder.WorldStep> path, Action onComplete)
     {
         isActive = true;
         unitAnimator?.SetMoving(true);
 
+        // NEW: store the actual movement trail for followers
+        List<Vector3> completedPathWorld = new();
+
         Vector2 visualOff = unit.GetVisualOffset();
-        int     stamSpent = 0;
+        int stamSpent = 0;
 
         unit.IsSyncingFromNetwork = true;
 
         for (int i = 0; i < path.Count; i++)
         {
-            var step     = path[i];
+            var step = path[i];
             var stepGrid = step.OwnerGrid ?? unit.GetCurrentRoomGrid();
-            var stepGP   = stepGrid?.GetGridPosition(step.WorldPos) ?? unit.GetGridPosition();
+            var stepGP = stepGrid?.GetGridPosition(step.WorldPos) ?? unit.GetGridPosition();
 
             if (i == 0)
                 SetFacingToward(unit.GetGridPosition(), stepGP);
             else
             {
-                var prev     = path[i - 1];
+                var prev = path[i - 1];
                 var prevGrid = prev.OwnerGrid ?? unit.GetCurrentRoomGrid();
                 SetFacingToward(prevGrid.GetGridPosition(prev.WorldPos), stepGP);
             }
@@ -245,30 +250,64 @@ public class MoveAction : BaseAction
             if (stepGrid != null && stepGrid != unit.GetCurrentRoomGrid())
             {
                 var oldGrid = unit.GetCurrentRoomGrid();
-                var oldGP   = unit.GetGridPosition();
+                var oldGP = unit.GetGridPosition();
+
                 oldGrid?.RemoveUnitAtGridPosition(oldGP, unit);
+
                 unit.PlaceInRoom(stepGrid, stepGP);
+
                 stepGrid.AddUnitAtGridPosition(stepGP, unit);
+
+                if (!GameManager.IsMultiplayer &&
+                    PartyManager.Instance != null &&
+                    unit == PartyManager.Instance.SelectedUnit)
+                {
+                    RoomConnector connector = stepGrid.GetComponent<RoomConnector>();
+
+                    if (connector != null &&
+                        connector.TryGetDirectionFromWorldPosition(step.WorldPos, stepGrid, out LevelGenerator.Direction entranceDir))
+                    {
+                        PartyFollowManager followManager = FindFirstObjectByType<PartyFollowManager>();
+
+                        if (followManager != null)
+                            followManager.SnapFollowersToEntrance(stepGrid, entranceDir);
+                    }
+                }
             }
+
 
             var visualTarget = new Vector3(
                 step.WorldPos.x + visualOff.x,
                 step.WorldPos.y + visualOff.y,
-                transform.position.z);
+                transform.position.z
+            );
 
             while (Vector2.Distance(transform.position, visualTarget) > 0.01f)
             {
                 transform.position = Vector3.MoveTowards(
-                    transform.position, visualTarget, moveSpeed * Time.deltaTime);
+                    transform.position,
+                    visualTarget,
+                    moveSpeed * Time.deltaTime
+                );
+
                 yield return null;
             }
+
             transform.position = visualTarget;
+
+            // Record this tile for end-of-move trail
+            completedPathWorld.Add(step.WorldPos);
+
+            // NEW: tell followers immediately that leader finished this tile
+            OnWorldStepCompleted?.Invoke(unit, step.WorldPos);
+
             stamSpent++;
         }
 
         var finalStep = path[^1];
         var finalGrid = finalStep.OwnerGrid ?? unit.GetCurrentRoomGrid();
-        var finalGP   = finalGrid?.GetGridPosition(finalStep.WorldPos) ?? unit.GetGridPosition();
+        var finalGP = finalGrid?.GetGridPosition(finalStep.WorldPos)
+                      ?? unit.GetGridPosition();
 
         if (playerStats != null && IsInCombatRoom())
             playerStats.SpendStamina(stamSpent);
@@ -287,10 +326,14 @@ public class MoveAction : BaseAction
         else
         {
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
+
             if (bridge != null && bridge.IsOwner)
                 bridge.SyncGridPosition(finalGrid, finalGP);
         }
 
+        // NEW: send movement trail to party followers
+        OnWorldMoveCompleted?.Invoke(unit, completedPathWorld);
+        CameraController2D.Instance?.StopFollow();
         onComplete?.Invoke();
     }
 

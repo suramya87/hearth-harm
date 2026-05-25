@@ -18,6 +18,17 @@ public class Unit : MonoBehaviour
 
     internal bool IsSyncingFromNetwork { get; set; }
 
+    private void OnEnable()
+    {
+        if (GetComponent<PlayerStats>() != null)
+            PartyManager.Instance?.RegisterUnit(this);
+    }
+
+    private void OnDisable()
+    {
+        PartyManager.Instance?.UnregisterUnit(this);
+    }
+
     private void Awake()
     {
         moveAction  = GetComponent<MoveAction>();

@@ -157,4 +157,37 @@ public class RoomConnector : MonoBehaviour
         Gizmos.DrawSphere(p.transform.position, 0.2f);
         Gizmos.DrawLine(p.transform.position, p.transform.position + p.transform.up * 0.8f);
     }
+
+
+
+
+    public bool TryGetDirectionFromWorldPosition(Vector3 worldPos, RoomGrid room, out LevelGenerator.Direction dir)
+    {
+        dir = default;
+
+        if (room == null)
+            return false;
+
+        float bestDistance = float.MaxValue;
+        bool found = false;
+
+        foreach (LevelGenerator.Direction testDir in System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+        {
+            ConnectionPoint point = GetConnectionPoint(testDir);
+
+            if (point == null || point.transform == null)
+                continue;
+
+            float distance = Vector2.Distance(worldPos, point.transform.position);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                dir = testDir;
+                found = true;
+            }
+        }
+
+        return found;
+    }
 }

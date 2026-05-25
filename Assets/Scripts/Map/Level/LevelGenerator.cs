@@ -111,7 +111,7 @@ public class LevelGenerator : MonoBehaviour
 
         if (spawnPlayerOnGenerate && playerPrefabs != null && playerPrefabs.Count > 0)
         {
-            SpawnPlayer(start);
+            SpawnParty(start);
         }
 
         Debug.Log($"[LevelGenerator] {placedRooms.Count} rooms + {spawnedHallways.Count} hallways. " +
@@ -541,31 +541,56 @@ public class LevelGenerator : MonoBehaviour
 
     // ── Player spawning ────────────────────────────────────────────────────
 
-    private void SpawnPlayer(PlacedRoom start)
+    private void SpawnParty(PlacedRoom start)
     {
         if (GameManager.IsMultiplayer) return;
+
         if (Unity.Netcode.NetworkManager.Singleton != null &&
-            Unity.Netcode.NetworkManager.Singleton.IsListening) return;
+            Unity.Netcode.NetworkManager.Singleton.IsListening)
+            return;
 
         RoomManager.Instance?.SetCurrentRoom(start);
-
-        int        index  = CharacterSelection.Index;
-        GameObject prefab = (index >= 0 && index < playerPrefabs.Count)
-            ? playerPrefabs[index] : playerPrefabs[0];
-        if (prefab == null) { Debug.LogError("[LevelGenerator] Player prefab null!"); return; }
 
         GridPosition? sp = FindPlayerSpawnTile(start)
                         ?? FindCentralFloorTile(start.roomGrid);
 
-        if (sp == null) { Debug.LogError("[LevelGenerator] No spawn tile in start room!"); return; }
+        if (sp == null)
+        {
+            Debug.LogError("[LevelGenerator] No spawn tile in start room!");
+            return;
+        }
 
-        spawnedPlayer      = Instantiate(prefab);
-        spawnedPlayer.name = "Player";
+        GridPosition leaderPos = sp.Value;
 
-        var unit = spawnedPlayer.GetComponent<Unit>();
-        unit?.PlaceInRoomWhenReady(start.roomGrid, sp.Value);
+        for (int i = 0; i < playerPrefabs.Count; i++)
+        {
+            GameObject prefab = playerPrefabs[i];
 
-        Debug.Log($"[LevelGenerator] Player spawned at {sp.Value}");
+            if (prefab == null)
+                continue;
+
+            GridPosition spawnPos = new GridPosition(
+                leaderPos.x + i,
+                leaderPos.y
+            );
+
+            GameObject player = Instantiate(prefab);
+
+            player.name = i == 0
+                ? "Player"
+                : $"PartyMember_{i}";
+
+            Unit unit = player.GetComponent<Unit>();
+
+            unit?.PlaceInRoomWhenReady(start.roomGrid, spawnPos);
+
+            PartyManager.Instance?.RegisterUnit(unit);
+
+            if (i == 0)
+                spawnedPlayer = player;
+
+            Debug.Log($"[LevelGenerator] Spawned party member at {spawnPos}");
+        }
     }
 
     private static GridPosition? FindPlayerSpawnTile(PlacedRoom room)

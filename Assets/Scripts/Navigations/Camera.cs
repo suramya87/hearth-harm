@@ -381,6 +381,12 @@ public class CameraController2D : MonoBehaviour
 
     private static Transform FindLocalPlayer()
     {
+        if (PartyManager.Instance != null &&
+            PartyManager.Instance.SelectedUnit != null)
+        {
+            return PartyManager.Instance.SelectedUnit.transform;
+        }
+
         var pt = PlayerTarget.Instance;
         return pt != null ? pt.transform : null;
     }

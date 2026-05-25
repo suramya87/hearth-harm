@@ -27,25 +27,43 @@ public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerE
 
     private void Awake() => rect = GetComponent<RectTransform>();
 
-    private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
-    private void OnDisable() => LevelGenerator.OnLevelReady -= OnLevelReady;
+    private void OnEnable()
+    {
+        LevelGenerator.OnLevelReady += OnLevelReady;
+
+        if (PartyManager.Instance != null)
+            PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
+
+        TryBindToSelectedUnit();
+    }
+
+    private void OnDisable()
+    {
+        LevelGenerator.OnLevelReady -= OnLevelReady;
+
+        if (PartyManager.Instance != null)
+            PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
+    }
 
     private void OnLevelReady() => StartCoroutine(WaitAndBind());
 
     private IEnumerator WaitAndBind()
     {
         float t = 0f;
+
         while (t < 10f)
         {
-            var unit = FindAnyObjectByType<Unit>();
-            if (unit != null)
+            if (PartyManager.Instance != null && PartyManager.Instance.SelectedUnit != null)
             {
-                stats = unit.GetComponent<PlayerStats>();
-                if (stats != null) { lastStamina = stats.currentStamina; SyncParticles(); SyncText(); yield break; }
+                BindToUnit(PartyManager.Instance.SelectedUnit);
+                yield break;
             }
+
             t += Time.deltaTime;
             yield return null;
         }
+
+        Debug.LogWarning("[StaminaContainerUI] Could not bind to selected unit after 10s.");
     }
 
     private void Update()
@@ -128,4 +146,42 @@ public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerE
 
     public void OnPointerEnter(PointerEventData _) { if (hoverOverlay) hoverOverlay.SetActive(true); }
     public void OnPointerExit(PointerEventData _)  { if (hoverOverlay) hoverOverlay.SetActive(false); }
+
+
+
+
+    private void HandleSelectedUnitChanged(Unit unit)
+    {
+        BindToUnit(unit);
+    }
+
+    private void TryBindToSelectedUnit()
+    {
+        if (PartyManager.Instance != null && PartyManager.Instance.SelectedUnit != null)
+        {
+            BindToUnit(PartyManager.Instance.SelectedUnit);
+            return;
+        }
+
+        StartCoroutine(WaitAndBind());
+    }
+
+    private void BindToUnit(Unit unit)
+    {
+        if (unit == null)
+            return;
+
+        PlayerStats newStats = unit.GetComponent<PlayerStats>();
+
+        if (newStats == null)
+            return;
+
+        stats = newStats;
+        lastStamina = stats.currentStamina;
+
+        SyncParticles();
+        SyncText();
+
+        Debug.Log($"[StaminaContainerUI] Bound to {unit.name}");
+    }
 }

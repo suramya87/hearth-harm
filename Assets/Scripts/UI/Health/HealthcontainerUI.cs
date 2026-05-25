@@ -37,6 +37,9 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     {
         LevelGenerator.OnLevelReady -= OnLevelReady;
         Unbind();
+
+        if (PartyManager.Instance != null)
+            PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
     }
 
     private void OnLevelReady()
@@ -50,14 +53,18 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     // exists when this component enables (common after a scene reload or hot-reload).
     private void TryBindImmediate()
     {
-        // Prefer PlayerTarget singleton — no scene search needed
-        if (PlayerTarget.Instance != null)
+        if (PartyManager.Instance != null)
         {
-            var hc = PlayerTarget.Instance.GetComponent<HealthComponent>();
-            if (hc != null) { Bind(hc); return; }
+            PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
+            PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
+
+            if (PartyManager.Instance.SelectedUnit != null)
+            {
+                BindToUnit(PartyManager.Instance.SelectedUnit);
+                return;
+            }
         }
 
-        // Fallback: if PlayerTarget isn't ready yet, start the polling coroutine
         if (bound == null)
         {
             if (bindCoroutine != null) StopCoroutine(bindCoroutine);
@@ -68,19 +75,21 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     private IEnumerator WaitAndBind()
     {
         float t = 0f;
+
         while (t < 10f)
         {
-            // FIX: use PlayerTarget singleton instead of FindFirstObjectByType<Unit>
-            // This is O(1) and never finds the wrong object
-            if (PlayerTarget.Instance != null)
+            if (PartyManager.Instance != null && PartyManager.Instance.SelectedUnit != null)
             {
-                var hc = PlayerTarget.Instance.GetComponent<HealthComponent>();
-                if (hc != null) { Bind(hc); bindCoroutine = null; yield break; }
+                BindToUnit(PartyManager.Instance.SelectedUnit);
+                bindCoroutine = null;
+                yield break;
             }
+
             t += Time.deltaTime;
             yield return null;
         }
-        Debug.LogWarning("[HealthContainerUI] Could not find player HealthComponent after 10s.");
+
+        Debug.LogWarning("[HealthContainerUI] Could not find selected unit HealthComponent after 10s.");
         bindCoroutine = null;
     }
 
@@ -142,4 +151,27 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     public void OnPointerEnter(PointerEventData _) { if (hoverOverlay) hoverOverlay.SetActive(true); }
     public void OnPointerExit(PointerEventData _)  { if (hoverOverlay) hoverOverlay.SetActive(false); }
+
+
+
+
+    private void HandleSelectedUnitChanged(Unit unit)
+    {
+        BindToUnit(unit);
+    }
+
+    private void BindToUnit(Unit unit)
+    {
+        if (unit == null)
+            return;
+
+        HealthComponent hc = unit.GetComponent<HealthComponent>();
+
+        if (hc == null)
+            return;
+
+        Bind(hc);
+
+        Debug.Log($"[HealthContainerUI] Bound to {unit.name}");
+    }
 }
