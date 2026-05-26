@@ -28,9 +28,10 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     {
         LevelGenerator.OnLevelReady += OnLevelReady;
 
-        // FIX: also try to bind immediately in case the level is already ready
-        // (e.g. UI enabled after level generation, or domain reload in editor)
-        TryBindImmediate();
+        if (bindCoroutine != null)
+            StopCoroutine(bindCoroutine);
+
+        bindCoroutine = StartCoroutine(WaitForPartyManagerAndBind());
     }
 
     private void OnDisable()
@@ -45,33 +46,34 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     private void OnLevelReady()
     {
         Unbind();
-        if (bindCoroutine != null) StopCoroutine(bindCoroutine);
-        bindCoroutine = StartCoroutine(WaitAndBind());
+
+        if (bindCoroutine != null)
+            StopCoroutine(bindCoroutine);
+
+        bindCoroutine = StartCoroutine(WaitForPartyManagerAndBind());
     }
 
     // FIX: synchronous bind attempt — covers the case where the player already
     // exists when this component enables (common after a scene reload or hot-reload).
-    private void TryBindImmediate()
+
+
+    private IEnumerator WaitForPartyManagerAndBind()
     {
-        if (PartyManager.Instance != null)
-        {
-            PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
-            PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
+        while (PartyManager.Instance == null)
+            yield return null;
 
-            if (PartyManager.Instance.SelectedUnit != null)
-            {
-                BindToUnit(PartyManager.Instance.SelectedUnit);
-                return;
-            }
-        }
+        PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
+        PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
 
-        if (bound == null)
-        {
-            if (bindCoroutine != null) StopCoroutine(bindCoroutine);
-            bindCoroutine = StartCoroutine(WaitAndBind());
-        }
+        while (PartyManager.Instance.SelectedUnit == null)
+            yield return null;
+
+        BindToUnit(PartyManager.Instance.SelectedUnit);
+
+        Debug.Log("[HealthContainerUI] Subscribed to PartyManager selection.");
+
+        bindCoroutine = null;
     }
-
     private IEnumerator WaitAndBind()
     {
         float t = 0f;
@@ -95,12 +97,14 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     private void Bind(HealthComponent hc)
     {
-        Unbind(); // safe to call even if bound == null
+        Unbind();
+
         bound = hc;
         bound.OnHealthChanged += OnHealthChanged;
 
-        // FIX: force a full refresh so the UI shows correct values immediately,
-        // even if InitializeHealth already fired before we subscribed
+        if (healthText)
+            healthText.text = hc.CurrentHealth.ToString();
+
         OnHealthChanged(hc.CurrentHealth, hc.MaxHealth);
     }
 
@@ -157,6 +161,8 @@ public class HealthContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
 
     private void HandleSelectedUnitChanged(Unit unit)
     {
+        Debug.Log($"[HealthContainerUI] Selection changed to {unit?.name}");
+
         BindToUnit(unit);
     }
 

@@ -18,11 +18,13 @@ public class PartyFollowManager : MonoBehaviour
 
         PartyManager.Instance.OnPartyChanged += HookParty;
         PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
-        yield return null;
+
+        while (PartyManager.Instance.PartyUnits.Count < 2)
+            yield return null;
+
         HookParty();
 
-        yield return null;
-        HookParty();
+        Debug.Log("[PartyFollowManager] Initial party hooked.");
     }
 
     private void OnDisable()
@@ -35,7 +37,9 @@ public class PartyFollowManager : MonoBehaviour
     private void HandleSelectedUnitChanged(Unit unit)
     {
         ClearFollowerQueue();
+        HookParty();
     }
+
     private void HookParty()
     {
         UnhookAll();
@@ -171,7 +175,7 @@ public class PartyFollowManager : MonoBehaviour
 
     private readonly Queue<Vector3> followerStepQueue = new();
     private bool followerIsMoving;
-
+    private Coroutine followerMoveRoutine;
     private void HandleWorldStepCompleted(Unit leader, Vector3 leaderStepWorld)
     {
         if (GameManager.IsMultiplayer)
@@ -192,7 +196,7 @@ public class PartyFollowManager : MonoBehaviour
         followerStepQueue.Enqueue(leaderStepWorld);
 
         if (!followerIsMoving)
-            StartCoroutine(ProcessFollowerStepQueue(leader));
+            followerMoveRoutine = StartCoroutine(ProcessFollowerStepQueue(leader));
     }
 
     private IEnumerator ProcessFollowerStepQueue(Unit leader)
@@ -218,6 +222,7 @@ public class PartyFollowManager : MonoBehaviour
     public void SnapFollowersToEntrance(RoomGrid room, LevelGenerator.Direction entranceDir)
     {
         ClearFollowerQueue();
+
         if (PartyManager.Instance == null)
             return;
 
@@ -226,8 +231,7 @@ public class PartyFollowManager : MonoBehaviour
         if (leader == null || room == null)
             return;
 
-        GridPosition leaderPos = leader.GetGridPosition();
-
+        GridPosition leaderPos = room.GetGridPosition(leader.transform.position);
         int placed = 0;
 
         foreach (Unit follower in PartyManager.Instance.PartyUnits)
@@ -292,5 +296,11 @@ public class PartyFollowManager : MonoBehaviour
     {
         followerStepQueue.Clear();
         followerIsMoving = false;
+
+        if (followerMoveRoutine != null)
+        {
+            StopCoroutine(followerMoveRoutine);
+            followerMoveRoutine = null;
+        }
     }
 }

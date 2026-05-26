@@ -77,18 +77,26 @@ public class UnitActionSystem : MonoBehaviour
         }
 
         // Single player
-        int attempts = 0;
-        while (selectedUnit == null && attempts < 10)
+        float singlePlayerWaited = 0f;
+
+        while (singlePlayerWaited < 5f)
         {
-            var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
-            foreach (var u in units)
+            singlePlayerWaited += Time.deltaTime;
+
+            if (PartyManager.Instance != null &&
+                PartyManager.Instance.SelectedUnit != null)
             {
-                SetSelectedUnit(u);
-                break;
+                SetSelectedUnit(PartyManager.Instance.SelectedUnit);
+
+                Debug.Log($"[UnitActionSystem] Synced to PartyManager leader: {selectedUnit.name}");
+
+                yield break;
             }
-            attempts++;
+
             yield return null;
         }
+
+        Debug.LogWarning("[UnitActionSystem] Failed to sync to PartyManager selected unit.");
     }
 
     // ── Update ─────────────────────────────────────────────────────────────
@@ -159,6 +167,9 @@ public class UnitActionSystem : MonoBehaviour
 
     public void SetSelectedUnit(Unit unit)
     {
+        if (unit == null)
+            return;
+
         selectedUnit = unit;
 
         SetSelectedAction(unit.GetMoveAction());
@@ -166,8 +177,9 @@ public class UnitActionSystem : MonoBehaviour
         unit.GetMoveAction()?.InvalidateCache();
 
         OnSelectedUnitChange?.Invoke(this, EventArgs.Empty);
-    }
 
+        Debug.Log($"[UnitActionSystem] Selected unit: {unit.name}");
+    }
     public void SetSelectedAction(BaseAction action, bool clearDiceForMove)
     {
         selectedAction = action;

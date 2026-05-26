@@ -27,14 +27,32 @@ public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerE
 
     private void Awake() => rect = GetComponent<RectTransform>();
 
+    private Coroutine partyBindCoroutine;
+
     private void OnEnable()
     {
         LevelGenerator.OnLevelReady += OnLevelReady;
 
-        if (PartyManager.Instance != null)
-            PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
+        if (partyBindCoroutine != null)
+            StopCoroutine(partyBindCoroutine);
 
-        TryBindToSelectedUnit();
+        partyBindCoroutine = StartCoroutine(WaitForPartyManagerAndBind());
+    }
+
+    private IEnumerator WaitForPartyManagerAndBind()
+    {
+        while (PartyManager.Instance == null)
+            yield return null;
+
+        PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
+        PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
+
+        while (PartyManager.Instance.SelectedUnit == null)
+            yield return null;
+
+        BindToUnit(PartyManager.Instance.SelectedUnit);
+
+        Debug.Log("[StaminaContainerUI] Subscribed to PartyManager selection.");
     }
 
     private void OnDisable()
@@ -45,26 +63,15 @@ public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerE
             PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
     }
 
-    private void OnLevelReady() => StartCoroutine(WaitAndBind());
-
-    private IEnumerator WaitAndBind()
+    private void OnLevelReady()
     {
-        float t = 0f;
+        if (partyBindCoroutine != null)
+            StopCoroutine(partyBindCoroutine);
 
-        while (t < 10f)
-        {
-            if (PartyManager.Instance != null && PartyManager.Instance.SelectedUnit != null)
-            {
-                BindToUnit(PartyManager.Instance.SelectedUnit);
-                yield break;
-            }
-
-            t += Time.deltaTime;
-            yield return null;
-        }
-
-        Debug.LogWarning("[StaminaContainerUI] Could not bind to selected unit after 10s.");
+        partyBindCoroutine = StartCoroutine(WaitForPartyManagerAndBind());
     }
+
+    
 
     private void Update()
     {
@@ -152,19 +159,11 @@ public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerE
 
     private void HandleSelectedUnitChanged(Unit unit)
     {
+        Debug.Log($"[StaminaContainerUI] Selection changed to {unit?.name}");
         BindToUnit(unit);
     }
 
-    private void TryBindToSelectedUnit()
-    {
-        if (PartyManager.Instance != null && PartyManager.Instance.SelectedUnit != null)
-        {
-            BindToUnit(PartyManager.Instance.SelectedUnit);
-            return;
-        }
-
-        StartCoroutine(WaitAndBind());
-    }
+    
 
     private void BindToUnit(Unit unit)
     {
@@ -179,9 +178,23 @@ public class StaminaContainerUI : MonoBehaviour, IPointerEnterHandler, IPointerE
         stats = newStats;
         lastStamina = stats.currentStamina;
 
+        // FULL RESET
+        ClearParticles();
+
         SyncParticles();
         SyncText();
 
         Debug.Log($"[StaminaContainerUI] Bound to {unit.name}");
+    }
+
+    private void ClearParticles()
+    {
+        foreach (var p in particles)
+        {
+            if (p != null)
+                Destroy(p.gameObject);
+        }
+
+        particles.Clear();
     }
 }

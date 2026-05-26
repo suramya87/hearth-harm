@@ -270,7 +270,14 @@ public class MoveAction : BaseAction
                         PartyFollowManager followManager = FindFirstObjectByType<PartyFollowManager>();
 
                         if (followManager != null)
+                        {
+                            Debug.Log($"[MoveAction] Leader entered {stepGrid.name} through {entranceDir}. Snapping followers.");
                             followManager.SnapFollowersToEntrance(stepGrid, entranceDir);
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[MoveAction] Entered new grid {stepGrid.name}, but no RoomConnector entrance was found.");
                     }
                 }
             }
