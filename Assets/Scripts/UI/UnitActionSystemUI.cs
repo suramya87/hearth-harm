@@ -10,7 +10,6 @@ public class UnitActionSystemUI : MonoBehaviour
 
     private readonly List<ActionButtonUI> actionButtonUIList = new();
 
-    // Cached so we can unsubscribe from stamina events when the unit changes.
     private PlayerStats subscribedStats;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -76,7 +75,6 @@ public class UnitActionSystemUI : MonoBehaviour
         Unit unit = UnitActionSystem.Instance?.GetSelectedUnit();
         if (unit == null) return;
 
-        // Subscribe to stamina changes so affordability updates in real time.
         subscribedStats = unit.GetComponent<PlayerStats>();
         if (subscribedStats != null)
             subscribedStats.OnStaminaChanged += OnStaminaChanged;
@@ -99,7 +97,6 @@ public class UnitActionSystemUI : MonoBehaviour
             btn?.UpdateSelectedVisual();
     }
 
-    // ── Stamina subscription ───────────────────────────────────────────────
 
     private void UnsubscribeStamina()
     {
@@ -113,7 +110,6 @@ public class UnitActionSystemUI : MonoBehaviour
         UpdateSelectedVisual();
     }
 
-    // ── Events ─────────────────────────────────────────────────────────────
 
     private void OnSelectedUnitChanged(object sender, EventArgs e)
     {

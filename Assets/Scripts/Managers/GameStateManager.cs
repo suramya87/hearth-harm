@@ -2,10 +2,6 @@ using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// Handles LOSE state (player death). Win/progression goes through EndRoomUI.
-/// In multiplayer, only tracks the LOCAL owned player's health.
-/// </summary>
 public class GameStateManager : MonoBehaviour
 {
     public static GameStateManager Instance { get; private set; }

@@ -15,10 +15,6 @@ public enum GameMode
     None
 }
 
-/// <summary>
-/// Central entry point. Controls game mode so the same scene runs SP or MP.
-/// Also initializes UGS Analytics on startup — no game logic is affected.
-/// </summary>
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
@@ -34,7 +30,6 @@ public class GameManager : MonoBehaviour
     public static bool IsAuthority   => Mode == GameMode.Offline || Mode == GameMode.Host;
     public static bool IsClient      => Mode == GameMode.Client;
 
-    /// <summary>True once UGS has initialized successfully.</summary>
     public static bool AnalyticsReady { get; private set; }
 
     // ── Internal ───────────────────────────────────────────────────────────

@@ -1,10 +1,6 @@
 using System;
 using UnityEngine;
 
-/// <summary>
-/// Base class for all unit actions.
-/// Subclasses must call CanExecuteLocally() before doing anything input-driven.
-/// </summary>
 public abstract class BaseAction : MonoBehaviour
 {
     protected Unit           unit;
@@ -17,8 +13,6 @@ public abstract class BaseAction : MonoBehaviour
     protected virtual void Awake()
     {
         unit           = GetComponent<Unit>();
-        // FIX: use GetComponentInParent so PlayerStats is found even if it lives
-        // on a parent GameObject (e.g. a root unit prefab with action children).
         playerStats    = GetComponentInParent<PlayerStats>();
         unitAnimator   = GetComponent<UnitAnimator>();
         playerAnimator = GetComponent<PlayerAnimator>();
@@ -36,17 +30,10 @@ public abstract class BaseAction : MonoBehaviour
         isActive = true;
     }
 
-    /// <summary>Expose the owning Unit for ownership checks upstream.</summary>
     public Unit GetUnit() => unit;
 
-    /// <summary>Expose PlayerStats so UI can check affordability without a separate lookup.</summary>
     public PlayerStats GetPlayerStats() => playerStats;
 
-    /// <summary>
-    /// Returns true when this client is allowed to execute this action.
-    /// Always true in singleplayer. In multiplayer, only the owner of this
-    /// unit may execute actions.
-    /// </summary>
     protected bool CanExecuteLocally()
     {
         if (!GameManager.IsMultiplayer) return true;

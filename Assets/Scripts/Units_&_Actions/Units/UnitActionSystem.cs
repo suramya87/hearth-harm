@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -34,7 +34,8 @@ public class UnitActionSystem : MonoBehaviour
     {
         if (!GameManager.IsMultiplayer)
         {
-            SetSelectedUnit(selectedUnit != null ? selectedUnit : FindAnyObjectByType<Unit>());
+            var unit = selectedUnit != null ? selectedUnit : FindAnyObjectByType<Unit>();
+            SetSelectedUnit(unit);
         }
         else
         {
@@ -42,11 +43,11 @@ public class UnitActionSystem : MonoBehaviour
         }
     }
 
-    private System.Collections.IEnumerator FindOwnedUnitCoroutine()
+    private IEnumerator FindOwnedUnitCoroutine()
     {
-        Unit  owned   = null;
         float timeout = 30f;
         float elapsed = 0f;
+        Unit  owned   = null;
 
         while (owned == null && elapsed < timeout)
         {
@@ -61,7 +62,7 @@ public class UnitActionSystem : MonoBehaviour
         if (owned != null)
         {
             SetSelectedUnit(owned);
-            Debug.Log($"[UnitActionSystem] Found owned unit: {owned.name}");
+            Debug.Log($"[UnitActionSystem] Coroutine found owned unit: {owned.name}");
         }
         else
         {
@@ -75,36 +76,35 @@ public class UnitActionSystem : MonoBehaviour
         if (!IsLocalPlayerTurn()) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
-        // In multiplayer, re-validate ownership every frame.
+        // In multiplayer re-validate ownership every frame and auto-correct.
         if (GameManager.IsMultiplayer)
         {
             if (selectedUnit == null || !IsOwnedByLocalPlayer(selectedUnit))
             {
                 var owned = FindLocalOwnedUnit();
                 if (owned != null && owned != selectedUnit)
+                {
+                    Debug.Log($"[UnitActionSystem] Auto-correcting selected unit to {owned.name}");
                     SetSelectedUnit(owned);
-                return;
+                }
+                // Don't return here — if we just set the unit, let input through this frame.
+                if (selectedUnit == null) return;
             }
         }
 
-        // Route input to the currently selected action.
         if (selectedAction is MoveAction moveAction)
-        {
             moveAction.HandleActionInput();
-        }
         else if (selectedAction is CombatAction combatAction)
-        {
             combatAction.HandleActionInput();
-        }
     }
 
-    // ---- Public API ----
+    // ── Public API ─────────────────────────────────────────────────────────
 
     public void SetSelectedUnit(Unit unit)
     {
         if (GameManager.IsMultiplayer && unit != null && !IsOwnedByLocalPlayer(unit))
         {
-            Debug.LogWarning($"[UnitActionSystem] Refused to select non-owned unit {unit.name}.");
+            Debug.LogWarning($"[UnitActionSystem] Refused non-owned unit {unit.name}.");
             return;
         }
 
@@ -116,6 +116,7 @@ public class UnitActionSystem : MonoBehaviour
             if (move != null) SetSelectedAction(move, notify: false);
         }
 
+        Debug.Log($"[UnitActionSystem] Selected unit: {(unit != null ? unit.name : "null")}");
         OnSelectedUnitChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -128,16 +129,16 @@ public class UnitActionSystem : MonoBehaviour
     public Unit       GetSelectedUnit()   => selectedUnit;
     public BaseAction GetSelectedAction() => selectedAction;
 
-    /// <summary>
-    /// Executes an action. The action is expected to have already stored any
-    /// target information it needs (e.g. CombatAction stores pendingTargetGP).
-    /// </summary>
     public void TakeAction(BaseAction action, Action onComplete)
     {
-        if (!IsLocalPlayerTurn()) return;
+        if (!IsLocalPlayerTurn())
+        {
+            Debug.LogWarning("[UnitActionSystem] TakeAction blocked — not player turn.");
+            return;
+        }
         if (GameManager.IsMultiplayer && !IsOwnedByLocalPlayer(action.GetUnit()))
         {
-            Debug.LogWarning("[UnitActionSystem] Refused TakeAction — not our unit.");
+            Debug.LogWarning("[UnitActionSystem] TakeAction blocked — not our unit.");
             return;
         }
 
@@ -162,7 +163,7 @@ public class UnitActionSystem : MonoBehaviour
         OnBusyChanged?.Invoke(this, false);
     }
 
-    // ---- Ownership helpers ----
+    // ── Ownership helpers ──────────────────────────────────────────────────
 
     public static Unit FindLocalOwnedUnit()
     {
@@ -170,13 +171,12 @@ public class UnitActionSystem : MonoBehaviour
             return FindAnyObjectByType<Unit>();
 
         foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
-        {
             if (IsOwnedByLocalPlayer(u)) return u;
-        }
+
         return null;
     }
 
-    private static bool IsOwnedByLocalPlayer(Unit unit)
+    public static bool IsOwnedByLocalPlayer(Unit unit)
     {
         if (unit == null) return false;
         if (!GameManager.IsMultiplayer) return true;
@@ -184,13 +184,12 @@ public class UnitActionSystem : MonoBehaviour
         return netObj != null && netObj.IsOwner;
     }
 
-    // ---- Turn helpers ----
+    // ── Turn helpers ────────────────────────────────────────────────────────
 
-    private static bool IsLocalPlayerTurn()
+    public static bool IsLocalPlayerTurn()
     {
         if (!GameManager.IsMultiplayer)
             return TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
-
         return NetworkedTurnSystem.Instance == null ||
                NetworkedTurnSystem.Instance.IsPlayerPhase;
     }

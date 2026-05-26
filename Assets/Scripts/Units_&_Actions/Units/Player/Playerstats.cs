@@ -1,5 +1,5 @@
-using UnityEngine;
 using System;
+using UnityEngine;
 
 /// <summary>
 /// Loads class stats from ClassStatsDatabase.
@@ -110,11 +110,32 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         charisma     = stats.charisma;
         luck         = stats.luck;
 
-        maxHealth    = Mathf.Max(1, stats.baseMaxHealth + constitution);
-        maxStamina   = Mathf.Max(1, 10 + (dexterity * 2));
+        maxHealth  = Mathf.Max(1, stats.baseMaxHealth + constitution);
+        maxStamina = Mathf.Max(1, 10 + (dexterity * 2));
 
         currentHealth  = maxHealth;
         currentStamina = maxStamina;
+    }
+
+    /// <summary>
+    /// Called by the networked spawner after instantiation to apply the correct
+    /// character class. Safe to call after Awake() has already run.
+    /// </summary>
+    public void InitializeWithClass(PlayerClass chosenClass)
+    {
+        playerClass = chosenClass;
+        ApplyClassStats();
+
+        if (health != null)
+            health.InitializeHealth(maxHealth);
+
+        currentHealth  = maxHealth;
+        currentStamina = maxStamina;
+
+        OnStaminaChanged?.Invoke(currentStamina, maxStamina);
+
+        Debug.Log($"[PlayerStats] Initialized as {chosenClass} — " +
+                  $"HP {currentHealth}/{maxHealth}, Stamina {currentStamina}/{maxStamina}");
     }
 
     // ── IHasHealth ─────────────────────────────────────────────────────────
@@ -151,7 +172,7 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     /// </summary>
     public int RollStaminaRecovery()
     {
-        int diceCount     = Mathf.Max(1, Mathf.CeilToInt(dexterity / 2f));
+        int diceCount      = Mathf.Max(1, Mathf.CeilToInt(dexterity / 2f));
         int rolledRecovery = 0;
 
         for (int i = 0; i < diceCount; i++)
@@ -191,7 +212,7 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         RecalculateDerivedStats();
 
         if (statType == PlayerStatType.Dexterity)
-            RefillStaminaToMax(); // fires OnStaminaChanged via RefillStaminaToMax
+            RefillStaminaToMax();
 
         Debug.Log($"[PlayerStats] Increased {statType} by {amount}");
     }
@@ -227,3 +248,4 @@ public class PlayerStats : MonoBehaviour, IHasHealth
                   $"Stamina {currentStamina}/{maxStamina}");
     }
 }
+

@@ -129,11 +129,9 @@ public static class HallwayTilemapPainter
 
             for (int x = xMin; x <= xMax; x++)
             {
-                // Floor strip - Always paints the full length
                 for (int p = pMin; p <= pMax; p++)
                     SetFloor(floor, new Vector3Int(x, cy + p, 0), PickFloor(tiles, x, cy + p));
 
-                // Walls - Only paint if NOT at the very start or very end of the segment
                 if (x > xMin && x < xMax)
                 {
                     SetWall(walls, floor, new Vector3Int(x, cy + pMax + 1, 0), tiles.GetWallTop());
@@ -226,18 +224,15 @@ public static class HallwayTilemapPainter
             yMax = pivot.y + aMax;
         }
 
-        // Fill junction floor
         for (int x = xMin; x <= xMax; x++)
         for (int y = yMin; y <= yMax; y++)
             SetFloor(floor, new Vector3Int(x, y, 0), PickFloor(tiles, x, y));
 
-        // ── Four outer convex corners ──────────────────────────────────────
         SetWall(walls, floor, new Vector3Int(xMin - 1, yMax + 1, 0), tiles.GetConvex_NW());
         SetWall(walls, floor, new Vector3Int(xMax + 1, yMax + 1, 0), tiles.GetConvex_NE());
         SetWall(walls, floor, new Vector3Int(xMin - 1, yMin - 1, 0), tiles.GetConvex_SW());
         SetWall(walls, floor, new Vector3Int(xMax + 1, yMin - 1, 0), tiles.GetConvex_SE());
 
-        // ── Straight wall edges around the junction box ────────────────────
         for (int x = xMin; x <= xMax; x++)
         {
             SetWall(walls, floor, new Vector3Int(x, yMax + 1, 0), tiles.GetWallTop());
@@ -249,7 +244,6 @@ public static class HallwayTilemapPainter
             SetWall(walls, floor, new Vector3Int(xMax + 1, y, 0), tiles.GetWallRight());
         }
 
-        // ── Inner concave corner ───────────────────────────────────────────
         if (segA.Horizontal != segB.Horizontal)
         {
             bool aGoesRight = segA.End.x >= segA.Start.x;
@@ -265,7 +259,6 @@ public static class HallwayTilemapPainter
                 icx = aGoesRight ? xMin - 1 : xMax + 1;
                 icy = bGoesUp    ? yMin - 1 : yMax + 1;
 
-                // Which quadrant?
                 bool isNorth = icy > yMax;
                 bool isEast  = icx > xMax;
                 concaveTile = (isNorth, isEast) switch
@@ -296,7 +289,6 @@ public static class HallwayTilemapPainter
         }
     }
 
-    // ── PCG floor tile selection ───────────────────────────────────────────
 
     private static TileBase PickFloor(HallwayTileSet tiles, int wx, int wy)
     {

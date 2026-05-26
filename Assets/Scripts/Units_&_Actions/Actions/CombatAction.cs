@@ -38,7 +38,6 @@ public class CombatAction : BaseAction
             diceBox = FindFirstObjectByType<DiceBoxUI>();
     }
 
-    // ---- Input handling (called by UnitActionSystem.Update when selected) ----
 
     public void HandleActionInput()
     {

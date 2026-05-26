@@ -1,140 +1,117 @@
- 
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
- 
+
 public class AnalyticsRoomTracker : MonoBehaviour
 {
     [Tooltip("Human-readable room name shown in the dashboard.\n" +
              "Leave blank to use the GameObject name.")]
     [SerializeField] private string roomName = "";
- 
+
     [Tooltip("If true, fires room_visited automatically when this GameObject becomes active.")]
     [SerializeField] private bool autoTrackOnEnable = false;
- 
+
     [Tooltip("If true, subscribes to EnemyManager to detect when all enemies are gone.")]
     [SerializeField] private bool autoTrackCleared = false;
- 
+
     [Tooltip("How often (seconds) to sample FPS while the player is in this room.")]
     [SerializeField] private float fpsSampleInterval = 0.5f;
- 
+
     private bool visited;
     private bool cleared;
- 
+
     // ── Time tracking ──────────────────────────────────────────────────────
     private float enterTime    = -1f;
     private bool  timerRunning = false;
- 
+
     // ── FPS sampling ───────────────────────────────────────────────────────
-    // Samples are collected every fpsSampleInterval seconds.
-    // We store a rolling list and compute avg + min when the room ends.
     private List<float> fpsSamples   = new List<float>();
     private Coroutine   fpsCoroutine = null;
- 
+
     // ── Load time ──────────────────────────────────────────────────────────
-    private float activateTime = -1f; // realtimeSinceStartup when OnEnable fires
+    private float activateTime = -1f;
     private bool  loadTracked  = false;
- 
+
     private string RoomName => string.IsNullOrEmpty(roomName) ? gameObject.name : roomName;
     private bool   IsWeb    => Application.platform == RuntimePlatform.WebGLPlayer;
- 
+
     // ── Unity lifecycle ────────────────────────────────────────────────────
- 
+
     private void OnEnable()
     {
-        // Record when this room object became active (for load time)
         activateTime = Time.realtimeSinceStartup;
- 
         if (autoTrackOnEnable) MarkVisited();
     }
- 
+
     private void Start()
     {
-        // Measure room activation: time from OnEnable to end of first frame
         if (!loadTracked)
         {
             loadTracked = true;
             float loadSeconds = Time.realtimeSinceStartup - activateTime;
             AnalyticsEvents.RoomLoadTime(RoomName, loadSeconds, IsWeb);
         }
- 
+
         if (autoTrackCleared)
             StartCoroutine(WatchForClear());
     }
- 
-    private void OnDisable()
-    {
-        StopTimer();
-    }
- 
-    private void OnDestroy()
-    {
-        StopTimer();
-    }
- 
+
+    private void OnDisable()  => StopTimer();
+    private void OnDestroy()  => StopTimer();
+
     // ── Public API ─────────────────────────────────────────────────────────
- 
-    /// <summary>Call when the player enters this room.</summary>
+
     public void MarkVisited()
     {
         if (visited) return;
         visited = true;
- 
+
         enterTime    = Time.time;
         timerRunning = true;
- 
-        // Start FPS sampling coroutine
+
         fpsSamples.Clear();
         fpsCoroutine = StartCoroutine(SampleFps());
- 
+
         AnalyticsEvents.RoomVisited(RoomName);
     }
- 
-    /// <summary>Call when all enemies in this room are defeated.</summary>
+
     public void MarkCleared()
     {
         if (cleared) return;
         cleared = true;
         AnalyticsEvents.RoomCleared(RoomName);
     }
- 
-    /// <summary>
-    /// Stops the room timer and FPS sampler, then fires room_time_spent.
-    /// Called automatically on OnDisable/OnDestroy.
-    /// </summary>
+
     public void StopTimer()
     {
         if (!timerRunning) return;
         timerRunning = false;
- 
-        // Stop FPS sampling
+
         if (fpsCoroutine != null)
         {
             StopCoroutine(fpsCoroutine);
             fpsCoroutine = null;
         }
- 
+
         float secondsSpent = Time.time - enterTime;
         float avgFps       = ComputeAvgFps();
         float minFps       = ComputeMinFps();
- 
+
         AnalyticsEvents.RoomTimeSpent(RoomName, secondsSpent, cleared, avgFps, minFps);
     }
- 
+
     // ── FPS sampling ───────────────────────────────────────────────────────
- 
+
     private IEnumerator SampleFps()
     {
         while (true)
         {
-            // deltaTime can be 0 on the very first frame — guard against divide by zero
             if (Time.deltaTime > 0f)
                 fpsSamples.Add(1f / Time.deltaTime);
- 
             yield return new WaitForSeconds(fpsSampleInterval);
         }
     }
- 
+
     private float ComputeAvgFps()
     {
         if (fpsSamples.Count == 0) return 0f;
@@ -142,7 +119,7 @@ public class AnalyticsRoomTracker : MonoBehaviour
         foreach (float s in fpsSamples) sum += s;
         return sum / fpsSamples.Count;
     }
- 
+
     private float ComputeMinFps()
     {
         if (fpsSamples.Count == 0) return 0f;
@@ -150,13 +127,13 @@ public class AnalyticsRoomTracker : MonoBehaviour
         foreach (float s in fpsSamples) if (s < min) min = s;
         return min;
     }
- 
+
     // ── Auto-clear detection ───────────────────────────────────────────────
- 
+
     private IEnumerator WatchForClear()
     {
         while (EnemyManager.Instance == null) yield return null;
- 
+
         var roomGrid = GetComponent<RoomGrid>() ?? GetComponentInParent<RoomGrid>();
         if (roomGrid == null)
         {
@@ -164,24 +141,24 @@ public class AnalyticsRoomTracker : MonoBehaviour
                              $"found on {gameObject.name}. Call MarkCleared() manually instead.");
             yield break;
         }
- 
+
         yield return new WaitForSeconds(1f);
- 
+
         bool hadEnemies = false;
- 
+
         while (!cleared)
         {
             var enemies = EnemyManager.Instance.GetEnemiesInRoom(roomGrid);
- 
+
             if (enemies != null && enemies.Count > 0)
                 hadEnemies = true;
- 
+
             if (hadEnemies && (enemies == null || enemies.Count == 0))
             {
                 MarkCleared();
                 yield break;
             }
- 
+
             yield return new WaitForSeconds(0.5f);
         }
     }

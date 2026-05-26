@@ -7,7 +7,7 @@ public class HallwayWalkTrigger : MonoBehaviour
     private HallwayGrid hallway;
     private bool        locked;
     private bool        cooling;
-    private bool        applied; 
+    private bool        applied;
 
     public GameObject DoorStripObject { get; set; }
 
@@ -29,14 +29,14 @@ public class HallwayWalkTrigger : MonoBehaviour
     private IEnumerator TemporaryDisableRoutine(float seconds)
     {
         cooling = true;
-        applied = false; 
+        applied = false;
         yield return new WaitForSeconds(seconds);
         cooling = false;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        applied = false; 
+        applied = false;
         TryApplyCamera(other);
     }
 
@@ -60,9 +60,23 @@ public class HallwayWalkTrigger : MonoBehaviour
         if (!other.CompareTag("Player")) return;
         if (hallway == null || !hallway.IsReady) return;
 
+        if (!IsLocalPlayerCollider(other)) return;
+
         ApplyHallwayCameraBounds();
         RoomManager.Instance?.SetInHallway();
         applied = true;
+    }
+
+    private static bool IsLocalPlayerCollider(Collider2D col)
+    {
+        if (!GameManager.IsMultiplayer)
+            return col.GetComponent<Unit>() != null
+                || col.GetComponentInParent<Unit>() != null;
+
+        var netObj = col.GetComponent<Unity.Netcode.NetworkObject>()
+                  ?? col.GetComponentInParent<Unity.Netcode.NetworkObject>();
+
+        return netObj != null && netObj.IsOwner;
     }
 
     private void ApplyHallwayCameraBounds()
