@@ -114,7 +114,6 @@ public class RoomManager : MonoBehaviour
         var bounds = room.roomInstance.GetComponentInChildren<CameraRoomBounds>();
         if (bounds != null)
         {
-            cam.SetRoomBounds(bounds.GetBounds());
         }
         else
         {
@@ -131,7 +130,6 @@ public class RoomManager : MonoBehaviour
                 float   width  = Mathf.Abs(worldMax.x - worldMin.x) + 8f;
                 float   height = Mathf.Abs(worldMax.y - worldMin.y) + 8f;
 
-                cam.SetRoomBounds(new Bounds(center, new Vector3(width, height, 10f)));
             }
             else
             {

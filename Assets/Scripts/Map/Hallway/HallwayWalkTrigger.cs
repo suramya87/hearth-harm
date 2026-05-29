@@ -100,7 +100,5 @@ public class HallwayWalkTrigger : MonoBehaviour
         float finalWidth  = Mathf.Max(width  + 64f, 32f);
         float finalHeight = Mathf.Max(height + 64f, 10f);
 
-        cam.SetRoomBounds(new Bounds(center,
-            new Vector3(finalWidth, finalHeight, 10f)));
     }
 }
