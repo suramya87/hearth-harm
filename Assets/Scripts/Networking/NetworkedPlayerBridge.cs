@@ -18,10 +18,12 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     private NetworkVariable<int> gridY = new(0,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    private Unit unit;
-    private bool isTransitioning;
-    private bool syncPending;
+    private Unit      unit;
+    private bool      syncPending;
     private Coroutine syncCoroutine;
+    private Coroutine stepLerpCoroutine;
+
+    private bool isWalking;
 
     private void Awake() => unit = GetComponent<Unit>();
 
@@ -35,7 +37,7 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridX.OnValueChanged           += OnGridPositionChanged;
         gridY.OnValueChanged           += OnGridPositionChanged;
 
-        // Non-owners apply whatever position the server already has.
+        // Non-owners: apply whatever the server already has.
         if (!IsOwner)
         {
             string existing = currentRoomName.Value.ToString();
@@ -53,16 +55,17 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridX.OnValueChanged           -= OnGridPositionChanged;
         gridY.OnValueChanged           -= OnGridPositionChanged;
 
-        if (syncCoroutine != null) { StopCoroutine(syncCoroutine); syncCoroutine = null; }
+        if (syncCoroutine     != null) { StopCoroutine(syncCoroutine);     syncCoroutine     = null; }
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
         syncPending = false;
+        isWalking   = false;
     }
 
     // ── Owner setup ────────────────────────────────────────────────────────
 
     private IEnumerator WireUpOwnerSystems()
     {
-        float timeout = 30f;
-        float elapsed = 0f;
+        float timeout = 30f, elapsed = 0f;
 
         while (UnitActionSystem.Instance == null && elapsed < timeout)
         {
@@ -70,19 +73,9 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             elapsed += 0.1f;
         }
 
-        if (UnitActionSystem.Instance == null)
-        {
-            Debug.LogWarning("[NetworkedPlayerBridge] UnitActionSystem never found.");
-            yield break;
-        }
-
         elapsed = 0f;
-        while (elapsed < timeout)
+        while (!unit.IsInitialized() && elapsed < timeout)
         {
-            var  netObj             = GetComponent<NetworkObject>();
-            bool ownershipConfirmed = netObj != null && netObj.IsOwner;
-            bool unitReady          = unit.IsInitialized();
-            if (ownershipConfirmed && unitReady) break;
             yield return new WaitForSeconds(0.1f);
             elapsed += 0.1f;
         }
@@ -93,19 +86,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             yield break;
         }
 
-        // Snap transform to correct world pos (ApplyRoomSync skips transform).
-        var currentRoom = unit.GetCurrentRoomGrid();
-        if (currentRoom != null)
-        {
-            Vector2 vo    = unit.GetVisualOffset();
-            Vector3 world = currentRoom.GetWorldPosition(unit.GetGridPosition());
-            unit.transform.position = new Vector3(
-                world.x + vo.x,
-                world.y + vo.y,
-                unit.transform.position.z);
-        }
+        SnapTransformToGridPosition();
 
-        UnitActionSystem.Instance.SetSelectedUnit(unit);
+        if (UnitActionSystem.Instance != null)
+            UnitActionSystem.Instance.SetSelectedUnit(unit);
 
         var pt = GetComponent<PlayerTarget>();
         if (pt == null) pt = gameObject.AddComponent<PlayerTarget>();
@@ -124,22 +108,43 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         Debug.Log($"[NetworkedPlayerBridge] Owner systems wired for {gameObject.name}");
     }
 
+    private void SnapTransformToGridPosition()
+    {
+        var room = unit.GetCurrentRoomGrid();
+        if (room == null) return;
+
+        Vector2 vo    = unit.GetVisualOffset();
+        Vector3 world = room.GetWorldPosition(unit.GetGridPosition());
+        unit.transform.position = new Vector3(
+            world.x + vo.x,
+            world.y + vo.y,
+            unit.transform.position.z);
+    }
+
     // ── Public API ─────────────────────────────────────────────────────────
 
     public string       GetCurrentRoomName()    => currentRoomName.Value.ToString();
     public GridPosition GetNetworkGridPosition() => new(gridX.Value, gridY.Value);
 
-    /// <summary>Called by MoveAction at end of move — owner only.</summary>
+    public void SetWalking(bool walking) => isWalking = walking;
+
     public void SyncGridPosition(RoomGrid room, GridPosition pos)
     {
-        if (!IsOwner || isTransitioning) return;
+        if (!IsOwner) return;
+        isWalking = false;
         RequestMoveServerRpc(room.gameObject.name, pos.x, pos.y);
     }
 
-    /// <summary>Called by NetworkedPlayerSpawner after initial spawn — server only.</summary>
+    public void BroadcastMoveStep(Vector3 worldPos)
+    {
+        if (!IsOwner) return;
+        BroadcastMoveStepClientRpc(worldPos.x, worldPos.y);
+    }
+
+    /// <summary>Called by NetworkedPlayerSpawner on server after NGO spawn.</summary>
     public void InitialPlacement(RoomGrid room, GridPosition pos)
     {
-        if (!GameManager.IsMultiplayer || !IsServer) return;
+        if (!IsServer) return;
 
         currentRoomName.Value = room.gameObject.name;
         gridX.Value           = pos.x;
@@ -153,31 +158,29 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     {
         if (IsServer) return;
 
-        ApplyRoomSync(roomName, x, y);
+        var room = FindRoomGridByName(roomName);
+        if (room == null)
+        {
+            Debug.LogWarning($"[NetworkedPlayerBridge] InitialPlacement: room '{roomName}' not found.");
+            return;
+        }
+
+        unit.IsSyncingFromNetwork = true;
+        unit.PlaceInRoom(room, new GridPosition(x, y));
+        unit.IsSyncingFromNetwork = false;
 
         if (IsOwner)
         {
-            var room = FindRoomGridByName(roomName);
-            if (room != null)
-            {
-                Vector2 vo    = unit.GetVisualOffset();
-                Vector3 world = room.GetWorldPosition(new GridPosition(x, y));
-                unit.transform.position = new Vector3(
-                    world.x + vo.x,
-                    world.y + vo.y,
-                    unit.transform.position.z);
+            SnapTransformToGridPosition();
 
-                var placed = FindPlacedRoomForGrid(room);
-                if (placed != null) RoomManager.Instance?.SetCurrentRoom(placed);
-            }
+            var placed = FindPlacedRoomForGrid(room);
+            if (placed != null) RoomManager.Instance?.SetCurrentRoom(placed);
+
             CameraController2D.Instance?.SnapToTarget();
+            Debug.Log($"[NetworkedPlayerBridge] Owner initial placement: {roomName} ({x},{y})");
         }
     }
 
-    /// <summary>
-    /// Called when the player crosses into a new room via hallway trigger or minimap.
-    /// Owner-only: tells the server where this player ended up.
-    /// </summary>
     public void TransitionToRoom(RoomGrid newRoom, GridPosition spawnPos)
     {
         if (!GameManager.IsMultiplayer)
@@ -190,16 +193,15 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         if (!IsOwner) return;
 
-        isTransitioning = true;
+        isWalking = false;
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
+
         unit.PlaceInRoom(newRoom, spawnPos);
-        isTransitioning = false;
 
         var placed = FindPlacedRoomForGrid(newRoom);
         RoomManager.Instance?.SetCurrentRoom(placed);
         CameraController2D.Instance?.SnapToTarget();
 
-        // Tell server this player entered this room — server will spawn
-        // enemies and lock exits if needed.
         RequestRoomTransitionServerRpc(newRoom.gameObject.name, spawnPos.x, spawnPos.y);
     }
 
@@ -211,7 +213,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         currentRoomName.Value = roomName;
         gridX.Value           = x;
         gridY.Value           = y;
-        // No ClientRpc needed — NetworkVariable change propagates automatically.
     }
 
     [ServerRpc]
@@ -221,19 +222,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridX.Value           = spawnX;
         gridY.Value           = spawnY;
 
-        // Broadcast visual transition to non-owner clients.
         BroadcastRoomTransitionClientRpc(roomName, spawnX, spawnY);
-
-        // Server: handle enemy spawn + door lock for this room.
         HandleRoomEntryOnServer(roomName);
     }
 
-    /// <summary>
-    /// Server-side logic when a player enters a room:
-    ///   1. Spawn enemies if the room hasn't been cleared.
-    ///   2. Lock exits (one-way: players can ENTER but not LEAVE while enemies live).
-    ///   3. Notify all clients of the lock state.
-    /// </summary>
     private void HandleRoomEntryOnServer(string roomName)
     {
         if (!IsServer) return;
@@ -252,7 +244,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         if (placed.prefabData.roomType == LevelGenerator.RoomType.Start) return;
         if (placed.roomGrid.HasBeenCleared) return;
 
-        // Spawn enemies if not already present.
         bool hadEnemies = EnemyManager.Instance != null &&
                           EnemyManager.Instance.GetEnemiesInRoom(placed.roomGrid).Count > 0;
 
@@ -266,17 +257,13 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         if (hadEnemies)
         {
-            // Lock exits on all clients.
             LockRoomExitsClientRpc(roomName);
 
-            // Subscribe to room cleared so we can unlock when enemies die.
             if (EnemyManager.Instance != null)
             {
                 EnemyManager.Instance.OnRoomCleared -= OnRoomClearedServer;
                 EnemyManager.Instance.OnRoomCleared += OnRoomClearedServer;
             }
-
-            Debug.Log($"[NetworkedPlayerBridge] Server: locked exits for {roomName}");
         }
     }
 
@@ -285,26 +272,52 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         if (!IsServer) return;
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnRoomCleared -= OnRoomClearedServer;
-
         UnlockRoomExitsClientRpc(clearedRoom.gameObject.name);
-        Debug.Log($"[NetworkedPlayerBridge] Server: unlocked exits for {clearedRoom.name}");
     }
 
     // ── Client RPCs ────────────────────────────────────────────────────────
 
     [ClientRpc]
-    private void BroadcastRoomTransitionClientRpc(string roomName, int spawnX, int spawnY)
+    private void BroadcastMoveStepClientRpc(float wx, float wy)
     {
-        // Owner already applied locally in TransitionToRoom.
         if (IsOwner) return;
 
-        ApplyRoomSync(roomName, spawnX, spawnY);
+        Vector2 vo     = unit.GetVisualOffset();
+        Vector3 target = new Vector3(wx + vo.x, wy + vo.y, unit.transform.position.z);
+
+        if (stepLerpCoroutine != null) StopCoroutine(stepLerpCoroutine);
+        stepLerpCoroutine = StartCoroutine(LerpToWorldPos(target));
     }
 
-    /// <summary>
-    /// Closes doors and locks hallway walk triggers for a room on all clients.
-    /// Players already inside cannot leave; players outside can still enter.
-    /// </summary>
+    private IEnumerator LerpToWorldPos(Vector3 target)
+    {
+        const float speed = 8f; // keep in sync with MoveAction.moveSpeed
+        while (Vector2.Distance(unit.transform.position, target) > 0.01f)
+        {
+            unit.transform.position = Vector3.MoveTowards(
+                unit.transform.position, target, speed * Time.deltaTime);
+            yield return null;
+        }
+        unit.transform.position = target;
+        stepLerpCoroutine = null;
+    }
+
+    [ClientRpc]
+    private void BroadcastRoomTransitionClientRpc(string roomName, int spawnX, int spawnY)
+    {
+        if (IsOwner) return;
+
+        // Cancel any in-progress step lerp — the player is in a new room now.
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
+
+        var room = FindRoomGridByName(roomName);
+        if (room == null) return;
+
+        unit.IsSyncingFromNetwork = true;
+        unit.PlaceInRoom(room, new GridPosition(spawnX, spawnY));
+        unit.IsSyncingFromNetwork = false;
+    }
+
     [ClientRpc]
     private void LockRoomExitsClientRpc(string roomName)
     {
@@ -318,48 +331,37 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             { placed = r; break; }
         }
 
-        if (placed == null) return;
-
-        // Close connected doors visually.
-        var connectedDirs = new System.Collections.Generic.List<LevelGenerator.Direction>();
-        foreach (LevelGenerator.Direction dir in
-            System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+        if (placed != null)
         {
-            if (gen.GetConnectedRoom(placed, dir) != null)
-                connectedDirs.Add(dir);
+            var connectedDirs = new System.Collections.Generic.List<LevelGenerator.Direction>();
+            foreach (LevelGenerator.Direction dir in
+                System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+            {
+                if (gen.GetConnectedRoom(placed, dir) != null)
+                    connectedDirs.Add(dir);
+            }
+            placed.connector?.CloseConnectedDoors(connectedDirs);
         }
-        placed.connector?.CloseConnectedDoors(connectedDirs);
 
-        // Lock walk triggers whose hallways touch this room
-        // so players inside CANNOT walk out.
         foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
         {
             if (et.pairedWalkTrigger == null) continue;
-
-            bool hallwayTouchesRoom = false;
+            bool touches = false;
             if (et.Hallway != null)
             {
                 var roomA = et.Hallway.RoomA?.roomGrid;
                 var roomB = et.Hallway.RoomB?.roomGrid;
-                if (roomA != null && roomA.gameObject.name == roomName) hallwayTouchesRoom = true;
-                if (roomB != null && roomB.gameObject.name == roomName) hallwayTouchesRoom = true;
+                if (roomA != null && roomA.gameObject.name == roomName) touches = true;
+                if (roomB != null && roomB.gameObject.name == roomName) touches = true;
             }
-            if (!hallwayTouchesRoom) continue;
-
-            // Lock ONLY the walk trigger that leads OUT of this room.
-            // The entry trigger on the far side (leading IN) stays unlocked.
+            if (!touches) continue;
             et.SetExitLocked(true);
         }
 
-        // Switch camera to combat mode for any player currently in this room.
         var localUnit = UnitActionSystem.FindLocalOwnedUnit();
         if (localUnit != null &&
             localUnit.GetCurrentRoomGrid()?.gameObject.name == roomName)
-        {
             CameraController2D.Instance?.SetCombatState(true);
-        }
-
-        Debug.Log($"[NetworkedPlayerBridge] Client: exits locked for {roomName}");
     }
 
     [ClientRpc]
@@ -392,7 +394,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             RoomManager.Instance?.NotifyRoomCleared(placed);
         }
 
-        // Unlock all walk triggers touching this room.
         foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
         {
             bool touches = false;
@@ -405,34 +406,27 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             }
             if (et.DestinationRoom?.roomGrid?.gameObject.name == roomName) touches = true;
             if (!touches) continue;
-
             et.SetExitLocked(false);
             et.ResetTrigger();
         }
 
-        // Move cache needs rebuilding now that doors are open.
         var localUnit = UnitActionSystem.FindLocalOwnedUnit();
         localUnit?.GetMoveAction()?.InvalidateCache();
-
         CameraController2D.Instance?.SetCombatState(false);
-
-        Debug.Log($"[NetworkedPlayerBridge] Client: exits unlocked for {roomName}");
     }
 
     // ── NetworkVariable callbacks — NON-OWNER ONLY ─────────────────────────
 
     private void OnRoomNameChanged(FixedString64Bytes oldVal, FixedString64Bytes newVal)
     {
-        // CRITICAL: owners write these vars — they must NOT react to their own writes
-        // or they will rubber-band back to the last synced position mid-move.
-        if (IsOwner) return;
+        if (IsOwner || IsServer) return;
         string name = newVal.ToString();
         if (!string.IsNullOrEmpty(name)) QueueApplyRoomSync();
     }
 
     private void OnGridPositionChanged(int oldVal, int newVal)
     {
-        if (IsOwner) return; // same guard
+        if (IsOwner || IsServer) return;
         QueueApplyRoomSync();
     }
 
@@ -443,18 +437,18 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         syncCoroutine = StartCoroutine(ApplyRoomSyncNextFrame());
     }
 
-    private System.Collections.IEnumerator ApplyRoomSyncNextFrame()
+    private IEnumerator ApplyRoomSyncNextFrame()
     {
         yield return new WaitForEndOfFrame();
         syncPending   = false;
         syncCoroutine = null;
 
+        // If the owner is still walking, the step lerps are handling visual
+        // movement — don't snap the transform, just update grid state.
         string roomName = currentRoomName.Value.ToString();
         if (!string.IsNullOrEmpty(roomName))
             ApplyRoomSync(roomName, gridX.Value, gridY.Value);
     }
-
-    // ── Core sync ──────────────────────────────────────────────────────────
 
     private void ApplyRoomSync(string roomName, int x, int y)
     {
@@ -465,7 +459,9 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             return;
         }
 
-        unit.IsSyncingFromNetwork = true;
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
+
+        unit.IsSyncingFromNetwork = isWalking;
         unit.PlaceInRoom(room, new GridPosition(x, y));
         unit.IsSyncingFromNetwork = false;
     }
@@ -490,18 +486,15 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     {
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
-
         for (int i = 0; i < posX.Length; i++)
         {
             var pos = new GridPosition(posX[i], posY[i]);
             if (!room.IsValidGridPosition(pos)) continue;
-
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
                 if (enemy == null || enemy.IsDead) continue;
                 NetworkedHealthBridge.TakeDamage(enemy.gameObject, damage);
             }
-
             foreach (var target in room.GetUnitsAtGridPosition(pos))
                 NetworkedHealthBridge.TakeDamage(target.gameObject, damage);
         }

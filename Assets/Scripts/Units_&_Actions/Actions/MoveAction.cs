@@ -252,7 +252,12 @@ public class MoveAction : BaseAction
         Vector2 visualOff = unit.GetVisualOffset();
         int     stamSpent = 0;
 
-        unit.IsSyncingFromNetwork = true;
+        var bridge = GameManager.IsMultiplayer
+            ? unit.GetComponent<NetworkedPlayerBridge>()
+            : null;
+        bool isOwner = bridge != null && bridge.IsOwner;
+
+        if (isOwner) bridge.SetWalking(true);
 
         for (int i = 0; i < path.Count; i++)
         {
@@ -291,6 +296,9 @@ public class MoveAction : BaseAction
             }
             transform.position = visualTarget;
             stamSpent++;
+
+            if (isOwner)
+                bridge.BroadcastMoveStep(step.WorldPos);
         }
 
         var finalStep = path[^1];
@@ -302,19 +310,12 @@ public class MoveAction : BaseAction
 
         unitAnimator?.SetMoving(false);
         isActive = false;
-        unit.IsSyncingFromNetwork = false;
         InvalidateCache();
 
-        if (!GameManager.IsMultiplayer)
-        {
-            unit.PlaceInRoomNoMove(finalGrid, finalGP);
-        }
-        else
-        {
-            var bridge = unit.GetComponent<NetworkedPlayerBridge>();
-            if (bridge != null && bridge.IsOwner)
-                bridge.SyncGridPosition(finalGrid, finalGP);
-        }
+        unit.PlaceInRoomNoMove(finalGrid, finalGP);
+
+        if (GameManager.IsMultiplayer && isOwner)
+            bridge.SyncGridPosition(finalGrid, finalGP);
 
         onComplete?.Invoke();
     }
@@ -348,7 +349,7 @@ public class MoveAction : BaseAction
             {
                 var bridge = unit.GetComponent<NetworkedPlayerBridge>();
                 if (bridge != null && bridge.IsOwner)
-                    bridge.SyncGridPosition(startingGrid, finalGP);
+                    bridge.SyncGridPosition(startingGrid, finalGP); // also calls SetWalking(false)
             }
             else
                 unit.PlaceInRoomNoMove(startingGrid, finalGP);

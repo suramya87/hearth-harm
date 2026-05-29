@@ -32,7 +32,6 @@ public class HallwayEntryTrigger : MonoBehaviour
 
     public void ResetTrigger()
     {
-        StopAllCoroutines();
         coolingUnits.Clear();
         completedUnits.Clear();
         exitLocked = false;
@@ -156,16 +155,11 @@ public class HallwayEntryTrigger : MonoBehaviour
         {
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null && bridge.IsOwner)
-            {
                 bridge.TransitionToRoom(DestinationRoom.roomGrid, spawnPos);
-            }
         }
         else
         {
-            // ── Singleplayer — full local logic ────────────────────────────
-            unit.IsSyncingFromNetwork = true;
             unit.PlaceInRoom(DestinationRoom.roomGrid, spawnPos);
-            unit.IsSyncingFromNetwork = false;
 
             RoomManager.Instance?.SetCurrentRoom(DestinationRoom);
             CameraController2D.Instance?.SnapToTarget();
@@ -315,8 +309,8 @@ public class HallwayEntryTrigger : MonoBehaviour
 
         CameraController2D.Instance?.SetCombatState(false);
         StartCoroutine(InvalidateCacheAfterDoorsOpen());
-        clearedRoom.MarkCleared();
-        RoomManager.Instance?.NotifyRoomCleared(DestinationRoom);
+        RoomManager.Instance?.NotifyRoomCleared(
+            FindPlacedRoomForGrid(clearedRoom));
     }
 
     private IEnumerator InvalidateCacheAfterDoorsOpen()
@@ -410,6 +404,18 @@ public class HallwayEntryTrigger : MonoBehaviour
             var net = u.GetComponent<Unity.Netcode.NetworkObject>();
             if (net != null && net.IsOwner) return u;
         }
+        return null;
+    }
+
+    private static LevelGenerator.PlacedRoom FindPlacedRoomForGrid(RoomGrid grid)
+    {
+        if (grid == null) return null;
+        var gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen == null) return null;
+        foreach (var placed in gen.GetAllRooms())
+            if (placed.roomGrid == grid ||
+                placed.roomGrid?.gameObject.name == grid.gameObject.name)
+                return placed;
         return null;
     }
 }
