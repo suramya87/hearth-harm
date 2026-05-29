@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
@@ -27,15 +28,11 @@ public class EnemySpawner : MonoBehaviour
 
     private void OnLevelReady()
     {
-        // With the new hallway walk-in system, enemies spawn on room entry
-        // rather than all at once. Set spawnOnLevelReady = false in the Inspector
-        // to opt into the new behaviour. Legacy projects can keep it true.
         if (spawnOnLevelReady) SpawnAll();
     }
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /// <summary>Spawn all enemies across all rooms at once (legacy / opt-in).</summary>
     public void SpawnAll()
     {
         var gen = FindAnyObjectByType<LevelGenerator>();
@@ -47,13 +44,6 @@ public class EnemySpawner : MonoBehaviour
             SpawnLegacy(gen);
     }
 
-    /// <summary>
-    /// Spawn enemies for ONE specific room — called by HallwayEntryTrigger
-    /// when the player first walks into that room.
-    ///
-    /// Uses the same spawn-table / legacy logic as SpawnAll() but scoped
-    /// to the single PlacedRoom that was just entered.
-    /// </summary>
     public void SpawnForRoom(LevelGenerator.PlacedRoom room)
     {
         if (room == null || room.roomGrid == null || !room.roomGrid.IsInitialized())
@@ -62,7 +52,6 @@ public class EnemySpawner : MonoBehaviour
             return;
         }
 
-        // Don't re-spawn enemies in a room the player has already cleared.
         if (room.roomGrid.HasBeenCleared)
         {
             Debug.Log($"[EnemySpawner] Skipping already-cleared room: {room.roomInstance.name}");
@@ -102,7 +91,6 @@ public class EnemySpawner : MonoBehaviour
         }
         else
         {
-            // Legacy fallback
             foreach (var entry in legacyEntries)
             {
                 if (entry.prefab == null) continue;
@@ -175,15 +163,52 @@ public class EnemySpawner : MonoBehaviour
     {
         if (prefab == null || room == null) return null;
         if (!room.IsWalkableIgnoreOccupancy(pos))
-        { Debug.LogWarning($"[EnemySpawner] {pos} not walkable."); return null; }
+        {
+            Debug.LogWarning($"[EnemySpawner] {pos} not walkable.");
+            return null;
+        }
 
         var worldPos = room.GetWorldPosition(pos);
         if (!room.IsPositionInRoom(worldPos))
-        { Debug.LogWarning($"[EnemySpawner] {worldPos} outside room bounds."); return null; }
+        {
+            Debug.LogWarning($"[EnemySpawner] {worldPos} outside room bounds.");
+            return null;
+        }
 
-        var go = Instantiate(prefab, worldPos, Quaternion.identity);
+        GameObject go;
+
+        if (GameManager.IsMultiplayer)
+        {
+            if (!NetworkManager.Singleton.IsServer)
+            {
+                Debug.LogWarning("[EnemySpawner] SpawnEnemy called on client — skipping.");
+                return null;
+            }
+
+            go = Instantiate(prefab, worldPos, Quaternion.identity);
+            var netObj = go.GetComponent<NetworkObject>();
+            if (netObj == null)
+            {
+                Debug.LogError($"[EnemySpawner] Enemy prefab '{prefab.name}' is missing " +
+                               "NetworkObject. Add one and register it in NetworkManager's " +
+                               "NetworkPrefabs list for multiplayer damage to work.");
+                Destroy(go);
+                return null;
+            }
+            netObj.Spawn();
+        }
+        else
+        {
+            go = Instantiate(prefab, worldPos, Quaternion.identity);
+        }
+
         var eu = go.GetComponent<EnemyUnit>();
-        if (eu == null) { Debug.LogError($"[EnemySpawner] {prefab.name} missing EnemyUnit."); Destroy(go); return null; }
+        if (eu == null)
+        {
+            Debug.LogError($"[EnemySpawner] {prefab.name} missing EnemyUnit.");
+            Destroy(go);
+            return null;
+        }
 
         eu.PlaceOnGrid(room, pos);
         EnemyManager.Instance?.RegisterEnemy(eu);
