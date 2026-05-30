@@ -20,7 +20,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/SamUpdatesDOSSS.unity
     guid: c69cfaba25360a54e88513557e55eaa3
-  - enabled: 0
+  - enabled: 1
     path: Assets/Scenes/MultiplayerNew.unity
     guid: 945d577c215b88e42ac8217307e73b84
   m_configObjects:

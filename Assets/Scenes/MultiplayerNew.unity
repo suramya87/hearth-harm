@@ -440,7 +440,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 4253681513
+  GlobalObjectIdHash: 1656386456
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -688,7 +688,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 577624911
+  GlobalObjectIdHash: 1954544209
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -960,10 +960,6 @@ MonoBehaviour:
   recenterOnPlayerTurn: 1
   followSmoothness: 8
   unlockDistance: 0.05
-  followPlayerWhileMoving: 1
-  playerMoveDetectThreshold: 0.01
-  usePlayerLeashBounds: 1
-  playerLeashDistance: 30
   shakeFrequency: 25
 --- !u!1 &1624180977
 GameObject:
@@ -1106,7 +1102,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 679987098
+  GlobalObjectIdHash: 24831670
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -1379,10 +1375,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4dbd529f57afcf748a6b3e2731f7b8b8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UnitActionSystem
-  selectedUnit: {fileID: 0}
   unitLayerMask:
     serializedVersion: 2
     m_Bits: 128
+  diceBoxUI: {fileID: 0}
 --- !u!4 &2097609747
 Transform:
   m_ObjectHideFlags: 0
