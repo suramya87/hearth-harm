@@ -4,7 +4,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-
 public class TurnSystemUI : MonoBehaviour
 {
     [Header("Core")]
@@ -27,13 +26,13 @@ public class TurnSystemUI : MonoBehaviour
     private void OnEnable()
     {
         LevelGenerator.OnLevelReady += OnLevelReady;
-        SubscribeTurnSystem();
+        SubscribeTurnSystems();
     }
 
     private void OnDisable()
     {
         LevelGenerator.OnLevelReady -= OnLevelReady;
-        UnsubscribeTurnSystem();
+        UnsubscribeTurnSystems();
     }
 
     private void Start()
@@ -42,26 +41,37 @@ public class TurnSystemUI : MonoBehaviour
         SetOverlay(endTurnFlashOverlay,   false);
         SetOverlay(disabledClickFeedback, false);
         UpdateTurnText();
-        SetPlayerTurnUI(TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn);
+
+        // Set initial state based on whichever turn system is active.
+        SetPlayerTurnUI(IsLocalPlayerTurn());
     }
 
     private void OnLevelReady()
     {
-        SubscribeTurnSystem();
+        SubscribeTurnSystems();
         StartCoroutine(FindPlayerStats());
     }
 
-    private void SubscribeTurnSystem()
+    private void SubscribeTurnSystems()
     {
+        // Singleplayer
         if (TurnSystem.Instance != null)
         {
             TurnSystem.Instance.OnTurnChanged     += OnTurnChanged;
             TurnSystem.Instance.OnPlayerTurnBegin += OnPlayerTurnBegin;
             TurnSystem.Instance.OnEnemyPhaseBegin += OnEnemyPhaseBegin;
         }
+
+        // Multiplayer — subscribe to per-player events
+        if (NetworkedTurnSystem.Instance != null)
+        {
+            NetworkedTurnSystem.Instance.OnTurnChanged     += OnTurnChangedMP;
+            NetworkedTurnSystem.Instance.OnPlayerTurnBegin += OnPlayerTurnBegin;
+            NetworkedTurnSystem.Instance.OnEnemyPhaseBegin += OnEnemyPhaseBegin;
+        }
     }
 
-    private void UnsubscribeTurnSystem()
+    private void UnsubscribeTurnSystems()
     {
         if (TurnSystem.Instance != null)
         {
@@ -69,16 +79,31 @@ public class TurnSystemUI : MonoBehaviour
             TurnSystem.Instance.OnPlayerTurnBegin -= OnPlayerTurnBegin;
             TurnSystem.Instance.OnEnemyPhaseBegin -= OnEnemyPhaseBegin;
         }
+
+        if (NetworkedTurnSystem.Instance != null)
+        {
+            NetworkedTurnSystem.Instance.OnTurnChanged     -= OnTurnChangedMP;
+            NetworkedTurnSystem.Instance.OnPlayerTurnBegin -= OnPlayerTurnBegin;
+            NetworkedTurnSystem.Instance.OnEnemyPhaseBegin -= OnEnemyPhaseBegin;
+        }
     }
 
     private IEnumerator FindPlayerStats()
     {
-        float e = 0f;
-        while (e < 10f)
+        float elapsed = 0f;
+        while (elapsed < 10f)
         {
-            var unit = FindAnyObjectByType<Unit>();
-            if (unit != null) { localStats = unit.GetComponent<PlayerStats>(); yield break; }
-            e += Time.deltaTime;
+            // In multiplayer find the LOCAL owned unit's stats.
+            Unit unit = GameManager.IsMultiplayer
+                ? UnitActionSystem.FindLocalOwnedUnit()
+                : FindAnyObjectByType<Unit>();
+
+            if (unit != null)
+            {
+                localStats = unit.GetComponent<PlayerStats>();
+                yield break;
+            }
+            elapsed += Time.deltaTime;
             yield return null;
         }
     }
@@ -88,7 +113,8 @@ public class TurnSystemUI : MonoBehaviour
     private void Update()
     {
         if (localStats == null) return;
-        bool isPlayer     = TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
+
+        bool isPlayer     = IsLocalPlayerTurn();
         bool outOfStamina = localStats.currentStamina == 0;
 
         if (!isPlayer)
@@ -113,20 +139,30 @@ public class TurnSystemUI : MonoBehaviour
 
     private void OnEndTurnClicked()
     {
-        if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn)
-        { StartCoroutine(DisabledFeedback()); return; }
+        if (!IsLocalPlayerTurn())
+        {
+            StartCoroutine(DisabledFeedback());
+            return;
+        }
 
-        TurnSystem.Instance?.NextTurn();
+        if (GameManager.IsMultiplayer)
+        {
+            NetworkedTurnSystem.Instance?.RequestEndTurn();
+        }
+        else
+        {
+            TurnSystem.Instance?.NextTurn();
+        }
     }
 
     // ── Events ─────────────────────────────────────────────────────────────
 
-    private void OnTurnChanged(object s, EventArgs e) => UpdateTurnText();
+    private void OnTurnChanged(object s, EventArgs e)    => UpdateTurnText();
+    private void OnTurnChangedMP(object s, EventArgs e)  => UpdateTurnText();
 
     private void OnPlayerTurnBegin()
     {
         SetPlayerTurnUI(true);
-
         if (endTurnButton) endTurnButton.interactable = true;
         UpdateTurnText();
     }
@@ -134,9 +170,18 @@ public class TurnSystemUI : MonoBehaviour
     private void OnEnemyPhaseBegin()
     {
         SetPlayerTurnUI(false);
-
         StopFlash();
         if (endTurnButton) endTurnButton.interactable = false;
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static bool IsLocalPlayerTurn()
+    {
+        if (!GameManager.IsMultiplayer)
+            return TurnSystem.Instance == null || TurnSystem.Instance.IsPlayerTurn;
+        return NetworkedTurnSystem.Instance == null ||
+               NetworkedTurnSystem.Instance.IsPlayerPhase;
     }
 
     // ── Flash ──────────────────────────────────────────────────────────────
@@ -167,7 +212,10 @@ public class TurnSystemUI : MonoBehaviour
 
     private void UpdateTurnText()
     {
-        if (turnNumberText != null && TurnSystem.Instance != null)
+        if (turnNumberText == null) return;
+        if (GameManager.IsMultiplayer && NetworkedTurnSystem.Instance != null)
+            turnNumberText.text = "TURN " + NetworkedTurnSystem.Instance.TurnNumber;
+        else if (TurnSystem.Instance != null)
             turnNumberText.text = "TURN " + TurnSystem.Instance.GetTrunNumber();
     }
 

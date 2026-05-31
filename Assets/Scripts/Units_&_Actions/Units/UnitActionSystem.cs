@@ -76,7 +76,6 @@ public class UnitActionSystem : MonoBehaviour
         if (!IsLocalPlayerTurn()) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
 
-        // In multiplayer re-validate ownership every frame and auto-correct.
         if (GameManager.IsMultiplayer)
         {
             if (selectedUnit == null || !IsOwnedByLocalPlayer(selectedUnit))
@@ -87,7 +86,6 @@ public class UnitActionSystem : MonoBehaviour
                     Debug.Log($"[UnitActionSystem] Auto-correcting selected unit to {owned.name}");
                     SetSelectedUnit(owned);
                 }
-                // Don't return here — if we just set the unit, let input through this frame.
                 if (selectedUnit == null) return;
             }
         }

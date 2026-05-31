@@ -24,6 +24,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     private Coroutine stepLerpCoroutine;
     private bool      isWalking;
 
+    // Track which room this player is currently registered as a combatant in
+    // so we can unregister cleanly if they leave or the object despawns.
+    private string registeredCombatRoom = "";
+
     private void Awake() => unit = GetComponent<Unit>();
 
     // ── Network lifecycle ──────────────────────────────────────────────────
@@ -57,6 +61,14 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
         syncPending = false;
         isWalking   = false;
+
+        // Clean up combat registration if this object despawns mid-combat
+        if (IsServer && !string.IsNullOrEmpty(registeredCombatRoom))
+        {
+            NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
+                OwnerClientId, registeredCombatRoom);
+            registeredCombatRoom = "";
+        }
     }
 
     // ── Owner setup ────────────────────────────────────────────────────────
@@ -221,6 +233,32 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         HandleRoomEntryOnServer(roomName);
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestJoinActiveCombatServerRpc(string roomName, int spawnX, int spawnY,
+        ServerRpcParams rpcParams = default)
+    {
+        ulong callerId = rpcParams.Receive.SenderClientId;
+
+        if (!string.IsNullOrEmpty(registeredCombatRoom) && registeredCombatRoom != roomName)
+        {
+            NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
+                callerId, registeredCombatRoom);
+        }
+
+        currentRoomName.Value = roomName;
+        gridX.Value           = spawnX;
+        gridY.Value           = spawnY;
+
+        NetworkedTurnSystem.Instance?.RegisterPlayerInRoomCombat(callerId, roomName);
+        registeredCombatRoom = roomName;
+
+        BroadcastRoomTransitionClientRpc(roomName, spawnX, spawnY);
+
+        LockRoomExitsClientRpc(roomName);
+
+        Debug.Log($"[NetworkedPlayerBridge] Client {callerId} joined active combat in '{roomName}'.");
+    }
+
     private void HandleRoomEntryOnServer(string roomName)
     {
         if (!IsServer) return;
@@ -252,6 +290,17 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         if (hadEnemies)
         {
+            // Unregister from any previous combat room
+            if (!string.IsNullOrEmpty(registeredCombatRoom) && registeredCombatRoom != roomName)
+            {
+                NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
+                    OwnerClientId, registeredCombatRoom);
+            }
+
+            // Register this player into the room's combat turn tracking
+            NetworkedTurnSystem.Instance?.RegisterPlayerInRoomCombat(OwnerClientId, roomName);
+            registeredCombatRoom = roomName;
+
             LockRoomExitsClientRpc(roomName);
 
             if (EnemyManager.Instance != null)
@@ -267,6 +316,13 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         if (!IsServer) return;
         if (EnemyManager.Instance != null)
             EnemyManager.Instance.OnRoomCleared -= OnRoomClearedServer;
+
+        // Clear combat tracking for this room in the turn system
+        NetworkedTurnSystem.Instance?.ClearRoomCombat(clearedRoom.gameObject.name);
+
+        if (registeredCombatRoom == clearedRoom.gameObject.name)
+            registeredCombatRoom = "";
+
         UnlockRoomExitsClientRpc(clearedRoom.gameObject.name);
     }
 
@@ -318,7 +374,7 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         var gen = FindAnyObjectByType<LevelGenerator>();
         if (gen == null) return;
 
-        // Always close visual doors on all clients.
+        // Always close visual doors on all clients
         LevelGenerator.PlacedRoom placed = null;
         foreach (var r in gen.GetAllRooms())
         {
@@ -341,9 +397,9 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         var localUnit = UnitActionSystem.FindLocalOwnedUnit();
         if (localUnit == null) return;
 
-        string localRoomName   = localUnit.GetCurrentRoomGrid()?.gameObject.name;
-        bool localInRoom       = localRoomName == roomName;
-        bool localAdjacent     = false;
+        string localRoomName = localUnit.GetCurrentRoomGrid()?.gameObject.name;
+        bool localInRoom     = localRoomName == roomName;
+        bool localAdjacent   = false;
 
         if (!localInRoom && placed != null)
         {

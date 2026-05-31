@@ -56,10 +56,19 @@ public class HallwayEntryTrigger : MonoBehaviour
         if (unit == null) return;
         if (!IsLocalPlayerUnit(unit)) return;
 
-        if (exitLocked && IsUnitLeavingLockedRoom(unit))
+        bool destinationHasActiveCombat = EnemyManager.Instance != null &&
+            EnemyManager.Instance.GetEnemiesInRoom(DestinationRoom.roomGrid).Count > 0;
+
+        if (exitLocked)
         {
-            Debug.Log("[HallwayEntryTrigger] Exit blocked — enemies in current room.");
-            return;
+            bool unitIsLeaving = IsUnitLeavingLockedRoom(unit);
+
+            if (unitIsLeaving && !destinationHasActiveCombat)
+            {
+                Debug.Log("[HallwayEntryTrigger] Exit blocked — enemies in current room, " +
+                          "destination has no combat.");
+                return;
+            }
         }
 
         if (coolingUnits.Contains(unit)) return;
@@ -155,10 +164,33 @@ public class HallwayEntryTrigger : MonoBehaviour
         {
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null && bridge.IsOwner)
-                bridge.TransitionToRoom(DestinationRoom.roomGrid, spawnPos);
+            {
+                bool destinationHasActiveCombat = EnemyManager.Instance != null &&
+                    DestinationRoom.roomGrid != null &&
+                    EnemyManager.Instance.GetEnemiesInRoom(DestinationRoom.roomGrid).Count > 0;
+
+                if (destinationHasActiveCombat)
+                {
+                    Debug.Log($"[HallwayEntryTrigger] {unit.name} joining active combat in " +
+                              $"'{DestinationRoom.roomGrid.gameObject.name}'.");
+
+                    unit.PlaceInRoom(DestinationRoom.roomGrid, spawnPos);
+                    RoomManager.Instance?.SetCurrentRoom(DestinationRoom);
+                    CameraController2D.Instance?.SnapToTarget();
+                    CameraController2D.Instance?.SetCombatState(true);
+
+                    bridge.RequestJoinActiveCombatServerRpc(
+                        DestinationRoom.roomGrid.gameObject.name, spawnPos.x, spawnPos.y);
+                }
+                else
+                {
+                    bridge.TransitionToRoom(DestinationRoom.roomGrid, spawnPos);
+                }
+            }
         }
         else
         {
+            // ── Singleplayer ───────────────────────────────────────────────
             unit.PlaceInRoom(DestinationRoom.roomGrid, spawnPos);
 
             RoomManager.Instance?.SetCurrentRoom(DestinationRoom);
@@ -309,8 +341,7 @@ public class HallwayEntryTrigger : MonoBehaviour
 
         CameraController2D.Instance?.SetCombatState(false);
         StartCoroutine(InvalidateCacheAfterDoorsOpen());
-        RoomManager.Instance?.NotifyRoomCleared(
-            FindPlacedRoomForGrid(clearedRoom));
+        RoomManager.Instance?.NotifyRoomCleared(FindPlacedRoomForGrid(clearedRoom));
     }
 
     private IEnumerator InvalidateCacheAfterDoorsOpen()

@@ -34,7 +34,6 @@ public class PlayerStats : MonoBehaviour, IHasHealth
 
     private HealthComponent health;
 
-    /// <summary>Fired whenever stamina changes. Args: (currentStamina, maxStamina).</summary>
     public event Action<int, int> OnStaminaChanged;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -85,8 +84,14 @@ public class PlayerStats : MonoBehaviour, IHasHealth
     private void OnRoomChanged(LevelGenerator.PlacedRoom _)
     {
         RefillStaminaToMax();
-        TurnSystem.Instance?.ForcePlayerTurn();
-        Debug.Log("[PlayerStats] Room entered → stamina refilled, player turn forced.");
+
+        if (!GameManager.IsMultiplayer)
+        {
+            TurnSystem.Instance?.ForcePlayerTurn();
+        }
+
+        Debug.Log("[PlayerStats] Room entered → stamina refilled" +
+                  (GameManager.IsMultiplayer ? "." : ", player turn forced."));
     }
 
     // ── Stats loading ──────────────────────────────────────────────────────
@@ -117,10 +122,6 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         currentStamina = maxStamina;
     }
 
-    /// <summary>
-    /// Called by the networked spawner after instantiation to apply the correct
-    /// character class. Safe to call after Awake() has already run.
-    /// </summary>
     public void InitializeWithClass(PlayerClass chosenClass)
     {
         playerClass = chosenClass;
@@ -166,10 +167,6 @@ public class PlayerStats : MonoBehaviour, IHasHealth
         OnStaminaChanged?.Invoke(currentStamina, maxStamina);
     }
 
-    /// <summary>
-    /// Recovers stamina using a dice roll based on Dexterity.
-    /// Used for "End Turn" or "Rest" mechanics.
-    /// </summary>
     public int RollStaminaRecovery()
     {
         int diceCount      = Mathf.Max(1, Mathf.CeilToInt(dexterity / 2f));
@@ -248,4 +245,3 @@ public class PlayerStats : MonoBehaviour, IHasHealth
                   $"Stamina {currentStamina}/{maxStamina}");
     }
 }
-

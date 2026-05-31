@@ -44,7 +44,6 @@ public class HallwayWalkTrigger : MonoBehaviour
     {
         if (applied && RoomManager.Instance != null && RoomManager.Instance.IsInHallway())
             return;
-
         TryApplyCamera(other);
     }
 
@@ -56,10 +55,9 @@ public class HallwayWalkTrigger : MonoBehaviour
 
     private void TryApplyCamera(Collider2D other)
     {
-        if (cooling || locked) return;
+        if (cooling) return;
         if (!other.CompareTag("Player")) return;
         if (hallway == null || !hallway.IsReady) return;
-
         if (!IsLocalPlayerCollider(other)) return;
 
         ApplyHallwayCameraBounds();
@@ -75,7 +73,6 @@ public class HallwayWalkTrigger : MonoBehaviour
 
         var netObj = col.GetComponent<Unity.Netcode.NetworkObject>()
                   ?? col.GetComponentInParent<Unity.Netcode.NetworkObject>();
-
         return netObj != null && netObj.IsOwner;
     }
 
@@ -88,10 +85,8 @@ public class HallwayWalkTrigger : MonoBehaviour
         if (floor == null) return;
 
         var     cb       = floor.cellBounds;
-        Vector3 worldMin = floor.GetCellCenterWorld(
-            new Vector3Int(cb.xMin,     cb.yMin,     0));
-        Vector3 worldMax = floor.GetCellCenterWorld(
-            new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
+        Vector3 worldMin = floor.GetCellCenterWorld(new Vector3Int(cb.xMin,     cb.yMin,     0));
+        Vector3 worldMax = floor.GetCellCenterWorld(new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
 
         Vector3 center = (worldMin + worldMax) * 0.5f;
         float   width  = Mathf.Abs(worldMax.x - worldMin.x);

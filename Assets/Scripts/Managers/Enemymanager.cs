@@ -40,11 +40,6 @@ public class EnemyManager : MonoBehaviour
         OnEnemyListChanged?.Invoke();
     }
 
-    /// <summary>
-    /// Primary death path — called from EnemyUnit.HandleDeath with the room
-    /// captured before any cleanup. This guarantees OnRoomCleared fires even
-    /// if the enemy's currentRoomGrid is nulled before Destroy completes.
-    /// </summary>
     public void UnregisterEnemyFromRoom(EnemyUnit e, RoomGrid roomAtDeath)
     {
         if (!active.Remove(e)) return;
@@ -57,8 +52,6 @@ public class EnemyManager : MonoBehaviour
 
         if (roomAtDeath == null) return;
 
-        // GetEnemiesInRoom filters out IsDead enemies, so if all remaining
-        // active enemies in this room are dead, count will be 0 and we fire.
         if (GetEnemiesInRoom(roomAtDeath).Count == 0)
         {
             Debug.Log($"[EnemyManager] Room cleared: {roomAtDeath.gameObject.name}");
@@ -67,11 +60,6 @@ public class EnemyManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Fallback path — called from EnemyUnit.OnDestroy when HandleDeath was
-    /// never reached (direct Destroy call, ClearAllEnemies, level reload).
-    /// Room reference may be null or stale here; best-effort only.
-    /// </summary>
     public void UnregisterEnemy(EnemyUnit e)
     {
         var room = e.CurrentRoomGrid;
@@ -110,10 +98,6 @@ public class EnemyManager : MonoBehaviour
     public int             GetEnemyCount() => active.Count;
     public List<EnemyUnit> GetAllEnemies() => new(active);
 
-    /// <summary>
-    /// Returns only living (non-dead) enemies in the given room.
-    /// Compares by GameObject name so references don't need to match exactly.
-    /// </summary>
     public List<EnemyUnit> GetEnemiesInRoom(RoomGrid room)
     {
         var result = new List<EnemyUnit>();
@@ -156,14 +140,27 @@ public class EnemyManager : MonoBehaviour
         EnemyTurnQueue.Instance.BuildQueue(room, enemies);
 
         if (showDebugLogs)
-            Debug.Log($"[EnemyManager] Queue built: {enemies.Count} enemies in " +
-                      $"{room.gameObject.name}");
+            Debug.Log($"[EnemyManager] Queue built: {enemies.Count} enemies in {room.gameObject.name}");
     }
 
     public void RunEnemyTurns()
     {
         if (running) return;
         BuildQueueForCurrentRoom();
+        StartCoroutine(RunTurns());
+    }
+
+    public void RunEnemyTurnsForRoom(RoomGrid room, List<EnemyUnit> enemies)
+    {
+        if (running)
+        {
+            Debug.LogWarning("[EnemyManager] RunEnemyTurnsForRoom called while already running.");
+            return;
+        }
+
+        if (EnemyTurnQueue.Instance != null)
+            EnemyTurnQueue.Instance.BuildQueue(room, enemies);
+
         StartCoroutine(RunTurns());
     }
 
