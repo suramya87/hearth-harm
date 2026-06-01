@@ -5,9 +5,9 @@ using UnityEngine;
 public class HallwayWalkTrigger : MonoBehaviour
 {
     private HallwayGrid hallway;
-    private bool        locked;
-    private bool        cooling;
-    private bool        applied; 
+    private bool locked;
+    private bool cooling;
+    private bool applied;
 
     public GameObject DoorStripObject { get; set; }
 
@@ -29,14 +29,14 @@ public class HallwayWalkTrigger : MonoBehaviour
     private IEnumerator TemporaryDisableRoutine(float seconds)
     {
         cooling = true;
-        applied = false; 
+        applied = false;
         yield return new WaitForSeconds(seconds);
         cooling = false;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        applied = false; 
+        applied = false;
         TryApplyCamera(other);
     }
 
@@ -60,9 +60,23 @@ public class HallwayWalkTrigger : MonoBehaviour
         if (!other.CompareTag("Player")) return;
         if (hallway == null || !hallway.IsReady) return;
 
+        if (!IsLocalPlayerCollider(other)) return;
+
         ApplyHallwayCameraBounds();
         RoomManager.Instance?.SetInHallway();
         applied = true;
+    }
+
+    private static bool IsLocalPlayerCollider(Collider2D col)
+    {
+        if (!GameManager.IsMultiplayer)
+            return col.GetComponent<Unit>() != null
+                || col.GetComponentInParent<Unit>() != null;
+
+        var netObj = col.GetComponent<Unity.Netcode.NetworkObject>()
+                  ?? col.GetComponentInParent<Unity.Netcode.NetworkObject>();
+
+        return netObj != null && netObj.IsOwner;
     }
 
     private void ApplyHallwayCameraBounds()
@@ -73,20 +87,18 @@ public class HallwayWalkTrigger : MonoBehaviour
         var floor = hallway.FloorTilemap;
         if (floor == null) return;
 
-        var     cb       = floor.cellBounds;
+        var cb = floor.cellBounds;
         Vector3 worldMin = floor.GetCellCenterWorld(
-            new Vector3Int(cb.xMin,     cb.yMin,     0));
+            new Vector3Int(cb.xMin, cb.yMin, 0));
         Vector3 worldMax = floor.GetCellCenterWorld(
             new Vector3Int(cb.xMax - 1, cb.yMax - 1, 0));
 
         Vector3 center = (worldMin + worldMax) * 0.5f;
-        float   width  = Mathf.Abs(worldMax.x - worldMin.x);
-        float   height = Mathf.Abs(worldMax.y - worldMin.y);
+        float width = Mathf.Abs(worldMax.x - worldMin.x);
+        float height = Mathf.Abs(worldMax.y - worldMin.y);
 
-        float finalWidth  = Mathf.Max(width  + 64f, 32f);
+        float finalWidth = Mathf.Max(width + 64f, 32f);
         float finalHeight = Mathf.Max(height + 64f, 10f);
 
-        cam.SetRoomBounds(new Bounds(center,
-            new Vector3(finalWidth, finalHeight, 10f)));
     }
 }

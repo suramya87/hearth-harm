@@ -31,7 +31,7 @@ public class UnitActionSystem : MonoBehaviour
         Instance = this;
 
         if (diceBoxUI == null)
-            diceBoxUI = FindFirstObjectByType<DiceBoxUI>();
+            diceBoxUI = FindAnyObjectByType<DiceBoxUI>();
     }
 
     private void OnEnable()  => LevelGenerator.OnLevelReady += OnLevelReady;
@@ -58,19 +58,27 @@ public class UnitActionSystem : MonoBehaviour
             while (waited < 8f)
             {
                 waited += Time.deltaTime;
-                var units = FindObjectsByType<Unit>(FindObjectsSortMode.None);
+                var units =
+    FindObjectsByType<Unit>(
+        FindObjectsInactive.Exclude);
+
                 foreach (var u in units)
                 {
                     var netObj = u.GetComponent<Unity.Netcode.NetworkObject>();
+
                     if (netObj != null && netObj.IsOwner)
                     {
                         SetSelectedUnit(u);
-                        localBridge = u.GetComponent<NetworkedPlayerBridge>();
-                        Debug.Log($"[UnitActionSystem] MP unit found: {u.name}");
+
+                        localBridge =
+                            u.GetComponent<NetworkedPlayerBridge>();
+
+                        Debug.Log(
+                            $"[UnitActionSystem] MP unit found: {u.name}");
+
                         yield break;
                     }
                 }
-                yield return null;
             }
             Debug.LogWarning("[UnitActionSystem] Timed out waiting for owned unit.");
             yield break;
@@ -144,7 +152,9 @@ public class UnitActionSystem : MonoBehaviour
 
     private void TrySelectOwnedUnit()
     {
-        foreach (var u in FindObjectsByType<Unit>(FindObjectsSortMode.None))
+        foreach (var u in
+    FindObjectsByType<Unit>(
+        FindObjectsInactive.Exclude))
         {
             if (GameManager.IsMultiplayer)
             {
