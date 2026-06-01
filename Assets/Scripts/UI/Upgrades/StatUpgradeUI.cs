@@ -18,6 +18,9 @@ public class StatUpgradeUI : MonoBehaviour
     [SerializeField] private Button luckButton;
 
     private readonly HashSet<RoomGrid> upgradedRooms = new();
+    private readonly Queue<Unit> pendingUpgradeUnits = new();
+
+    private Unit currentUpgradeUnit;
     private bool subscribed;
 
     private void Awake()
@@ -69,17 +72,71 @@ public class StatUpgradeUI : MonoBehaviour
 
         upgradedRooms.Add(clearedRoom);
 
-        ShowPanel();
+        StartPartyUpgradeSequence();
     }
 
-    private void ShowPanel()
+    private void StartPartyUpgradeSequence()
     {
-        Debug.Log("[StatUpgradeUI] Showing stat upgrade panel.");
+        BuildUpgradeQueue();
+        ShowNextUpgradeTarget();
+    }
+
+    private void BuildUpgradeQueue()
+    {
+        pendingUpgradeUnits.Clear();
+
+        if (PartyManager.Instance == null || PartyManager.Instance.PartyUnits.Count == 0)
+        {
+            Unit fallback = UnitActionSystem.Instance != null
+                ? UnitActionSystem.Instance.GetSelectedUnit()
+                : null;
+
+            if (fallback != null)
+                pendingUpgradeUnits.Enqueue(fallback);
+
+            return;
+        }
+
+        Unit selected = PartyManager.Instance.SelectedUnit;
+
+        if (selected != null)
+            pendingUpgradeUnits.Enqueue(selected);
+
+        foreach (Unit unit in PartyManager.Instance.PartyUnits)
+        {
+            if (unit == null || unit == selected)
+                continue;
+
+            pendingUpgradeUnits.Enqueue(unit);
+        }
+    }
+
+    private void ShowNextUpgradeTarget()
+    {
+        if (pendingUpgradeUnits.Count == 0)
+        {
+            currentUpgradeUnit = null;
+
+            if (panelRoot != null)
+                panelRoot.SetActive(false);
+
+            Time.timeScale = 1f;
+
+            Debug.Log("[StatUpgradeUI] Finished party stat upgrades.");
+            return;
+        }
+
+        currentUpgradeUnit = pendingUpgradeUnits.Dequeue();
+
+        PartyManager.Instance?.SelectUnit(currentUpgradeUnit);
+        CameraController2D.Instance?.ForceCenterOn(currentUpgradeUnit.transform);
 
         if (panelRoot != null)
             panelRoot.SetActive(true);
 
         Time.timeScale = 0f;
+
+        Debug.Log($"[StatUpgradeUI] Choose stat for {currentUpgradeUnit.DisplayName}");
     }
 
     private void HookupButtons()
@@ -108,37 +165,25 @@ public class StatUpgradeUI : MonoBehaviour
 
     private void SelectStat(PlayerStatType statType)
     {
-        PlayerStats playerStats = GetCurrentPlayerStats();
+        if (currentUpgradeUnit == null)
+        {
+            Debug.LogError("[StatUpgradeUI] No current upgrade unit.");
+            return;
+        }
+
+        PlayerStats playerStats = currentUpgradeUnit.GetComponent<PlayerStats>();
 
         if (playerStats == null)
         {
-            Debug.LogError("[StatUpgradeUI] Could not find PlayerStats.");
+            Debug.LogError($"[StatUpgradeUI] Could not find PlayerStats on {currentUpgradeUnit.name}.");
+            ShowNextUpgradeTarget();
             return;
         }
 
         playerStats.IncreaseStat(statType, 1);
 
-        Debug.Log($"[StatUpgradeUI] Increased {statType}");
+        Debug.Log($"[StatUpgradeUI] Increased {statType} for {currentUpgradeUnit.DisplayName}");
 
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
-
-        Time.timeScale = 1f;
-    }
-
-    private PlayerStats GetCurrentPlayerStats()
-    {
-        Unit selectedUnit = UnitActionSystem.Instance != null
-            ? UnitActionSystem.Instance.GetSelectedUnit()
-            : null;
-
-        if (selectedUnit != null)
-        {
-            PlayerStats stats = selectedUnit.GetComponent<PlayerStats>();
-            if (stats != null)
-                return stats;
-        }
-
-        return FindFirstObjectByType<PlayerStats>();
+        ShowNextUpgradeTarget();
     }
 }
