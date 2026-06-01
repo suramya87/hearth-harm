@@ -4,6 +4,14 @@ using UnityEngine;
 
 public class Unit : MonoBehaviour
 {
+
+    [Header("Identity")]
+    [SerializeField] private string displayName = "Player";
+
+    public string DisplayName => string.IsNullOrWhiteSpace(displayName)
+        ? gameObject.name.Replace("(Clone)", "").Trim()
+        : displayName;
+
     [Header("Visual Settings")]
     [Tooltip("Adjust this to center the sprite in the tile (usually 0.5, 0.5)")]
     [SerializeField] private Vector2 visualOffset = new Vector2(0.5f, 0.5f);

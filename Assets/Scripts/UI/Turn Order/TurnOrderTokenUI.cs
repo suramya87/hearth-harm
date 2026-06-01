@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,22 +11,46 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private Image iconImage;
 
+    [Header("Visual State")]
+    [SerializeField] private Image background;
+    [SerializeField] private Color normalColor = new Color(0.15f, 0.15f, 0.15f, 1f);
+    [SerializeField] private Color hoverColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+    [SerializeField] private Color selectedColor = Color.white;
+    [SerializeField] private Color clickFlashColor = Color.yellow;
+    [SerializeField] private float clickFlashTime = 0.08f;
+
     private EnemyUnit boundEnemy;
     private Unit boundPlayer;
 
-    [SerializeField] private Image background;
-    private Color normalColor;
-    public void SetHighlighted(bool value)
-    {
-        if (background == null) return;
+    private bool isHovering;
+    private Coroutine flashRoutine;
 
-        background.color = value ? Color.white : normalColor;
-    }
     private void Awake()
     {
         if (background != null)
             normalColor = background.color;
     }
+
+    private void OnEnable()
+    {
+        if (PartyManager.Instance != null)
+            PartyManager.Instance.OnSelectedUnitChanged += HandleSelectedUnitChanged;
+
+        RefreshVisualState();
+    }
+
+    private void OnDisable()
+    {
+        if (PartyManager.Instance != null)
+            PartyManager.Instance.OnSelectedUnitChanged -= HandleSelectedUnitChanged;
+
+        if (flashRoutine != null)
+        {
+            StopCoroutine(flashRoutine);
+            flashRoutine = null;
+        }
+    }
+
     public void BindEnemy(EnemyUnit enemy)
     {
         boundEnemy = enemy;
@@ -41,6 +66,8 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
 
             nameText.text = displayName;
         }
+
+        RefreshVisualState();
     }
 
     public void BindPlayer(Unit player)
@@ -49,15 +76,66 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
         boundEnemy = null;
 
         if (nameText != null)
-            nameText.text = player != null ? player.name : "Player";
+        {
+            if (player != null)
+                nameText.text = player.DisplayName;
+            else
+                nameText.text = "Player";
+        }
+
+        RefreshVisualState();
     }
 
     public EnemyUnit GetBoundEnemy() => boundEnemy;
     public Unit GetBoundPlayer() => boundPlayer;
 
+    public void SetHighlighted(bool value)
+    {
+        if (background == null)
+            return;
+
+        background.color = value ? selectedColor : normalColor;
+    }
+
+    private void HandleSelectedUnitChanged(Unit unit)
+    {
+        RefreshVisualState();
+    }
+
+    private void RefreshVisualState()
+    {
+        if (background == null)
+            return;
+
+        if (boundPlayer != null &&
+            PartyManager.Instance != null &&
+            PartyManager.Instance.SelectedUnit == boundPlayer)
+        {
+            background.color = selectedColor;
+            return;
+        }
+
+        background.color = isHovering ? hoverColor : normalColor;
+    }
+
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (boundEnemy == null) return;
+        if (boundPlayer != null)
+        {
+            if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn)
+                return;
+
+            PartyManager.Instance?.SelectUnit(boundPlayer);
+            CameraController2D.Instance?.SoftFocusOn(boundPlayer.transform);
+
+            FlashClick();
+
+            Debug.Log($"[TurnOrderTokenUI] Selected player token: {boundPlayer.DisplayName}");
+            return;
+        }
+
+        if (boundEnemy == null)
+            return;
 
         if (TurnSystem.Instance != null && !TurnSystem.Instance.IsPlayerTurn)
             return;
@@ -69,10 +147,21 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
         CameraController2D.Instance?.SoftFocusOn(boundEnemy.transform);
         TilemapHighlighter.Instance?.ShowEnemyMoveRange(boundEnemy);
     }
+
     public void OnPointerEnter(PointerEventData eventData)
     {
+        isHovering = true;
+
+        if (boundPlayer != null)
+        {
+            RefreshVisualState();
+            return;
+        }
+
+        if (boundEnemy == null)
+            return;
+
         TilemapHighlighter.Instance?.ShowEnemyMoveRange(boundEnemy);
-        if (boundEnemy == null) return;
 
         HealthComponent health = boundEnemy.GetComponent<HealthComponent>();
         if (health != null)
@@ -81,9 +170,40 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
 
     public void OnPointerExit(PointerEventData eventData)
     {
+        isHovering = false;
+
+        if (boundPlayer != null)
+        {
+            RefreshVisualState();
+            return;
+        }
+
         TilemapHighlighter.Instance?.ClearEnemyPreview();
-        if (boundEnemy == null) return;
+
+        if (boundEnemy == null)
+            return;
 
         EnemyHealthUI.Instance?.ClearTarget();
+    }
+
+    private void FlashClick()
+    {
+        if (background == null)
+            return;
+
+        if (flashRoutine != null)
+            StopCoroutine(flashRoutine);
+
+        flashRoutine = StartCoroutine(FlashRoutine());
+    }
+
+    private IEnumerator FlashRoutine()
+    {
+        background.color = clickFlashColor;
+
+        yield return new WaitForSecondsRealtime(clickFlashTime);
+
+        flashRoutine = null;
+        RefreshVisualState();
     }
 }
