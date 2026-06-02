@@ -190,7 +190,7 @@ public class PartyFollowManager : MonoBehaviour
         if (leader != PartyManager.Instance.SelectedUnit)
             return;
 
-        if (IsInCombatRoom(leader))
+        if (IsInCombatRoom(leader) && IsWholePartyInLeaderRoom(leader))
             return;
 
         followerStepQueue.Enqueue(leaderStepWorld);
@@ -303,4 +303,30 @@ public class PartyFollowManager : MonoBehaviour
             followerMoveRoutine = null;
         }
     }
+
+    public void StopFollowingNow()
+    {
+        ClearFollowerQueue();
+    }
+    private bool IsWholePartyInLeaderRoom(Unit leader)
+    {
+        if (PartyManager.Instance == null || leader == null)
+            return true;
+
+        RoomGrid leaderRoom = leader.GetCurrentRoomGrid();
+        if (leaderRoom == null)
+            return false;
+
+        foreach (Unit unit in PartyManager.Instance.PartyUnits)
+        {
+            if (unit == null)
+                continue;
+
+            if (unit.GetCurrentRoomGrid() != leaderRoom)
+                return false;
+        }
+
+        return true;
+    }
+
 }

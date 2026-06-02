@@ -58,7 +58,17 @@ public class MoveAction : BaseAction
     private bool IsInCombatRoom()
     {
         RoomGrid room = unit != null ? unit.GetCurrentRoomGrid() : null;
-        if (room == null || EnemyManager.Instance == null) return false;
+
+        if (room == null || EnemyManager.Instance == null)
+            return false;
+
+        RoomGrid currentRoom = RoomManager.Instance != null
+            ? RoomManager.Instance.GetCurrentRoomGrid()
+            : null;
+
+        if (currentRoom != null && currentRoom != room)
+            return false;
+
         return EnemyManager.Instance.GetEnemiesInRoom(room).Count > 0;
     }
 
@@ -196,8 +206,7 @@ public class MoveAction : BaseAction
         room.RemoveUnitAtGridPosition(startPos, unit);
         room.AddUnitAtGridPosition(finalPos, unit);
 
-        if (playerStats != null && IsInCombatRoom())
-            playerStats.SpendStamina(steps);
+  
 
         Vector2 visualOff = unit.GetVisualOffset();
         var waypoints = new List<Vector3>();
@@ -219,12 +228,11 @@ public class MoveAction : BaseAction
     }
 
     private IEnumerator MoveAlongWorldPath(
-      List<UnifiedPathfinder.WorldStep> path, Action onComplete)
+     List<UnifiedPathfinder.WorldStep> path, Action onComplete)
     {
         isActive = true;
         unitAnimator?.SetMoving(true);
 
-        // NEW: store the actual movement trail for followers
         List<Vector3> completedPathWorld = new();
 
         Vector2 visualOff = unit.GetVisualOffset();
@@ -257,31 +265,7 @@ public class MoveAction : BaseAction
                 unit.PlaceInRoom(stepGrid, stepGP);
 
                 stepGrid.AddUnitAtGridPosition(stepGP, unit);
-
-                if (!GameManager.IsMultiplayer &&
-                    PartyManager.Instance != null &&
-                    unit == PartyManager.Instance.SelectedUnit)
-                {
-                    RoomConnector connector = stepGrid.GetComponent<RoomConnector>();
-
-                    if (connector != null &&
-                        connector.TryGetDirectionFromWorldPosition(step.WorldPos, stepGrid, out LevelGenerator.Direction entranceDir))
-                    {
-                        PartyFollowManager followManager = FindFirstObjectByType<PartyFollowManager>();
-
-                        if (followManager != null)
-                        {
-                            Debug.Log($"[MoveAction] Leader entered {stepGrid.name} through {entranceDir}. Snapping followers.");
-                            followManager.SnapFollowersToEntrance(stepGrid, entranceDir);
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[MoveAction] Entered new grid {stepGrid.name}, but no RoomConnector entrance was found.");
-                    }
-                }
             }
-
 
             var visualTarget = new Vector3(
                 step.WorldPos.x + visualOff.x,
@@ -302,10 +286,7 @@ public class MoveAction : BaseAction
 
             transform.position = visualTarget;
 
-            // Record this tile for end-of-move trail
             completedPathWorld.Add(step.WorldPos);
-
-            // NEW: tell followers immediately that leader finished this tile
             OnWorldStepCompleted?.Invoke(unit, step.WorldPos);
 
             stamSpent++;
@@ -315,9 +296,6 @@ public class MoveAction : BaseAction
         var finalGrid = finalStep.OwnerGrid ?? unit.GetCurrentRoomGrid();
         var finalGP = finalGrid?.GetGridPosition(finalStep.WorldPos)
                       ?? unit.GetGridPosition();
-
-        if (playerStats != null && IsInCombatRoom())
-            playerStats.SpendStamina(stamSpent);
 
         unitAnimator?.SetMoving(false);
         isActive = false;
@@ -329,6 +307,18 @@ public class MoveAction : BaseAction
         if (!GameManager.IsMultiplayer)
         {
             unit.PlaceInRoomNoMove(finalGrid, finalGP);
+
+            if (PartyManager.Instance != null &&
+                unit == PartyManager.Instance.SelectedUnit)
+            {
+                TrySetRoomManagerCurrentRoom(finalGrid);
+            }
+
+            // IMPORTANT:
+            // Spend stamina AFTER RoomManager has been updated,
+            // otherwise IsInCombatRoom() still thinks we are not in combat.
+            if (playerStats != null && IsInCombatRoom())
+                playerStats.SpendStamina(stamSpent);
         }
         else
         {
@@ -338,7 +328,6 @@ public class MoveAction : BaseAction
                 bridge.SyncGridPosition(finalGrid, finalGP);
         }
 
-        // NEW: send movement trail to party followers
         OnWorldMoveCompleted?.Invoke(unit, completedPathWorld);
         CameraController2D.Instance?.StopFollow();
         onComplete?.Invoke();
@@ -524,5 +513,32 @@ public class MoveAction : BaseAction
             transform.position.x - vo.x,
             transform.position.y - vo.y,
             0f);
+    }
+
+    private void TrySetRoomManagerCurrentRoom(RoomGrid enteredGrid)
+    {
+        if (enteredGrid == null || RoomManager.Instance == null)
+            return;
+
+        // IMPORTANT: don't re-fire room changed events every move
+        if (RoomManager.Instance.GetCurrentRoomGrid() == enteredGrid)
+            return;
+
+        LevelGenerator gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen == null)
+            return;
+
+        foreach (LevelGenerator.PlacedRoom placed in gen.GetAllRooms())
+        {
+            if (placed == null || placed.roomGrid == null)
+                continue;
+
+            if (placed.roomGrid == enteredGrid)
+            {
+                RoomManager.Instance.SetCurrentRoom(placed);
+                Debug.Log($"[MoveAction] Set RoomManager current room: {placed.roomInstance.name}");
+                return;
+            }
+        }
     }
 }
