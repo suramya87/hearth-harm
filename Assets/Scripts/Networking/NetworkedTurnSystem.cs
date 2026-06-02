@@ -22,7 +22,6 @@ public class NetworkedTurnSystem : NetworkBehaviour
     public int  TurnNumber    => turnNumber.Value;
     public bool IsPlayerPhase => isPlayerPhase.Value;
 
-    // ── Per-room combat state (server-only) ────────────────────────────────
     private readonly Dictionary<string, HashSet<ulong>> roomCombatants = new();
     private readonly Dictionary<string, HashSet<ulong>> roomEndedTurns = new();
     private readonly HashSet<string> roomsInEnemyPhase = new();
@@ -85,9 +84,6 @@ public class NetworkedTurnSystem : NetworkBehaviour
                   $"Total combatants: {roomCombatants[roomName].Count}");
     }
 
-    /// <summary>
-    /// Server-side: remove a player from a room's combat (they died, left, or room cleared).
-    /// </summary>
     public void UnregisterPlayerFromRoomCombat(ulong clientId, string roomName)
     {
         if (!IsServer) return;
@@ -105,14 +101,16 @@ public class NetworkedTurnSystem : NetworkBehaviour
         }
         else
         {
-            // Re-check in case remaining players had all already ended their turn
             CheckRoomTurnComplete(roomName);
         }
     }
 
-    /// <summary>
-    /// Server-side: called when a room is fully cleared of enemies.
-    /// </summary>
+    public bool IsRoomInCombat(string roomName)
+    {
+        return roomCombatants.ContainsKey(roomName) &&
+               roomCombatants[roomName].Count > 0;
+    }
+
     public void ClearRoomCombat(string roomName)
     {
         if (!IsServer) return;
@@ -129,7 +127,6 @@ public class NetworkedTurnSystem : NetworkBehaviour
     {
         if (!string.IsNullOrEmpty(roomName) && roomCombatants.ContainsKey(roomName))
         {
-            // Room has active combat — record this player's vote
             roomEndedTurns[roomName].Add(clientId);
 
             Debug.Log($"[NetworkedTurnSystem] Client {clientId} ended turn in '{roomName}'. " +
@@ -139,7 +136,6 @@ public class NetworkedTurnSystem : NetworkBehaviour
         }
         else
         {
-            // No active combat in this room — global turn end (exploration)
             HandleGlobalEndTurn();
         }
     }
@@ -163,14 +159,12 @@ public class NetworkedTurnSystem : NetworkBehaviour
     private IEnumerator RunRoomEnemyPhase(string roomName)
     {
         roomsInEnemyPhase.Add(roomName);
-        roomEndedTurns[roomName].Clear(); // reset votes for next round
+        roomEndedTurns[roomName].Clear(); 
 
         Debug.Log($"[NetworkedTurnSystem] Starting enemy phase for room '{roomName}'.");
 
-        // Tell all clients in this room to show enemy phase UI
-        NotifyRoomPhaseClientRpc(roomName, false); // false = enemy phase
+        NotifyRoomPhaseClientRpc(roomName, false); 
 
-        // Find the room and enemies on the server
         var room = FindRoomGridByName(roomName);
         if (room == null)
         {
@@ -218,12 +212,10 @@ public class NetworkedTurnSystem : NetworkBehaviour
             Debug.Log($"[NetworkedTurnSystem] All rooms done. Turn {turnNumber.Value} begins.");
         }
 
-        // Return clients in this room to player phase
-        NotifyRoomPhaseClientRpc(roomName, true); // true = player phase
+        NotifyRoomPhaseClientRpc(roomName, true); 
         RecoverStaminaForRoomClientRpc(roomName);
     }
 
-    // ── Global end turn (exploration — no active combat) ───────────────────
 
     private void HandleGlobalEndTurn()
     {

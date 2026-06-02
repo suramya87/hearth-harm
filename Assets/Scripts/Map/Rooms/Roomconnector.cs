@@ -1,15 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-/// <summary>
-/// Marks connection points and door strips on a room prefab.
-///
-/// DOOR BLOCKING:
-///   Call InitBlockers(roomGrid) after the room's RoomGrid is initialized.
-///   This wires all DoorStripBlocker components on the door strips so they
-///   automatically register/unregister wall cells in UnifiedWorldGrid
-///   whenever SetDoorOpen() is called.
-/// </summary>
 public class RoomConnector : MonoBehaviour
 {
     [System.Serializable]
@@ -32,16 +23,10 @@ public class RoomConnector : MonoBehaviour
     public GameObject eastDoorStrip;
     public GameObject westDoorStrip;
 
-    // Directions that are permanent dead-end walls.
     private readonly HashSet<LevelGenerator.Direction> deadEnds = new();
 
     // ── Blocker initialisation ─────────────────────────────────────────────
 
-    /// <summary>
-    /// Call this after the room's RoomGrid is ready (i.e. after
-    /// RoomTilemapSetup.Initialize() and RegisterAllTilemaps() have run).
-    /// Gives every DoorStripBlocker its owning RoomGrid reference.
-    /// </summary>
     public void InitBlockers(RoomGrid grid)
     {
         InitStrip(northDoorStrip, grid);
@@ -53,13 +38,12 @@ public class RoomConnector : MonoBehaviour
     private static void InitStrip(GameObject strip, RoomGrid grid)
     {
         if (strip == null) return;
-        // Add the component automatically if the designer forgot.
         var blocker = strip.GetComponent<DoorStripBlocker>()
                    ?? strip.AddComponent<DoorStripBlocker>();
         blocker.SetOwnerGrid(grid);
     }
 
-    // ── API ────────────────────────────────────────────────────────────────
+    // ── Standard open/close ────────────────────────────────────────────────
 
     public void PermanentClose(LevelGenerator.Direction dir)
     {
@@ -70,7 +54,6 @@ public class RoomConnector : MonoBehaviour
     public void SetDoorOpen(LevelGenerator.Direction dir, bool open)
     {
         if (deadEnds.Contains(dir) && open) return;
-
         var strip = GetStrip(dir);
         if (strip != null) strip.SetActive(!open);
     }
@@ -81,12 +64,12 @@ public class RoomConnector : MonoBehaviour
             SetDoorOpen(d, false);
     }
 
-    public void CloseConnectedDoors(System.Collections.Generic.IEnumerable<LevelGenerator.Direction> connectedDirs)
+    public void CloseConnectedDoors(IEnumerable<LevelGenerator.Direction> connectedDirs)
     {
         foreach (var dir in connectedDirs)
         {
             var strip = GetStrip(dir);
-            if (strip != null) strip.SetActive(true); // true = closed/visible
+            if (strip != null) strip.SetActive(true);
         }
     }
 
@@ -96,15 +79,34 @@ public class RoomConnector : MonoBehaviour
             SetDoorOpen(d, true);
     }
 
-    public void OpenConnectedDoors(System.Collections.Generic.IEnumerable<LevelGenerator.Direction> connectedDirs)
+    public void OpenConnectedDoors(IEnumerable<LevelGenerator.Direction> connectedDirs)
     {
         foreach (var dir in connectedDirs)
         {
             if (deadEnds.Contains(dir)) continue;
             var strip = GetStrip(dir);
-            if (strip != null) strip.SetActive(false); // false = open/hidden
+            if (strip != null) strip.SetActive(false);
         }
     }
+
+    public void SetDoorPassable(LevelGenerator.Direction dir, bool passable)
+    {
+        var strip = GetStrip(dir);
+        if (strip == null) return;
+
+        var blocker = strip.GetComponent<DoorStripBlocker>();
+        if (blocker == null) return;
+
+        blocker.SetPassable(passable);
+    }
+
+    public void SetConnectedDoorsPassable(IEnumerable<LevelGenerator.Direction> connectedDirs,
+        bool passable)
+    {
+        foreach (var dir in connectedDirs)
+            SetDoorPassable(dir, passable);
+    }
+
 
     public ConnectionPoint GetConnectionPoint(LevelGenerator.Direction dir) => dir switch
     {

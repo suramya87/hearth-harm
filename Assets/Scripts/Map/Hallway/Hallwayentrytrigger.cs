@@ -17,6 +17,8 @@ public class HallwayEntryTrigger : MonoBehaviour
 
     private bool exitLocked = false;
 
+    private bool destinationIsActiveCombat = false;
+
     public void Initialize(
         HallwayGrid               hallway,
         LevelGenerator.PlacedRoom destinationRoom,
@@ -34,7 +36,8 @@ public class HallwayEntryTrigger : MonoBehaviour
     {
         coolingUnits.Clear();
         completedUnits.Clear();
-        exitLocked = false;
+        exitLocked             = false;
+        destinationIsActiveCombat = false;
         RoomManager.Instance?.SetTransitionLocked(false);
     }
 
@@ -43,6 +46,11 @@ public class HallwayEntryTrigger : MonoBehaviour
         exitLocked = locked;
         if (pairedWalkTrigger != null)
             pairedWalkTrigger.SetLocked(locked);
+    }
+
+    public void SetDestinationIsActiveCombat(bool active)
+    {
+        destinationIsActiveCombat = active;
     }
 
     // ── Trigger ────────────────────────────────────────────────────────────
@@ -56,17 +64,11 @@ public class HallwayEntryTrigger : MonoBehaviour
         if (unit == null) return;
         if (!IsLocalPlayerUnit(unit)) return;
 
-        bool destinationHasActiveCombat = EnemyManager.Instance != null &&
-            EnemyManager.Instance.GetEnemiesInRoom(DestinationRoom.roomGrid).Count > 0;
-
         if (exitLocked)
         {
-            bool unitIsLeaving = IsUnitLeavingLockedRoom(unit);
-
-            if (unitIsLeaving && !destinationHasActiveCombat)
+            if (!destinationIsActiveCombat)
             {
-                Debug.Log("[HallwayEntryTrigger] Exit blocked — enemies in current room, " +
-                          "destination has no combat.");
+                Debug.Log("[HallwayEntryTrigger] Exit blocked — player is in active combat room.");
                 return;
             }
         }
@@ -165,11 +167,7 @@ public class HallwayEntryTrigger : MonoBehaviour
             var bridge = unit.GetComponent<NetworkedPlayerBridge>();
             if (bridge != null && bridge.IsOwner)
             {
-                bool destinationHasActiveCombat = EnemyManager.Instance != null &&
-                    DestinationRoom.roomGrid != null &&
-                    EnemyManager.Instance.GetEnemiesInRoom(DestinationRoom.roomGrid).Count > 0;
-
-                if (destinationHasActiveCombat)
+                if (destinationIsActiveCombat)
                 {
                     Debug.Log($"[HallwayEntryTrigger] {unit.name} joining active combat in " +
                               $"'{DestinationRoom.roomGrid.gameObject.name}'.");
@@ -184,13 +182,14 @@ public class HallwayEntryTrigger : MonoBehaviour
                 }
                 else
                 {
+                    // Normal room transition.
                     bridge.TransitionToRoom(DestinationRoom.roomGrid, spawnPos);
                 }
             }
         }
         else
         {
-            // ── Singleplayer ───────────────────────────────────────────────
+            // ── Singleplayer ──────────────────────────────────────────────
             unit.PlaceInRoom(DestinationRoom.roomGrid, spawnPos);
 
             RoomManager.Instance?.SetCurrentRoom(DestinationRoom);
@@ -335,6 +334,7 @@ public class HallwayEntryTrigger : MonoBehaviour
             if (touches || destIsRoom)
             {
                 et.SetExitLocked(false);
+                et.SetDestinationIsActiveCombat(false);
                 et.ResetTrigger();
             }
         }
@@ -351,7 +351,7 @@ public class HallwayEntryTrigger : MonoBehaviour
         FindLocalUnit()?.GetMoveAction()?.InvalidateCache();
     }
 
-    // ── Singleplayer door helpers ───────────────────────────────────────────
+    // ── Singleplayer door helpers ──────────────────────────────────────────
 
     private void LockRoomExitsForEnemies(LevelGenerator.PlacedRoom room)
     {
@@ -374,8 +374,15 @@ public class HallwayEntryTrigger : MonoBehaviour
             }
             if (!touches) continue;
 
-            et.SetExitLocked(true);
-            roomBorderTriggers.Add(et.pairedWalkTrigger);
+            bool destinationIsCombatRoom =
+                et.DestinationRoom?.roomGrid == room.roomGrid ||
+                et.DestinationRoom?.roomGrid?.gameObject.name == room.roomGrid.gameObject.name;
+
+            if (!destinationIsCombatRoom)
+            {
+                et.SetExitLocked(true);
+                roomBorderTriggers.Add(et.pairedWalkTrigger);
+            }
         }
 
         LockRoomDoors(room);

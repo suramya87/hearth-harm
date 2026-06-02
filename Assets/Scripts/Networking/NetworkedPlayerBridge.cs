@@ -24,8 +24,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     private Coroutine stepLerpCoroutine;
     private bool      isWalking;
 
-    // Track which room this player is currently registered as a combatant in
-    // so we can unregister cleanly if they leave or the object despawns.
     private string registeredCombatRoom = "";
 
     private void Awake() => unit = GetComponent<Unit>();
@@ -62,7 +60,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         syncPending = false;
         isWalking   = false;
 
-        // Clean up combat registration if this object despawns mid-combat
         if (IsServer && !string.IsNullOrEmpty(registeredCombatRoom))
         {
             NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
@@ -288,19 +285,22 @@ public class NetworkedPlayerBridge : NetworkBehaviour
                          EnemyManager.Instance.GetEnemiesInRoom(placed.roomGrid).Count > 0;
         }
 
-        if (hadEnemies)
+        if (!hadEnemies) return;
+
+        if (!string.IsNullOrEmpty(registeredCombatRoom) && registeredCombatRoom != roomName)
         {
-            // Unregister from any previous combat room
-            if (!string.IsNullOrEmpty(registeredCombatRoom) && registeredCombatRoom != roomName)
-            {
-                NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
-                    OwnerClientId, registeredCombatRoom);
-            }
+            NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
+                OwnerClientId, registeredCombatRoom);
+        }
 
-            // Register this player into the room's combat turn tracking
-            NetworkedTurnSystem.Instance?.RegisterPlayerInRoomCombat(OwnerClientId, roomName);
-            registeredCombatRoom = roomName;
+        NetworkedTurnSystem.Instance?.RegisterPlayerInRoomCombat(OwnerClientId, roomName);
+        registeredCombatRoom = roomName;
 
+        bool roomAlreadyInCombat = NetworkedTurnSystem.Instance != null &&
+            NetworkedTurnSystem.Instance.IsRoomInCombat(roomName);
+
+        if (!roomAlreadyInCombat)
+        {
             LockRoomExitsClientRpc(roomName);
 
             if (EnemyManager.Instance != null)
@@ -308,6 +308,11 @@ public class NetworkedPlayerBridge : NetworkBehaviour
                 EnemyManager.Instance.OnRoomCleared -= OnRoomClearedServer;
                 EnemyManager.Instance.OnRoomCleared += OnRoomClearedServer;
             }
+        }
+        else
+        {
+            Debug.Log($"[NetworkedPlayerBridge] Room '{roomName}' already in combat — " +
+                      $"skipping re-lock for client {OwnerClientId}.");
         }
     }
 
@@ -374,7 +379,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         var gen = FindAnyObjectByType<LevelGenerator>();
         if (gen == null) return;
 
-        // Always close visual doors on all clients
         LevelGenerator.PlacedRoom placed = null;
         foreach (var r in gen.GetAllRooms())
         {
@@ -384,53 +388,48 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         if (placed != null)
         {
-            var connectedDirs = new System.Collections.Generic.List<LevelGenerator.Direction>();
             foreach (LevelGenerator.Direction dir in
                 System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             {
-                if (gen.GetConnectedRoom(placed, dir) != null)
-                    connectedDirs.Add(dir);
+                if (gen.GetConnectedRoom(placed, dir) == null) continue;
+
+                placed.connector?.SetDoorOpen(dir, false);
+
+                placed.connector?.SetDoorPassable(dir, true);
+
             }
-            placed.connector?.CloseConnectedDoors(connectedDirs);
+        }
+
+        foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
+        {
+            bool touchesCombatRoom = false;
+            if (et.Hallway != null)
+            {
+                var roomA = et.Hallway.RoomA?.roomGrid;
+                var roomB = et.Hallway.RoomB?.roomGrid;
+                if (roomA != null && roomA.gameObject.name == roomName) touchesCombatRoom = true;
+                if (roomB != null && roomB.gameObject.name == roomName) touchesCombatRoom = true;
+            }
+            if (!touchesCombatRoom) continue;
+
+            bool destinationIsCombatRoom =
+                et.DestinationRoom?.roomGrid?.gameObject.name == roomName;
+
+            if (destinationIsCombatRoom)
+            {
+                et.SetDestinationIsActiveCombat(true);
+            }
+            else
+            {
+                et.SetExitLocked(true);
+                et.SetDestinationIsActiveCombat(false);
+            }
         }
 
         var localUnit = UnitActionSystem.FindLocalOwnedUnit();
         if (localUnit == null) return;
-
         string localRoomName = localUnit.GetCurrentRoomGrid()?.gameObject.name;
-        bool localInRoom     = localRoomName == roomName;
-        bool localAdjacent   = false;
-
-        if (!localInRoom && placed != null)
-        {
-            foreach (LevelGenerator.Direction dir in
-                System.Enum.GetValues(typeof(LevelGenerator.Direction)))
-            {
-                var neighbour = gen.GetConnectedRoom(placed, dir);
-                if (neighbour != null && neighbour.roomGrid?.gameObject.name == localRoomName)
-                { localAdjacent = true; break; }
-            }
-        }
-
-        if (localInRoom || localAdjacent)
-        {
-            foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
-            {
-                if (et.pairedWalkTrigger == null) continue;
-                bool touches = false;
-                if (et.Hallway != null)
-                {
-                    var roomA = et.Hallway.RoomA?.roomGrid;
-                    var roomB = et.Hallway.RoomB?.roomGrid;
-                    if (roomA != null && roomA.gameObject.name == roomName) touches = true;
-                    if (roomB != null && roomB.gameObject.name == roomName) touches = true;
-                }
-                if (!touches) continue;
-                et.SetExitLocked(true);
-            }
-        }
-
-        if (localInRoom)
+        if (localRoomName == roomName)
             CameraController2D.Instance?.SetCombatState(true);
     }
 
@@ -453,58 +452,66 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             foreach (LevelGenerator.Direction dir in
                 System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             {
-                if (gen.GetConnectedRoom(placed, dir) != null)
-                {
-                    connectedDirs.Add(dir);
-                    placed.roomGrid.SetDoorState(dir, true);
-                }
+                if (gen.GetConnectedRoom(placed, dir) == null) continue;
+                connectedDirs.Add(dir);
+                placed.roomGrid.SetDoorState(dir, true);
+
+                placed.connector?.SetDoorPassable(dir, false);
+                placed.connector?.SetDoorOpen(dir, true);
             }
-            placed.connector?.OpenConnectedDoors(connectedDirs);
             placed.roomGrid.MarkCleared();
             RoomManager.Instance?.NotifyRoomCleared(placed);
+        }
+
+        foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
+        {
+            bool touches = false;
+            if (et.Hallway != null)
+            {
+                var roomA = et.Hallway.RoomA?.roomGrid;
+                var roomB = et.Hallway.RoomB?.roomGrid;
+                if (roomA != null && roomA.gameObject.name == roomName) touches = true;
+                if (roomB != null && roomB.gameObject.name == roomName) touches = true;
+            }
+            if (et.DestinationRoom?.roomGrid?.gameObject.name == roomName) touches = true;
+            if (!touches) continue;
+
+            et.SetExitLocked(false);
+            et.SetDestinationIsActiveCombat(false);
+            et.ResetTrigger();
         }
 
         var localUnit = UnitActionSystem.FindLocalOwnedUnit();
         if (localUnit == null) return;
 
         string localRoomName = localUnit.GetCurrentRoomGrid()?.gameObject.name;
-        bool localInRoom     = localRoomName == roomName;
-        bool localAdjacent   = false;
-
-        if (!localInRoom && placed != null)
+        if (localRoomName == roomName || IsAdjacentToRoom(roomName, localRoomName, gen))
         {
-            foreach (LevelGenerator.Direction dir in
-                System.Enum.GetValues(typeof(LevelGenerator.Direction)))
-            {
-                var neighbour = gen.GetConnectedRoom(placed, dir);
-                if (neighbour != null && neighbour.roomGrid?.gameObject.name == localRoomName)
-                { localAdjacent = true; break; }
-            }
-        }
-
-        if (localInRoom || localAdjacent)
-        {
-            foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
-            {
-                bool touches = false;
-                if (et.Hallway != null)
-                {
-                    var roomA = et.Hallway.RoomA?.roomGrid;
-                    var roomB = et.Hallway.RoomB?.roomGrid;
-                    if (roomA != null && roomA.gameObject.name == roomName) touches = true;
-                    if (roomB != null && roomB.gameObject.name == roomName) touches = true;
-                }
-                if (et.DestinationRoom?.roomGrid?.gameObject.name == roomName) touches = true;
-                if (!touches) continue;
-                et.SetExitLocked(false);
-                et.ResetTrigger();
-            }
-
             localUnit.GetMoveAction()?.InvalidateCache();
-
-            if (localInRoom)
+            if (localRoomName == roomName)
                 CameraController2D.Instance?.SetCombatState(false);
         }
+    }
+
+    private static bool IsAdjacentToRoom(string combatRoomName, string localRoomName,
+        LevelGenerator gen)
+    {
+        if (gen == null || string.IsNullOrEmpty(localRoomName)) return false;
+        LevelGenerator.PlacedRoom placed = null;
+        foreach (var r in gen.GetAllRooms())
+        {
+            if (r.roomGrid != null && r.roomGrid.gameObject.name == combatRoomName)
+            { placed = r; break; }
+        }
+        if (placed == null) return false;
+        foreach (LevelGenerator.Direction dir in
+            System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+        {
+            var neighbour = gen.GetConnectedRoom(placed, dir);
+            if (neighbour != null && neighbour.roomGrid?.gameObject.name == localRoomName)
+                return true;
+        }
+        return false;
     }
 
     // ── NetworkVariable callbacks — NON-OWNER ONLY ─────────────────────────

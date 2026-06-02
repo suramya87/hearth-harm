@@ -25,8 +25,6 @@ public class EnemyUnit : MonoBehaviour, IHasHealth
     private bool initialized;
     private int turnsWaited;
 
-    // Prevents HandleDeath and OnDestroy from both running cleanup.
-    // HandleDeath sets this first; OnDestroy checks it before acting.
     private bool deathHandled = false;
 
     public event Action<EnemyUnit> OnEnemyDied;
