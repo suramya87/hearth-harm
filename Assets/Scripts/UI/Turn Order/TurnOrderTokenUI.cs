@@ -126,7 +126,6 @@ public class TurnOrderTokenUI : MonoBehaviour, IPointerClickHandler, IPointerEnt
                 return;
 
             PartyManager.Instance?.SelectUnit(boundPlayer);
-            CameraController2D.Instance?.SoftFocusOn(boundPlayer.transform);
 
             FlashClick();
 

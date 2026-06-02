@@ -234,10 +234,17 @@ public class CameraController2D : MonoBehaviour
     public void SoftFocusOn(Transform target)
     {
         if (target == null) return;
+
         followTarget = target;
         cameraInputLocked = false;
         unlockWhenCentered = true;
         snapping = false;
+
+        // IMPORTANT:
+        // Switching party members is not real movement.
+        // Reset movement tracking so the leash system does not cancel this focus.
+        followingPlayer = false;
+        hasLastPlayerPos = false;
     }
 
     public void SetCombatState(bool combat)

@@ -35,10 +35,7 @@ public class PartyManager : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.C))
-        {
-            CycleSelectedUnit();
-        }
+        
 
         if (Input.GetKeyDown(KeyCode.Alpha1))
         {

@@ -88,26 +88,60 @@ public class TurnSystem : MonoBehaviour
 
     private static void RecoverPlayerStamina()
     {
-        var unit = UnitActionSystem.Instance?.GetSelectedUnit();
+        if (PartyManager.Instance != null &&
+            PartyManager.Instance.PartyUnits.Count > 0)
+        {
+            foreach (Unit unit in PartyManager.Instance.PartyUnits)
+            {
+                if (unit == null)
+                    continue;
 
-        if (unit == null)
-            unit = FindAnyObjectByType<Unit>();
+                PlayerStats stats = unit.GetComponent<PlayerStats>();
+                if (stats == null)
+                    continue;
 
-        if (unit == null) return;
+                int recovered = stats.RollStaminaRecovery();
 
-        var stats = unit.GetComponent<PlayerStats>();
-        if (stats == null) return;
+                Debug.Log($"[TurnSystem] {unit.DisplayName} recovered {recovered} stamina.");
+            }
 
-        int recovered = stats.RollStaminaRecovery();
-        Debug.Log($"[TurnSystem] Recovered {recovered} stamina.");
+            return;
+        }
+
+        Unit fallback = UnitActionSystem.Instance?.GetSelectedUnit();
+
+        if (fallback == null)
+            fallback = FindAnyObjectByType<Unit>();
+
+        if (fallback == null)
+            return;
+
+        PlayerStats fallbackStats = fallback.GetComponent<PlayerStats>();
+        if (fallbackStats == null)
+            return;
+
+        int fallbackRecovered = fallbackStats.RollStaminaRecovery();
+
+        Debug.Log($"[TurnSystem] {fallback.DisplayName} recovered {fallbackRecovered} stamina.");
     }
 
     private static void InvalidateMoveCache()
     {
-        var unit = UnitActionSystem.Instance?.GetSelectedUnit();
-        if (unit == null) return;
+        if (PartyManager.Instance != null &&
+            PartyManager.Instance.PartyUnits.Count > 0)
+        {
+            foreach (Unit unit in PartyManager.Instance.PartyUnits)
+            {
+                if (unit == null)
+                    continue;
 
-        var move = unit.GetMoveAction();
-        move?.InvalidateCache();
+                unit.GetMoveAction()?.InvalidateCache();
+            }
+
+            return;
+        }
+
+        Unit fallback = UnitActionSystem.Instance?.GetSelectedUnit();
+        fallback?.GetMoveAction()?.InvalidateCache();
     }
 }
