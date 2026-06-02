@@ -1045,6 +1045,10 @@ MonoBehaviour:
   recenterOnPlayerTurn: 1
   followSmoothness: 8
   unlockDistance: 0.05
+  followPlayerWhileMoving: 1
+  playerMoveDetectThreshold: 0.01
+  usePlayerLeashBounds: 1
+  playerLeashDistance: 10
   shakeFrequency: 25
 --- !u!1 &1624180977
 GameObject:
