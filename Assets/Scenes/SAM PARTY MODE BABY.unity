@@ -581,7 +581,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PartyManager
   useDebugStartingUnit: 1
-  debugStartingUnitIndex: 1
+  debugStartingUnitIndex: 0
 --- !u!114 &1059453627
 MonoBehaviour:
   m_ObjectHideFlags: 0
