@@ -21585,6 +21585,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2016669566}
   - component: {fileID: 2016669565}
+  - component: {fileID: 2016669567}
   m_Layer: 0
   m_Name: Audio Source
   m_TagString: Untagged
@@ -21605,7 +21606,7 @@ AudioSource:
   m_audioClip: {fileID: 0}
   m_Resource: {fileID: 8300000, guid: dd7f555739356d34691121b35d6ce524, type: 3}
   m_PlayOnAwake: 1
-  m_Volume: 0.194
+  m_Volume: 1
   m_Pitch: 1
   Loop: 1
   Mute: 0
@@ -21704,6 +21705,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2016669567
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2016669564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5cc86f205369f041bbab2ba76579e08, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AudioSettingsManager
+  musicSource: {fileID: 2016669565}
+  musicVolume: 0.8
 --- !u!1 &2021582878
 GameObject:
   m_ObjectHideFlags: 0
@@ -23022,6 +23037,7 @@ GameObject:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
+  - {fileID: 2016669566}
   - {fileID: 1803345272}
   - {fileID: 1366886749}
   - {fileID: 1367613123}
@@ -23030,4 +23046,3 @@ SceneRoots:
   - {fileID: 2003652083}
   - {fileID: 8407996902548054809}
   - {fileID: 1371950833}
-  - {fileID: 2016669566}
