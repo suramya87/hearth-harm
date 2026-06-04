@@ -13,20 +13,21 @@ MonoBehaviour:
   m_Name: Frost
   m_EditorClassIdentifier: Assembly-CSharp::BossStats
   bossName: Frost
-  maxHealth: 150
+  maxHealth: 450
   moveRange: 3
   attackRange: 5
   turnsBeforeFirstAction: 0
   rangedAttackData: {fileID: 11400000, guid: 4d7ab4286fb33b642853470a593cf962, type: 2}
   cleaveAttackData: {fileID: 11400000, guid: 9b2daa61b85a6664a8bcc6d26bacd918, type: 2}
-  enrageThreshold: 0.85
+  enrageThreshold: 0.6
   invisAlpha: 0.1
   damageReductionInvis: 0.5
   invisDurationTurns: 2
   minionPrefabs:
   - {fileID: 2607613351963544914, guid: 531d479663f6a5e42a8e789b498e3579, type: 3}
+  - {fileID: 2516156627802507729, guid: 263f6682cdcdc3340a313c0dddc89dc6, type: 3}
   minionsPerWave: 3
-  maxConcurrentMinions: 5
-  increasedDamageMultiplier: 2
+  maxConcurrentMinions: 7
+  increasedDamageMultiplier: 1.5
   kiteEnabled: 0
   kiteRange: 2

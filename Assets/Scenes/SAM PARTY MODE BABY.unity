@@ -1123,11 +1123,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 77b2c4df5a3278f4d91371e1a47a55df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveManager
-  baseEnemyCount: 2
-  enemiesPerLevel: 3
-  maxEnemies: 50
-  baseMinRooms: 4
-  baseMaxRooms: 8
+  baseEnemyCount: 4
+  enemiesPerLevel: 19
+  maxEnemies: 100
+  baseMinRooms: 8
+  baseMaxRooms: 10
   roomsPerLevel: 1
   maxRooms: 15
 --- !u!4 &1650586711

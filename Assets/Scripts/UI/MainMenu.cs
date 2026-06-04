@@ -74,6 +74,8 @@ public class MainMenuController : MonoBehaviour
     [Header("Scenes")]
     [SerializeField] private string singlePlayerSceneName = "SinglePlayerScene";
     [SerializeField] private string multiplayerSceneName  = "MultiplayerScene";
+    [SerializeField] private string PartyModeSceneName = "PartyModeScene";
+
 
     // ── Runtime state ─────────────────────────────────────────────────────
     private int    selectedCharIndex        = 0;
@@ -704,6 +706,10 @@ public class MainMenuController : MonoBehaviour
     {
         if (!isSinglePlayer) return;
         LaunchGame(isMultiplayer: false);
+    }
+
+    public void OnPartymodeStartClicked(){
+        SceneManager.LoadScene(PartyModeSceneName);
     }
 
     private void OnStartClicked()

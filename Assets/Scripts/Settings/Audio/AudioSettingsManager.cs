@@ -23,6 +23,8 @@ public class AudioSettingsManager : MonoBehaviour
         }
 
         Instance = this;
+        
+        transform.SetParent(null); 
         DontDestroyOnLoad(gameObject);
 
         LoadSettings();

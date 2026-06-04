@@ -1016,6 +1016,10 @@ MonoBehaviour:
   recenterOnPlayerTurn: 1
   followSmoothness: 8
   unlockDistance: 0.05
+  followPlayerWhileMoving: 1
+  playerMoveDetectThreshold: 0.01
+  usePlayerLeashBounds: 1
+  playerLeashDistance: 30
   shakeFrequency: 25
 --- !u!1 &1624180977
 GameObject:
@@ -1090,9 +1094,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 77b2c4df5a3278f4d91371e1a47a55df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveManager
-  baseEnemyCount: 2
-  enemiesPerLevel: 3
-  maxEnemies: 50
+  baseEnemyCount: 4
+  enemiesPerLevel: 10
+  maxEnemies: 100
   baseMinRooms: 4
   baseMaxRooms: 8
   roomsPerLevel: 1
