@@ -655,6 +655,7 @@ public class MainMenuController : MonoBehaviour
         float duration = 2f;
         float elapsed = 0f;
         float target = selected ? 1f : 0f;
+        float start = 1f - target;
         bool done = material.GetFloat("_Amount") == target;
 
         if (!done)
@@ -663,8 +664,10 @@ public class MainMenuController : MonoBehaviour
             {
                 elapsed += Time.deltaTime;
 
-                float amount = Mathf.Clamp01(elapsed / duration);
-                material.SetFloat("_Amount", selected ? amount : 1f - amount);
+                float t = Mathf.Clamp01(elapsed / duration);
+                float amount = Mathf.Lerp(start, target, t);
+
+                material.SetFloat("_Amount", amount);
 
                 yield return null;
             }
