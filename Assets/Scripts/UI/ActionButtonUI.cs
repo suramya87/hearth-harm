@@ -2,7 +2,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-
 public class ActionButtonUI : MonoBehaviour
 {
     [Header("Core")]
@@ -17,11 +16,12 @@ public class ActionButtonUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI staminaCostText;
 
     [Header("Affordability")]
-    [Range(0f,1f)]
-    [SerializeField] private float        unaffordableAlpha = 0.4f;
-    [SerializeField] private CanvasGroup  canvasGroup;
+    [Range(0f, 1f)]
+    [SerializeField] private float       unaffordableAlpha = 0.4f;
+    [SerializeField] private CanvasGroup canvasGroup;
 
-    private BaseAction action;
+    private BaseAction  action;
+    private PlayerStats cachedStats;   // FIX: cache from GetComponentInParent, not GetComponent
 
     private void Awake()
     {
@@ -32,9 +32,16 @@ public class ActionButtonUI : MonoBehaviour
     public void SetBaseAction(BaseAction a)
     {
         action = a;
+
+        // FIX: PlayerStats lives on the unit root, not on the action component.
+        // GetComponentInParent walks up the hierarchy and finds it correctly.
+        cachedStats = a.GetComponentInParent<PlayerStats>();
+
         if (actionNameText) actionNameText.text = a.GetActionName().ToUpper();
+
         button.onClick.RemoveAllListeners();
         button.onClick.AddListener(() => UnitActionSystem.Instance?.SetSelectedAction(action));
+
         RefreshIcon();
         RefreshDesc();
         RefreshStamina();
@@ -91,10 +98,8 @@ public class ActionButtonUI : MonoBehaviour
     private void RefreshAffordability()
     {
         if (canvasGroup == null || button == null) return;
-
         bool ok = CanAfford();
-
-        canvasGroup.alpha = ok ? 1f : unaffordableAlpha;
+        canvasGroup.alpha   = ok ? 1f : unaffordableAlpha;
         button.interactable = ok;
     }
 
@@ -102,19 +107,14 @@ public class ActionButtonUI : MonoBehaviour
     {
         if (action == null) return false;
 
-        PlayerStats stats = action.GetComponent<PlayerStats>();
-        if (stats == null) return false;
+        // If there's no stamina system at all, always allow.
+        if (cachedStats == null) return true;
 
         if (action is MoveAction)
-        {
-            return stats.currentStamina >= 1;
-        }
+            return cachedStats.currentStamina >= 1;
 
         if (action is CombatAction ca && ca.ActionData != null)
-        {
-            int cost = ca.ActionData.staminaCost;
-            return stats.currentStamina >= cost;
-        }
+            return cachedStats.currentStamina >= ca.ActionData.staminaCost;
 
         return true;
     }

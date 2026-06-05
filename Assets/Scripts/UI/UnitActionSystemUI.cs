@@ -5,23 +5,24 @@ using UnityEngine;
 public class UnitActionSystemUI : MonoBehaviour
 {
     [SerializeField] private Transform actionButtonPrefab;
-
     [Tooltip("The container transform that holds the action buttons.")]
     [SerializeField] private Transform actionButtonContainerTransform;
 
     private readonly List<ActionButtonUI> actionButtonUIList = new();
 
+    private PlayerStats subscribedStats;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+
     private void Start()
     {
-        // Subscribe to whichever action system is present
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChanged   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChanged += OnSelectedActionChanged;
         }
         else
         {
-            // Retry on level ready in case the system isn't initialised yet
             LevelGenerator.OnLevelReady += OnLevelReady;
         }
 
@@ -32,11 +33,12 @@ public class UnitActionSystemUI : MonoBehaviour
     private void OnDestroy()
     {
         LevelGenerator.OnLevelReady -= OnLevelReady;
+        UnsubscribeStamina();
 
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   -= OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange -= OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChanged   -= OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChanged -= OnSelectedActionChanged;
         }
     }
 
@@ -46,15 +48,13 @@ public class UnitActionSystemUI : MonoBehaviour
 
         if (UnitActionSystem.Instance != null)
         {
-            UnitActionSystem.Instance.OnSelectedUnitChange   += OnSelectedUnitChanged;
-            UnitActionSystem.Instance.OnSelectedActionChange += OnSelectedActionChanged;
+            UnitActionSystem.Instance.OnSelectedUnitChanged   += OnSelectedUnitChanged;
+            UnitActionSystem.Instance.OnSelectedActionChanged += OnSelectedActionChanged;
         }
 
         CreateUnitActionButtons();
         UpdateSelectedVisual();
     }
-
-    private void Update() => UpdateSelectedVisual();
 
     // ── Button creation ────────────────────────────────────────────────────
 
@@ -70,12 +70,18 @@ public class UnitActionSystemUI : MonoBehaviour
             Destroy(child.gameObject);
         actionButtonUIList.Clear();
 
+        UnsubscribeStamina();
+
         Unit unit = UnitActionSystem.Instance?.GetSelectedUnit();
         if (unit == null) return;
 
+        subscribedStats = unit.GetComponent<PlayerStats>();
+        if (subscribedStats != null)
+            subscribedStats.OnStaminaChanged += OnStaminaChanged;
+
         foreach (BaseAction action in unit.GetBaseActionArray())
         {
-            Transform t  = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
+            Transform      t  = Instantiate(actionButtonPrefab, actionButtonContainerTransform);
             ActionButtonUI ui = t.GetComponent<ActionButtonUI>();
             if (ui != null)
             {
@@ -91,7 +97,19 @@ public class UnitActionSystemUI : MonoBehaviour
             btn?.UpdateSelectedVisual();
     }
 
-    // ── Events ─────────────────────────────────────────────────────────────
+
+    private void UnsubscribeStamina()
+    {
+        if (subscribedStats != null)
+            subscribedStats.OnStaminaChanged -= OnStaminaChanged;
+        subscribedStats = null;
+    }
+
+    private void OnStaminaChanged(int current, int max)
+    {
+        UpdateSelectedVisual();
+    }
+
 
     private void OnSelectedUnitChanged(object sender, EventArgs e)
     {
@@ -99,5 +117,8 @@ public class UnitActionSystemUI : MonoBehaviour
         UpdateSelectedVisual();
     }
 
-    private void OnSelectedActionChanged(object sender, EventArgs e) => UpdateSelectedVisual();
+    private void OnSelectedActionChanged(object sender, EventArgs e)
+    {
+        UpdateSelectedVisual();
+    }
 }

@@ -18,8 +18,7 @@ public class MoveAction : BaseAction
     private List<Vector3>      cachedReachableWorld;
     private List<GridPosition> cachedReachableGP;
     private bool               cacheDirty = true;
-
-    private RoomGrid cachedForGrid;
+    private RoomGrid           cachedForGrid;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -41,7 +40,6 @@ public class MoveAction : BaseAction
 
     private void OnRoomChanged(LevelGenerator.PlacedRoom room)
     {
-        // Only invalidate when arriving at a real room, not mid-hallway.
         if (room == null) return;
         InvalidateCache();
     }
@@ -67,8 +65,22 @@ public class MoveAction : BaseAction
 
     public void HandleActionInput()
     {
+        // OWNERSHIP GUARD
+        if (!CanExecuteLocally())
+        {
+            Debug.LogWarning("[MoveAction] HandleActionInput blocked — CanExecuteLocally false.");
+            return;
+        }
+
         if (!Input.GetMouseButtonDown(0)) return;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
+
+        // Extra guard — make sure we have a unit and it's initialized.
+        if (unit == null || !unit.IsInitialized())
+        {
+            Debug.LogWarning("[MoveAction] HandleActionInput — unit null or not initialized.");
+            return;
+        }
 
         Vector3 raw        = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         Vector3 mouseWorld = new Vector3(raw.x, raw.y, 0f);
@@ -90,16 +102,16 @@ public class MoveAction : BaseAction
 
             if (reachable.Count == 0)
             {
-                Debug.LogWarning("[MoveAction] Reachable list is empty.");
+                Debug.LogWarning("[MoveAction] Reachable list is empty — no valid moves.");
                 return;
             }
 
             float cellSize = 1f;
-            var roomForSize = unit.GetCurrentRoomGrid();
+            var   roomForSize = unit.GetCurrentRoomGrid();
             if (roomForSize != null)
             {
                 var setup = roomForSize.GetComponent<RoomTilemapSetup>()
-                        ?? roomForSize.GetComponentInParent<RoomTilemapSetup>();
+                         ?? roomForSize.GetComponentInParent<RoomTilemapSetup>();
                 if (setup != null) cellSize = setup.GetCellSize();
             }
 
@@ -107,19 +119,21 @@ public class MoveAction : BaseAction
             float   bestDist = float.MaxValue;
             foreach (var w in reachable)
             {
-                float d = Vector2.Distance(new Vector2(w.x, w.y),
-                                           new Vector2(mouseWorld.x, mouseWorld.y));
+                float d = Vector2.Distance(
+                    new Vector2(w.x, w.y),
+                    new Vector2(mouseWorld.x, mouseWorld.y));
                 if (d < bestDist) { bestDist = d; best = w; }
             }
 
             if (bestDist < cellSize * 0.75f)
             {
-                Move(best, () => Debug.Log("[MoveAction] Move Complete."));
+                Debug.Log($"[MoveAction] Moving to {best} (dist {bestDist:F2})");
+                Move(best, () => Debug.Log("[MoveAction] Move complete."));
                 return;
             }
 
-            Debug.Log($"<color=red>[MoveAction] No reachable cell near {mouseWorld} " +
-                      $"(closest {bestDist:F2} away, threshold {cellSize * 0.75f:F2})</color>");
+            Debug.Log($"[MoveAction] Click too far from any reachable cell " +
+                      $"(closest {bestDist:F2}, threshold {cellSize * 0.75f:F2})");
             return;
         }
 
@@ -128,7 +142,7 @@ public class MoveAction : BaseAction
         if (room == null) return;
         GridPosition gp = room.GetGridPosition(mouseWorld);
         if (IsValidTarget(gp))
-            Move(gp, () => Debug.Log("[MoveAction] Move Complete."));
+            Move(gp, () => Debug.Log("[MoveAction] Move complete."));
     }
 
     public void RefreshValidTargets()
@@ -148,9 +162,12 @@ public class MoveAction : BaseAction
         newGrid.AddUnitAtGridPosition(newPos, unit);
     }
 
+    // ── Move(worldPos) ─────────────────────────────────────────────────────
+
     public void Move(Vector3 targetWorld, Action onComplete)
     {
-        if (isActive) { onComplete?.Invoke(); return; }
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
+        if (isActive)             { onComplete?.Invoke(); return; }
 
         if (UnifiedWorldGrid.Instance == null)
         {
@@ -162,7 +179,12 @@ public class MoveAction : BaseAction
 
         Vector3 startWorld = GetUnitCellCentreWorld();
         var worldPath = UnifiedPathfinder.FindWorldPath(startWorld, targetWorld);
-        if (worldPath == null || worldPath.Count == 0) { onComplete?.Invoke(); return; }
+        if (worldPath == null || worldPath.Count == 0)
+        {
+            Debug.LogWarning($"[MoveAction] No path found from {startWorld} to {targetWorld}");
+            onComplete?.Invoke();
+            return;
+        }
 
         int steps    = Mathf.Min(worldPath.Count, MoveDistance);
         var usedPath = worldPath.GetRange(0, steps);
@@ -171,8 +193,12 @@ public class MoveAction : BaseAction
         StartCoroutine(MoveAlongWorldPath(usedPath, onComplete));
     }
 
+    // ── Move(gridPos) ──────────────────────────────────────────────────────
+
     public void Move(GridPosition target, Action onComplete)
     {
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
+
         var room = unit.GetCurrentRoomGrid();
         if (room == null || isActive) { onComplete?.Invoke(); return; }
 
@@ -182,7 +208,6 @@ public class MoveAction : BaseAction
             return;
         }
 
-        // Pure local path.
         GridPosition startPos = unit.GetGridPosition();
         var path = new Pathfinder(room).FindPath(startPos, target);
         if (path == null || path.Count == 0) { onComplete?.Invoke(); return; }
@@ -216,6 +241,8 @@ public class MoveAction : BaseAction
         StartCoroutine(MoveAlongLocalPath(waypoints, usedPath, finalPos, room, onComplete));
     }
 
+    // ── World-path coroutine ───────────────────────────────────────────────
+
     private IEnumerator MoveAlongWorldPath(
         List<UnifiedPathfinder.WorldStep> path, Action onComplete)
     {
@@ -225,7 +252,12 @@ public class MoveAction : BaseAction
         Vector2 visualOff = unit.GetVisualOffset();
         int     stamSpent = 0;
 
-        unit.IsSyncingFromNetwork = true;
+        var bridge = GameManager.IsMultiplayer
+            ? unit.GetComponent<NetworkedPlayerBridge>()
+            : null;
+        bool isOwner = bridge != null && bridge.IsOwner;
+
+        if (isOwner) bridge.SetWalking(true);
 
         for (int i = 0; i < path.Count; i++)
         {
@@ -264,6 +296,9 @@ public class MoveAction : BaseAction
             }
             transform.position = visualTarget;
             stamSpent++;
+
+            if (isOwner)
+                bridge.BroadcastMoveStep(step.WorldPos);
         }
 
         var finalStep = path[^1];
@@ -275,24 +310,17 @@ public class MoveAction : BaseAction
 
         unitAnimator?.SetMoving(false);
         isActive = false;
-
-        unit.IsSyncingFromNetwork = false;
-
         InvalidateCache();
 
-        if (!GameManager.IsMultiplayer)
-        {
-            unit.PlaceInRoomNoMove(finalGrid, finalGP);
-        }
-        else
-        {
-            var bridge = unit.GetComponent<NetworkedPlayerBridge>();
-            if (bridge != null && bridge.IsOwner)
-                bridge.SyncGridPosition(finalGrid, finalGP);
-        }
+        unit.PlaceInRoomNoMove(finalGrid, finalGP);
+
+        if (GameManager.IsMultiplayer && isOwner)
+            bridge.SyncGridPosition(finalGrid, finalGP);
 
         onComplete?.Invoke();
     }
+
+    // ── Local-path coroutine ───────────────────────────────────────────────
 
     private IEnumerator MoveAlongLocalPath(
         List<Vector3> waypoints, List<GridPosition> gridPath,
@@ -313,7 +341,6 @@ public class MoveAction : BaseAction
 
         unitAnimator?.SetMoving(false);
         isActive = false;
-
         InvalidateCache();
 
         if (unit.GetCurrentRoomGrid() == startingGrid)
@@ -322,7 +349,7 @@ public class MoveAction : BaseAction
             {
                 var bridge = unit.GetComponent<NetworkedPlayerBridge>();
                 if (bridge != null && bridge.IsOwner)
-                    bridge.SyncGridPosition(startingGrid, finalGP);
+                    bridge.SyncGridPosition(startingGrid, finalGP); // also calls SetWalking(false)
             }
             else
                 unit.PlaceInRoomNoMove(startingGrid, finalGP);
@@ -330,6 +357,8 @@ public class MoveAction : BaseAction
         CameraController2D.Instance?.StopFollow();
         onComplete?.Invoke();
     }
+
+    // ── Cache rebuild ──────────────────────────────────────────────────────
 
     private void RebuildReachableCache()
     {
@@ -346,7 +375,11 @@ public class MoveAction : BaseAction
         }
 
         var startRoom = unit.GetCurrentRoomGrid();
-        if (startRoom == null) return;
+        if (startRoom == null)
+        {
+            Debug.LogWarning("[MoveAction] RebuildReachableCache — unit has no room.");
+            return;
+        }
 
         cachedForGrid = startRoom;
 
@@ -362,7 +395,13 @@ public class MoveAction : BaseAction
                 float d = Vector3Int.Distance(k, startKey);
                 if (d < best) { best = d; bestKey = k; }
             }
-            if (best > 4f) { LocalBFS(); return; }
+            if (best > 4f)
+            {
+                Debug.LogWarning($"[MoveAction] Start key {startKey} not in grid " +
+                                 $"(closest was {best:F1} away). Falling back to LocalBFS.");
+                LocalBFS();
+                return;
+            }
             startKey = bestKey;
         }
 
@@ -393,7 +432,7 @@ public class MoveAction : BaseAction
         }
 
         Debug.Log($"[MoveAction] BFS: {cachedReachableWorld.Count} reachable cells " +
-                  $"from key {startKey} (world {unitWorld}).");
+                  $"from {startKey} (world {unitWorld}) moveRange={moveRange}");
     }
 
     private void LocalBFS()
@@ -418,7 +457,7 @@ public class MoveAction : BaseAction
         }
     }
 
-    // ── Public query API ───────────────────────────────────────────────────
+    // ── Query API ──────────────────────────────────────────────────────────
 
     public List<Vector3> GetValidActionWorldPositions()
     {
@@ -468,7 +507,6 @@ public class MoveAction : BaseAction
     {
         var room = unit.GetCurrentRoomGrid();
         if (room != null) return room.GetWorldPosition(unit.GetGridPosition());
-
         Vector2 vo = unit.GetVisualOffset();
         return new Vector3(
             transform.position.x - vo.x,

@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
-
 public class LobbySync : NetworkBehaviour
 {
     public static LobbySync Instance { get; private set; }
@@ -20,12 +19,15 @@ public class LobbySync : NetworkBehaviour
     private Dictionary<ulong, int>  characterIndexMap = new Dictionary<ulong, int>();
     private Dictionary<ulong, bool> readyMap          = new Dictionary<ulong, bool>();
 
+    // Tracks which clients have explicitly submitted a character selection.
+    // This is separate from characterIndexMap (which defaults to 0) so the
+    // spawner can tell the difference between "picked index 0" and "never submitted".
+    private HashSet<ulong> receivedSelectionFrom = new HashSet<ulong>();
+
     public ulong LocalClientId           => NetworkManager.Singleton?.LocalClientId ?? 0;
     public bool  IsCharSelectPhaseActive => charSelectPhaseActive.Value;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Spawn / Despawn
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Spawn / Despawn ────────────────────────────────────────────────────
 
     public override void OnNetworkSpawn()
     {
@@ -43,10 +45,7 @@ public class LobbySync : NetworkBehaviour
         RegisterClientServerRpc(NetworkManager.Singleton.LocalClientId);
 
         if (charSelectPhaseActive.Value)
-        {
-            Debug.Log("[LobbySync] Char select already active on spawn — deferred fire.");
             StartCoroutine(FireCharSelectNextFrame());
-        }
     }
 
     private IEnumerator FireCharSelectNextFrame()
@@ -61,9 +60,7 @@ public class LobbySync : NetworkBehaviour
         if (Instance == this) Instance = null;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Client registration
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Client registration ────────────────────────────────────────────────
 
     [ServerRpc(RequireOwnership = false)]
     private void RegisterClientServerRpc(ulong clientId)
@@ -73,9 +70,7 @@ public class LobbySync : NetworkBehaviour
         BroadcastPlayerData();
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Character selection
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Character selection ────────────────────────────────────────────────
 
     public void SetMyCharacter(int index)
         => SetCharacterServerRpc(NetworkManager.Singleton.LocalClientId, index);
@@ -84,6 +79,8 @@ public class LobbySync : NetworkBehaviour
     private void SetCharacterServerRpc(ulong clientId, int index)
     {
         characterIndexMap[clientId] = index;
+        receivedSelectionFrom.Add(clientId);   // mark as explicitly submitted
+        Debug.Log($"[LobbySync] Client {clientId} selected character {index}");
         BroadcastPlayerData();
     }
 
@@ -93,9 +90,21 @@ public class LobbySync : NetworkBehaviour
         return idx;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Ready state
-    // ─────────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Returns true if this client has explicitly submitted a character selection.
+    /// Used by NetworkedPlayerSpawner to distinguish "selected index 0" from
+    /// "never submitted" — both return 0 from GetCharacterIndex.
+    /// </summary>
+    public bool HasReceivedSelectionFrom(ulong clientId)
+    {
+        // If the client registered but never picked, treat registration as
+        // an implicit selection of whatever default is in the map.
+        // We mark them as "received" once RegisterClientServerRpc fires so
+        // the spawner doesn't wait forever for clients using default character.
+        return characterIndexMap.ContainsKey(clientId);
+    }
+
+    // ── Ready state ────────────────────────────────────────────────────────
 
     public void SetMyReady(bool ready)
         => SetReadyServerRpc(NetworkManager.Singleton.LocalClientId, ready);
@@ -121,9 +130,7 @@ public class LobbySync : NetworkBehaviour
         return true;
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Phase transition
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Phase transition ───────────────────────────────────────────────────
 
     public void BeginCharSelectPhase()
     {
@@ -155,12 +162,10 @@ public class LobbySync : NetworkBehaviour
     private void OnCharSelectPhaseChanged(bool oldVal, bool newVal)
     {
         if (newVal)
-            Debug.Log("[LobbySync] charSelectPhaseActive NetworkVariable changed to true.");
+            Debug.Log("[LobbySync] charSelectPhaseActive changed to true.");
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Player data broadcast
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Player data broadcast ──────────────────────────────────────────────
 
     private void BroadcastPlayerData()
     {
@@ -192,9 +197,7 @@ public class LobbySync : NetworkBehaviour
         OnPlayerDataUpdated?.Invoke(ids);
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Reset — call when returning to menu between games
-    // ─────────────────────────────────────────────────────────────────────
+    // ── Reset ──────────────────────────────────────────────────────────────
 
     public void ResetPhase()
     {

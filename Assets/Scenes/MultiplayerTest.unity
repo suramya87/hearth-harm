@@ -549,7 +549,7 @@ MonoBehaviour:
   minRooms: 7
   maxRooms: 10
   specialRoomChance: 0.3
-  spawnBossRoom: 0
+  spawnBossRoom: 1
   roomSpacing: 16
   playerPrefabs:
   - {fileID: 9198468102176965729, guid: cf123cc857d02f44fae2ef402b13873a, type: 3}
@@ -883,6 +883,10 @@ MonoBehaviour:
   recenterOnPlayerTurn: 1
   followSmoothness: 8
   unlockDistance: 0.05
+  followPlayerWhileMoving: 1
+  playerMoveDetectThreshold: 0.01
+  usePlayerLeashBounds: 1
+  playerLeashDistance: 30
   shakeFrequency: 25
 --- !u!1 &1624180977
 GameObject:
@@ -1298,10 +1302,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4dbd529f57afcf748a6b3e2731f7b8b8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UnitActionSystem
+  selectedUnit: {fileID: 0}
   unitLayerMask:
     serializedVersion: 2
     m_Bits: 128
-  diceBoxUI: {fileID: 0}
 --- !u!4 &2097609747
 Transform:
   m_ObjectHideFlags: 0

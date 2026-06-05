@@ -1,222 +1,300 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
-
 
 public class NetworkedTurnSystem : NetworkBehaviour
 {
     public static NetworkedTurnSystem Instance { get; private set; }
 
-    // ── Network variables ──────────────────────────────────────────────────
+    public event EventHandler OnTurnChanged;
+    public event Action       OnPlayerTurnBegin;
+    public event Action       OnEnemyPhaseBegin;
 
+    // ── Networked state ────────────────────────────────────────────────────
     private NetworkVariable<int> turnNumber = new(1,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private NetworkVariable<bool> isPlayerPhase = new(true,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // ── Events ─────────────────────────────────────────────────────────────
-
-    public event Action       OnPlayerTurnBegin;
-    public event Action       OnEnemyPhaseBegin;
-    public event Action       OnEnemyPhaseEnd;
-    public event EventHandler OnTurnChanged;
-
-
-    public event Action<ulong[], bool[]> OnTurnStatusUpdated;
-
-    // ── State ──────────────────────────────────────────────────────────────
-
-    public bool IsPlayerPhase => isPlayerPhase.Value;
     public int  TurnNumber    => turnNumber.Value;
+    public bool IsPlayerPhase => isPlayerPhase.Value;
 
-    private readonly HashSet<ulong> playersEndedTurn = new();
+    private readonly Dictionary<string, HashSet<ulong>> roomCombatants = new();
+    private readonly Dictionary<string, HashSet<ulong>> roomEndedTurns = new();
+    private readonly HashSet<string> roomsInEnemyPhase = new();
 
-    private bool localEndTurnPending;
+    // ── Lifecycle ──────────────────────────────────────────────────────────
 
     private void Awake()
     {
-        if (Instance != null) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
     }
 
     public override void OnNetworkSpawn()
     {
-        if (!GameManager.IsMultiplayer) return;
-
+        turnNumber.OnValueChanged    += (_, _) => OnTurnChanged?.Invoke(this, EventArgs.Empty);
         isPlayerPhase.OnValueChanged += OnPhaseChanged;
-        turnNumber.OnValueChanged    += OnTurnNumberChanged;
 
         if (IsServer && EnemyManager.Instance != null)
-            EnemyManager.Instance.OnEnemyTurnsComplete += ServerHandleEnemyTurnsComplete;
+            EnemyManager.Instance.OnEnemyTurnsComplete += OnEnemyTurnsCompleteServer;
     }
 
     public override void OnNetworkDespawn()
     {
-        isPlayerPhase.OnValueChanged -= OnPhaseChanged;
-        turnNumber.OnValueChanged    -= OnTurnNumberChanged;
-
-        if (EnemyManager.Instance != null)
-            EnemyManager.Instance.OnEnemyTurnsComplete -= ServerHandleEnemyTurnsComplete;
+        if (IsServer && EnemyManager.Instance != null)
+            EnemyManager.Instance.OnEnemyTurnsComplete -= OnEnemyTurnsCompleteServer;
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    private void OnPhaseChanged(bool oldVal, bool newVal)
+    {
+        if (newVal) OnPlayerTurnBegin?.Invoke();
+        else        OnEnemyPhaseBegin?.Invoke();
+    }
+
+    // ── Public API (called by TurnSystemUI) ────────────────────────────────
 
     public void RequestEndTurn()
     {
-        if (!GameManager.IsMultiplayer)
-        {
-            TurnSystem.Instance?.NextTurn();
-            return;
-        }
+        var unit = UnitActionSystem.FindLocalOwnedUnit();
+        if (unit == null) return;
 
-        if (!isPlayerPhase.Value || localEndTurnPending) return;
-        if (NetworkManager.Singleton == null) return;
-
-        localEndTurnPending = true;
-        RequestEndTurnServerRpc(NetworkManager.Singleton.LocalClientId);
+        string roomName = unit.GetCurrentRoomGrid()?.gameObject.name ?? "";
+        EndTurnServerRpc(NetworkManager.Singleton.LocalClientId, roomName);
     }
 
-    public bool HasLocalPlayerEndedTurn()
+    // ── Room combat registration ───────────────────────────────────────────
+
+    public void RegisterPlayerInRoomCombat(ulong clientId, string roomName)
     {
-        if (NetworkManager.Singleton == null) return false;
-        return localEndTurnPending ||
-               playersEndedTurn.Contains(NetworkManager.Singleton.LocalClientId);
+        if (!IsServer) return;
+
+        if (!roomCombatants.ContainsKey(roomName))
+        {
+            roomCombatants[roomName] = new HashSet<ulong>();
+            roomEndedTurns[roomName] = new HashSet<ulong>();
+        }
+
+        roomCombatants[roomName].Add(clientId);
+
+        Debug.Log($"[NetworkedTurnSystem] Client {clientId} registered in '{roomName}' combat. " +
+                  $"Total combatants: {roomCombatants[roomName].Count}");
+    }
+
+    public void UnregisterPlayerFromRoomCombat(ulong clientId, string roomName)
+    {
+        if (!IsServer) return;
+        if (!roomCombatants.ContainsKey(roomName)) return;
+
+        roomCombatants[roomName].Remove(clientId);
+        roomEndedTurns[roomName].Remove(clientId);
+
+        if (roomCombatants[roomName].Count == 0)
+        {
+            roomCombatants.Remove(roomName);
+            roomEndedTurns.Remove(roomName);
+            roomsInEnemyPhase.Remove(roomName);
+            Debug.Log($"[NetworkedTurnSystem] Room '{roomName}' combat fully cleared (no combatants).");
+        }
+        else
+        {
+            CheckRoomTurnComplete(roomName);
+        }
+    }
+
+    public bool IsRoomInCombat(string roomName)
+    {
+        return roomCombatants.ContainsKey(roomName) &&
+               roomCombatants[roomName].Count > 0;
+    }
+
+    public void ClearRoomCombat(string roomName)
+    {
+        if (!IsServer) return;
+        roomCombatants.Remove(roomName);
+        roomEndedTurns.Remove(roomName);
+        roomsInEnemyPhase.Remove(roomName);
+        Debug.Log($"[NetworkedTurnSystem] Combat state cleared for room '{roomName}'.");
     }
 
     // ── Server RPCs ────────────────────────────────────────────────────────
 
     [ServerRpc(RequireOwnership = false)]
-    private void RequestEndTurnServerRpc(ulong clientId)
+    private void EndTurnServerRpc(ulong clientId, string roomName)
     {
-        if (!isPlayerPhase.Value)
+        if (!string.IsNullOrEmpty(roomName) && roomCombatants.ContainsKey(roomName))
         {
-            Debug.Log($"[NetworkedTurnSystem] Ignored end-turn from {clientId} (not player phase).");
-            return;
-        }
+            roomEndedTurns[roomName].Add(clientId);
 
-        playersEndedTurn.Add(clientId);
-        Debug.Log($"[NetworkedTurnSystem] {clientId} ended turn " +
-                  $"({playersEndedTurn.Count} / {GetRelevantPlayerCount()} relevant players)");
+            Debug.Log($"[NetworkedTurnSystem] Client {clientId} ended turn in '{roomName}'. " +
+                      $"{roomEndedTurns[roomName].Count}/{roomCombatants[roomName].Count} players ready.");
 
-        BroadcastTurnStatus();
-
-        if (AllRelevantPlayersEndedTurn())
-            ServerBeginEnemyPhase();
-    }
-
-    // ── Relevant player calculation ────────────────────────────────────────
-    private int GetRelevantPlayerCount()
-    {
-        return NetworkManager.Singleton.ConnectedClientsList.Count;
-
-    }
-
-    private bool AllRelevantPlayersEndedTurn()
-    {
-        // All connected clients must have ended turn
-        foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
-            if (!playersEndedTurn.Contains(client.ClientId)) return false;
-        return true;
-    }
-
-
-    // ── Server logic ───────────────────────────────────────────────────────
-
-    private void ServerBeginEnemyPhase()
-    {
-        playersEndedTurn.Clear();
-        turnNumber.Value++;
-        isPlayerPhase.Value = false;
-
-        NotifyEnemyPhaseBeginClientRpc();
-
-        // Run enemy AI on server — clients see results via NetworkedEnemyBridge RPCs
-        if (EnemyManager.Instance != null && EnemyManager.Instance.GetEnemyCount() > 0)
-        {
-            Debug.Log($"[NetworkedTurnSystem] Starting enemy phase with {EnemyManager.Instance.GetEnemyCount()} enemies.");
-            EnemyManager.Instance.RunEnemyTurns();
+            CheckRoomTurnComplete(roomName);
         }
         else
         {
-            Debug.Log("[NetworkedTurnSystem] No enemies — skipping to player phase.");
-            ServerHandleEnemyTurnsComplete();
+            HandleGlobalEndTurn();
         }
     }
 
-    private void ServerHandleEnemyTurnsComplete()
+    // ── Per-room enemy phase ───────────────────────────────────────────────
+
+    private void CheckRoomTurnComplete(string roomName)
     {
-        isPlayerPhase.Value = true;
-        NotifyPlayerPhaseBeginClientRpc();
-        Debug.Log($"[NetworkedTurnSystem] Enemy phase complete. Turn {turnNumber.Value} → player phase.");
-    }
+        if (!roomCombatants.ContainsKey(roomName)) return;
+        if (roomsInEnemyPhase.Contains(roomName)) return;
 
-    // ── Turn status broadcast ──────────────────────────────────────────────
+        var combatants = roomCombatants[roomName];
+        var ended      = roomEndedTurns[roomName];
 
-    private void BroadcastTurnStatus()
-    {
-        var clients  = NetworkManager.Singleton.ConnectedClientsList;
-        var ids      = new ulong[clients.Count];
-        var statuses = new bool[clients.Count];
-
-        for (int i = 0; i < clients.Count; i++)
+        if (ended.Count >= combatants.Count && combatants.Count > 0)
         {
-            ids[i]      = clients[i].ClientId;
-            statuses[i] = playersEndedTurn.Contains(clients[i].ClientId);
+            StartCoroutine(RunRoomEnemyPhase(roomName));
+        }
+    }
+
+    private IEnumerator RunRoomEnemyPhase(string roomName)
+    {
+        roomsInEnemyPhase.Add(roomName);
+        roomEndedTurns[roomName].Clear(); 
+
+        Debug.Log($"[NetworkedTurnSystem] Starting enemy phase for room '{roomName}'.");
+
+        NotifyRoomPhaseClientRpc(roomName, false); 
+
+        var room = FindRoomGridByName(roomName);
+        if (room == null)
+        {
+            Debug.LogWarning($"[NetworkedTurnSystem] RunRoomEnemyPhase: room '{roomName}' not found.");
+            roomsInEnemyPhase.Remove(roomName);
+            NotifyRoomPhaseClientRpc(roomName, true);
+            yield break;
         }
 
-        UpdateTurnStatusClientRpc(ids, statuses);
+        var enemies = EnemyManager.Instance?.GetEnemiesInRoom(room);
+        if (enemies == null || enemies.Count == 0)
+        {
+            Debug.Log($"[NetworkedTurnSystem] No enemies in '{roomName}' — skipping enemy phase.");
+            roomsInEnemyPhase.Remove(roomName);
+            NotifyRoomPhaseClientRpc(roomName, true);
+            RecoverStaminaForRoomClientRpc(roomName);
+            yield break;
+        }
+
+        Debug.Log($"[NetworkedTurnSystem] Running {enemies.Count} enemy turns in '{roomName}'.");
+
+        bool turnsComplete = false;
+        Action onComplete  = () => turnsComplete = true;
+        EnemyManager.Instance.OnEnemyTurnsComplete += onComplete;
+
+        EnemyManager.Instance.RunEnemyTurnsForRoom(room, enemies);
+
+        float timeout = 60f, elapsed = 0f;
+        while (!turnsComplete && elapsed < timeout)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        EnemyManager.Instance.OnEnemyTurnsComplete -= onComplete;
+
+        if (elapsed >= timeout)
+            Debug.LogWarning($"[NetworkedTurnSystem] Enemy phase timed out for room '{roomName}'.");
+
+        roomsInEnemyPhase.Remove(roomName);
+
+        if (roomsInEnemyPhase.Count == 0)
+        {
+            turnNumber.Value++;
+            Debug.Log($"[NetworkedTurnSystem] All rooms done. Turn {turnNumber.Value} begins.");
+        }
+
+        NotifyRoomPhaseClientRpc(roomName, true); 
+        RecoverStaminaForRoomClientRpc(roomName);
+    }
+
+
+    private void HandleGlobalEndTurn()
+    {
+        turnNumber.Value++;
+        RecoverStaminaGlobalClientRpc();
+        OnTurnChanged?.Invoke(this, EventArgs.Empty);
+        Debug.Log($"[NetworkedTurnSystem] Global end turn. Turn {turnNumber.Value}.");
     }
 
     // ── Client RPCs ────────────────────────────────────────────────────────
 
     [ClientRpc]
-    private void UpdateTurnStatusClientRpc(ulong[] clientIds, bool[] endedTurn)
+    private void NotifyRoomPhaseClientRpc(string roomName, bool playerPhase)
     {
-        OnTurnStatusUpdated?.Invoke(clientIds, endedTurn);
-    }
+        var localUnit = UnitActionSystem.FindLocalOwnedUnit();
+        if (localUnit == null) return;
 
-    [ClientRpc]
-    private void NotifyEnemyPhaseBeginClientRpc()
-    {
-        OnEnemyPhaseBegin?.Invoke();
-        OnTurnChanged?.Invoke(this, EventArgs.Empty);
-        Debug.Log("[NetworkedTurnSystem] Enemy phase begin (client).");
-    }
+        string localRoom = localUnit.GetCurrentRoomGrid()?.gameObject.name ?? "";
+        if (localRoom != roomName) return;
 
-    [ClientRpc]
-    private void NotifyPlayerPhaseBeginClientRpc()
-    {
-        localEndTurnPending = false;
+        if (IsServer)
+            isPlayerPhase.Value = playerPhase;
 
-        OnPlayerTurnBegin?.Invoke();
-        OnEnemyPhaseEnd?.Invoke();
-        OnTurnChanged?.Invoke(this, EventArgs.Empty);
-        Debug.Log($"[NetworkedTurnSystem] Player turn {turnNumber.Value} begin (client).");
-    }
-
-
-    private void OnPhaseChanged(bool oldVal, bool newVal)      { }
-    private void OnTurnNumberChanged(int oldVal, int newVal)   { }
-
-    // ── Force helpers ──────────────────────────────────────────────────────
-
-    public void RequestForcePlayerTurn()
-    {
-        if (!GameManager.IsMultiplayer)
+        if (playerPhase)
         {
-            TurnSystem.Instance?.ForcePlayerTurn();
-            return;
+            OnPlayerTurnBegin?.Invoke();
+            OnTurnChanged?.Invoke(this, EventArgs.Empty);
         }
-        ForcePlayerTurnServerRpc();
+        else
+        {
+            OnEnemyPhaseBegin?.Invoke();
+        }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void ForcePlayerTurnServerRpc()
+    [ClientRpc]
+    private void RecoverStaminaForRoomClientRpc(string roomName)
     {
-        playersEndedTurn.Clear();
-        isPlayerPhase.Value = true;
-        NotifyPlayerPhaseBeginClientRpc();
+        var localUnit = UnitActionSystem.FindLocalOwnedUnit();
+        if (localUnit == null) return;
+
+        string localRoom = localUnit.GetCurrentRoomGrid()?.gameObject.name ?? "";
+        if (localRoom != roomName) return;
+
+        RecoverLocalPlayerStamina(localUnit);
+        localUnit.GetMoveAction()?.InvalidateCache();
+    }
+
+    [ClientRpc]
+    private void RecoverStaminaGlobalClientRpc()
+    {
+        var localUnit = UnitActionSystem.FindLocalOwnedUnit();
+        if (localUnit == null) return;
+        RecoverLocalPlayerStamina(localUnit);
+        localUnit.GetMoveAction()?.InvalidateCache();
+    }
+
+    // ── EnemyManager callback (server) ─────────────────────────────────────
+
+    private void OnEnemyTurnsCompleteServer()
+    {
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static void RecoverLocalPlayerStamina(Unit unit)
+    {
+        var stats = unit.GetComponent<PlayerStats>();
+        if (stats == null) return;
+        int recovered = stats.RollStaminaRecovery();
+        Debug.Log($"[NetworkedTurnSystem] Recovered {recovered} stamina for {unit.name}.");
+    }
+
+    private static RoomGrid FindRoomGridByName(string roomName)
+    {
+        var gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen == null) return null;
+        foreach (var placed in gen.GetAllRooms())
+            if (placed.roomGrid != null && placed.roomGrid.gameObject.name == roomName)
+                return placed.roomGrid;
+        return null;
     }
 }

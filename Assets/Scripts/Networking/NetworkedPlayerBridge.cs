@@ -7,7 +7,7 @@ using UnityEngine;
 [RequireComponent(typeof(Unit))]
 public class NetworkedPlayerBridge : NetworkBehaviour
 {
-    // ── Network state ──────────────────────────────────────────────────────
+    // ── Network variables ──────────────────────────────────────────────────
 
     private NetworkVariable<FixedString64Bytes> currentRoomName = new("",
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -18,13 +18,17 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     private NetworkVariable<int> gridY = new(0,
         NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    private Unit unit;
-    private bool isTransitioning;
-
+    private Unit      unit;
     private bool      syncPending;
     private Coroutine syncCoroutine;
+    private Coroutine stepLerpCoroutine;
+    private bool      isWalking;
+
+    private string registeredCombatRoom = "";
 
     private void Awake() => unit = GetComponent<Unit>();
+
+    // ── Network lifecycle ──────────────────────────────────────────────────
 
     public override void OnNetworkSpawn()
     {
@@ -34,9 +38,15 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridX.OnValueChanged           += OnGridPositionChanged;
         gridY.OnValueChanged           += OnGridPositionChanged;
 
-        string existing = currentRoomName.Value.ToString();
-        if (!string.IsNullOrEmpty(existing))
-            ApplyRoomSync(existing, gridX.Value, gridY.Value);
+        if (!IsOwner)
+        {
+            string existing = currentRoomName.Value.ToString();
+            if (!string.IsNullOrEmpty(existing))
+                ApplyRoomSync(existing, gridX.Value, gridY.Value);
+        }
+
+        if (IsOwner)
+            StartCoroutine(WireUpOwnerSystems());
     }
 
     public override void OnNetworkDespawn()
@@ -45,28 +55,102 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         gridX.OnValueChanged           -= OnGridPositionChanged;
         gridY.OnValueChanged           -= OnGridPositionChanged;
 
-        if (syncCoroutine != null) { StopCoroutine(syncCoroutine); syncCoroutine = null; }
+        if (syncCoroutine     != null) { StopCoroutine(syncCoroutine);     syncCoroutine     = null; }
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
         syncPending = false;
+        isWalking   = false;
+
+        if (IsServer && !string.IsNullOrEmpty(registeredCombatRoom))
+        {
+            NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
+                OwnerClientId, registeredCombatRoom);
+            registeredCombatRoom = "";
+        }
+    }
+
+    // ── Owner setup ────────────────────────────────────────────────────────
+
+    private IEnumerator WireUpOwnerSystems()
+    {
+        float timeout = 30f, elapsed = 0f;
+
+        while (UnitActionSystem.Instance == null && elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        elapsed = 0f;
+        while (!unit.IsInitialized() && elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        if (!unit.IsInitialized())
+        {
+            Debug.LogWarning("[NetworkedPlayerBridge] Unit never initialized.");
+            yield break;
+        }
+
+        SnapTransformToGridPosition();
+
+        if (UnitActionSystem.Instance != null)
+            UnitActionSystem.Instance.SetSelectedUnit(unit);
+
+        var pt = GetComponent<PlayerTarget>();
+        if (pt == null) pt = gameObject.AddComponent<PlayerTarget>();
+        PlayerTarget.ForceRegister(pt, unit);
+
+        CameraController2D.Instance?.SnapToTarget();
+
+        var roomGrid = unit.GetCurrentRoomGrid();
+        if (roomGrid != null)
+        {
+            var placed = FindPlacedRoomForGrid(roomGrid);
+            if (placed != null)
+                RoomManager.Instance?.SetCurrentRoom(placed);
+        }
+
+        Debug.Log($"[NetworkedPlayerBridge] Owner systems wired for {gameObject.name}");
+    }
+
+    private void SnapTransformToGridPosition()
+    {
+        var room = unit.GetCurrentRoomGrid();
+        if (room == null) return;
+
+        Vector2 vo    = unit.GetVisualOffset();
+        Vector3 world = room.GetWorldPosition(unit.GetGridPosition());
+        unit.transform.position = new Vector3(
+            world.x + vo.x,
+            world.y + vo.y,
+            unit.transform.position.z);
     }
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    public string      GetCurrentRoomName()    => currentRoomName.Value.ToString();
+    public string       GetCurrentRoomName()    => currentRoomName.Value.ToString();
     public GridPosition GetNetworkGridPosition() => new(gridX.Value, gridY.Value);
 
-    // ── Called by MoveAction at end of coroutine (owner only) ─────────────
+    public void SetWalking(bool walking) => isWalking = walking;
 
     public void SyncGridPosition(RoomGrid room, GridPosition pos)
     {
-        if (isTransitioning) return;
+        if (!IsOwner) return;
+        isWalking = false;
         RequestMoveServerRpc(room.gameObject.name, pos.x, pos.y);
     }
 
-    // ── Called by NetworkedPlayerSpawner after spawn (server only) ─────────
+    public void BroadcastMoveStep(Vector3 worldPos)
+    {
+        if (!IsOwner) return;
+        BroadcastMoveStepClientRpc(worldPos.x, worldPos.y);
+    }
 
     public void InitialPlacement(RoomGrid room, GridPosition pos)
     {
-        if (!GameManager.IsMultiplayer || !IsServer) return;
+        if (!IsServer) return;
 
         currentRoomName.Value = room.gameObject.name;
         gridX.Value           = pos.x;
@@ -78,24 +162,28 @@ public class NetworkedPlayerBridge : NetworkBehaviour
     [ClientRpc]
     private void InitialPlacementClientRpc(string roomName, int x, int y)
     {
-        if (IsServer) return; // Server called PlaceInRoom locally in NetworkedPlayerSpawner
+        if (IsServer) return;
 
-        ApplyRoomSync(roomName, x, y);
+        var room = FindRoomGridByName(roomName);
+        if (room == null)
+        {
+            Debug.LogWarning($"[NetworkedPlayerBridge] InitialPlacement: room '{roomName}' not found.");
+            return;
+        }
+
+        unit.IsSyncingFromNetwork = true;
+        unit.PlaceInRoom(room, new GridPosition(x, y));
+        unit.IsSyncingFromNetwork = false;
 
         if (IsOwner)
         {
-            var room = FindRoomGridByName(roomName);
-            if (room != null)
-            {
-                var placed = FindPlacedRoomForGrid(room);
-                if (placed != null)
-                    RoomManager.Instance?.SetCurrentRoom(placed);
-            }
-            Debug.Log($"[NetworkedPlayerBridge] Owner initialized in room {roomName} at ({x},{y})");
+            SnapTransformToGridPosition();
+            var placed = FindPlacedRoomForGrid(room);
+            if (placed != null) RoomManager.Instance?.SetCurrentRoom(placed);
+            CameraController2D.Instance?.SnapToTarget();
+            Debug.Log($"[NetworkedPlayerBridge] Owner initial placement: {roomName} ({x},{y})");
         }
     }
-
-    // ── Called by RoomDoor / RoomNavigationUI in multiplayer ──────────────
 
     public void TransitionToRoom(RoomGrid newRoom, GridPosition spawnPos)
     {
@@ -109,9 +197,10 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
         if (!IsOwner) return;
 
-        isTransitioning = true;
+        isWalking = false;
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
+
         unit.PlaceInRoom(newRoom, spawnPos);
-        isTransitioning = false;
 
         var placed = FindPlacedRoomForGrid(newRoom);
         RoomManager.Instance?.SetCurrentRoom(placed);
@@ -136,49 +225,315 @@ public class NetworkedPlayerBridge : NetworkBehaviour
         currentRoomName.Value = roomName;
         gridX.Value           = spawnX;
         gridY.Value           = spawnY;
+
         BroadcastRoomTransitionClientRpc(roomName, spawnX, spawnY);
+        HandleRoomEntryOnServer(roomName);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void RequestJoinActiveCombatServerRpc(string roomName, int spawnX, int spawnY,
+        ServerRpcParams rpcParams = default)
+    {
+        ulong callerId = rpcParams.Receive.SenderClientId;
+
+        if (!string.IsNullOrEmpty(registeredCombatRoom) && registeredCombatRoom != roomName)
+        {
+            NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
+                callerId, registeredCombatRoom);
+        }
+
+        currentRoomName.Value = roomName;
+        gridX.Value           = spawnX;
+        gridY.Value           = spawnY;
+
+        NetworkedTurnSystem.Instance?.RegisterPlayerInRoomCombat(callerId, roomName);
+        registeredCombatRoom = roomName;
+
+        BroadcastRoomTransitionClientRpc(roomName, spawnX, spawnY);
+
+        LockRoomExitsClientRpc(roomName);
+
+        Debug.Log($"[NetworkedPlayerBridge] Client {callerId} joined active combat in '{roomName}'.");
+    }
+
+    private void HandleRoomEntryOnServer(string roomName)
+    {
+        if (!IsServer) return;
+
+        var gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen == null) return;
+
+        LevelGenerator.PlacedRoom placed = null;
+        foreach (var r in gen.GetAllRooms())
+        {
+            if (r.roomGrid != null && r.roomGrid.gameObject.name == roomName)
+            { placed = r; break; }
+        }
+
+        if (placed == null) return;
+        if (placed.prefabData.roomType == LevelGenerator.RoomType.Start) return;
+        if (placed.roomGrid.HasBeenCleared) return;
+
+        bool hadEnemies = EnemyManager.Instance != null &&
+                          EnemyManager.Instance.GetEnemiesInRoom(placed.roomGrid).Count > 0;
+
+        if (!hadEnemies)
+        {
+            var spawner = FindAnyObjectByType<EnemySpawner>();
+            spawner?.SpawnForRoom(placed);
+            hadEnemies = EnemyManager.Instance != null &&
+                         EnemyManager.Instance.GetEnemiesInRoom(placed.roomGrid).Count > 0;
+        }
+
+        if (!hadEnemies) return;
+
+        if (!string.IsNullOrEmpty(registeredCombatRoom) && registeredCombatRoom != roomName)
+        {
+            NetworkedTurnSystem.Instance?.UnregisterPlayerFromRoomCombat(
+                OwnerClientId, registeredCombatRoom);
+        }
+
+        NetworkedTurnSystem.Instance?.RegisterPlayerInRoomCombat(OwnerClientId, roomName);
+        registeredCombatRoom = roomName;
+
+        bool roomAlreadyInCombat = NetworkedTurnSystem.Instance != null &&
+            NetworkedTurnSystem.Instance.IsRoomInCombat(roomName);
+
+        if (!roomAlreadyInCombat)
+        {
+            LockRoomExitsClientRpc(roomName);
+
+            if (EnemyManager.Instance != null)
+            {
+                EnemyManager.Instance.OnRoomCleared -= OnRoomClearedServer;
+                EnemyManager.Instance.OnRoomCleared += OnRoomClearedServer;
+            }
+        }
+        else
+        {
+            Debug.Log($"[NetworkedPlayerBridge] Room '{roomName}' already in combat — " +
+                      $"skipping re-lock for client {OwnerClientId}.");
+        }
+    }
+
+    private void OnRoomClearedServer(RoomGrid clearedRoom)
+    {
+        if (!IsServer) return;
+        if (EnemyManager.Instance != null)
+            EnemyManager.Instance.OnRoomCleared -= OnRoomClearedServer;
+
+        // Clear combat tracking for this room in the turn system
+        NetworkedTurnSystem.Instance?.ClearRoomCombat(clearedRoom.gameObject.name);
+
+        if (registeredCombatRoom == clearedRoom.gameObject.name)
+            registeredCombatRoom = "";
+
+        UnlockRoomExitsClientRpc(clearedRoom.gameObject.name);
     }
 
     // ── Client RPCs ────────────────────────────────────────────────────────
 
     [ClientRpc]
+    private void BroadcastMoveStepClientRpc(float wx, float wy)
+    {
+        if (IsOwner) return;
+
+        Vector2 vo     = unit.GetVisualOffset();
+        Vector3 target = new Vector3(wx + vo.x, wy + vo.y, unit.transform.position.z);
+
+        if (stepLerpCoroutine != null) StopCoroutine(stepLerpCoroutine);
+        stepLerpCoroutine = StartCoroutine(LerpToWorldPos(target));
+    }
+
+    private IEnumerator LerpToWorldPos(Vector3 target)
+    {
+        const float speed = 8f;
+        while (Vector2.Distance(unit.transform.position, target) > 0.01f)
+        {
+            unit.transform.position = Vector3.MoveTowards(
+                unit.transform.position, target, speed * Time.deltaTime);
+            yield return null;
+        }
+        unit.transform.position = target;
+        stepLerpCoroutine = null;
+    }
+
+    [ClientRpc]
     private void BroadcastRoomTransitionClientRpc(string roomName, int spawnX, int spawnY)
     {
-        if (IsOwner) return; // Owner already applied locally in TransitionToRoom
+        if (IsOwner) return;
 
-        ApplyRoomSync(roomName, spawnX, spawnY);
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
 
-        if (IsLocalPlayer)
+        var room = FindRoomGridByName(roomName);
+        if (room == null) return;
+
+        unit.IsSyncingFromNetwork = true;
+        unit.PlaceInRoom(room, new GridPosition(spawnX, spawnY));
+        unit.IsSyncingFromNetwork = false;
+    }
+
+    [ClientRpc]
+    private void LockRoomExitsClientRpc(string roomName)
+    {
+        var gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen == null) return;
+
+        LevelGenerator.PlacedRoom placed = null;
+        foreach (var r in gen.GetAllRooms())
         {
-            var room = FindRoomGridByName(roomName);
-            if (room != null)
+            if (r.roomGrid != null && r.roomGrid.gameObject.name == roomName)
+            { placed = r; break; }
+        }
+
+        if (placed != null)
+        {
+            foreach (LevelGenerator.Direction dir in
+                System.Enum.GetValues(typeof(LevelGenerator.Direction)))
             {
-                var placed = FindPlacedRoomForGrid(room);
-                RoomManager.Instance?.SetCurrentRoom(placed);
+                if (gen.GetConnectedRoom(placed, dir) == null) continue;
+
+                placed.connector?.SetDoorOpen(dir, false);
+
+                placed.connector?.SetDoorPassable(dir, true);
+
             }
-            CameraController2D.Instance?.SnapToTarget();
+        }
+
+        foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
+        {
+            bool touchesCombatRoom = false;
+            if (et.Hallway != null)
+            {
+                var roomA = et.Hallway.RoomA?.roomGrid;
+                var roomB = et.Hallway.RoomB?.roomGrid;
+                if (roomA != null && roomA.gameObject.name == roomName) touchesCombatRoom = true;
+                if (roomB != null && roomB.gameObject.name == roomName) touchesCombatRoom = true;
+            }
+            if (!touchesCombatRoom) continue;
+
+            bool destinationIsCombatRoom =
+                et.DestinationRoom?.roomGrid?.gameObject.name == roomName;
+
+            if (destinationIsCombatRoom)
+            {
+                et.SetDestinationIsActiveCombat(true);
+            }
+            else
+            {
+                et.SetExitLocked(true);
+                et.SetDestinationIsActiveCombat(false);
+            }
+        }
+
+        var localUnit = UnitActionSystem.FindLocalOwnedUnit();
+        if (localUnit == null) return;
+        string localRoomName = localUnit.GetCurrentRoomGrid()?.gameObject.name;
+        if (localRoomName == roomName)
+            CameraController2D.Instance?.SetCombatState(true);
+    }
+
+    [ClientRpc]
+    private void UnlockRoomExitsClientRpc(string roomName)
+    {
+        var gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen == null) return;
+
+        LevelGenerator.PlacedRoom placed = null;
+        foreach (var r in gen.GetAllRooms())
+        {
+            if (r.roomGrid != null && r.roomGrid.gameObject.name == roomName)
+            { placed = r; break; }
+        }
+
+        if (placed != null)
+        {
+            var connectedDirs = new System.Collections.Generic.List<LevelGenerator.Direction>();
+            foreach (LevelGenerator.Direction dir in
+                System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+            {
+                if (gen.GetConnectedRoom(placed, dir) == null) continue;
+                connectedDirs.Add(dir);
+                placed.roomGrid.SetDoorState(dir, true);
+
+                placed.connector?.SetDoorPassable(dir, false);
+                placed.connector?.SetDoorOpen(dir, true);
+            }
+            placed.roomGrid.MarkCleared();
+            RoomManager.Instance?.NotifyRoomCleared(placed);
+        }
+
+        foreach (var et in FindObjectsByType<HallwayEntryTrigger>(FindObjectsSortMode.None))
+        {
+            bool touches = false;
+            if (et.Hallway != null)
+            {
+                var roomA = et.Hallway.RoomA?.roomGrid;
+                var roomB = et.Hallway.RoomB?.roomGrid;
+                if (roomA != null && roomA.gameObject.name == roomName) touches = true;
+                if (roomB != null && roomB.gameObject.name == roomName) touches = true;
+            }
+            if (et.DestinationRoom?.roomGrid?.gameObject.name == roomName) touches = true;
+            if (!touches) continue;
+
+            et.SetExitLocked(false);
+            et.SetDestinationIsActiveCombat(false);
+            et.ResetTrigger();
+        }
+
+        var localUnit = UnitActionSystem.FindLocalOwnedUnit();
+        if (localUnit == null) return;
+
+        string localRoomName = localUnit.GetCurrentRoomGrid()?.gameObject.name;
+        if (localRoomName == roomName || IsAdjacentToRoom(roomName, localRoomName, gen))
+        {
+            localUnit.GetMoveAction()?.InvalidateCache();
+            if (localRoomName == roomName)
+                CameraController2D.Instance?.SetCombatState(false);
         }
     }
 
-    // ── NetworkVariable callbacks ──────────────────────────────────────────
+    private static bool IsAdjacentToRoom(string combatRoomName, string localRoomName,
+        LevelGenerator gen)
+    {
+        if (gen == null || string.IsNullOrEmpty(localRoomName)) return false;
+        LevelGenerator.PlacedRoom placed = null;
+        foreach (var r in gen.GetAllRooms())
+        {
+            if (r.roomGrid != null && r.roomGrid.gameObject.name == combatRoomName)
+            { placed = r; break; }
+        }
+        if (placed == null) return false;
+        foreach (LevelGenerator.Direction dir in
+            System.Enum.GetValues(typeof(LevelGenerator.Direction)))
+        {
+            var neighbour = gen.GetConnectedRoom(placed, dir);
+            if (neighbour != null && neighbour.roomGrid?.gameObject.name == localRoomName)
+                return true;
+        }
+        return false;
+    }
+
+    // ── NetworkVariable callbacks — NON-OWNER ONLY ─────────────────────────
 
     private void OnRoomNameChanged(FixedString64Bytes oldVal, FixedString64Bytes newVal)
     {
+        if (IsOwner) return;
         string name = newVal.ToString();
-        if (!string.IsNullOrEmpty(name))
-            QueueApplyRoomSync();
+        if (!string.IsNullOrEmpty(name)) QueueApplyRoomSync();
     }
 
     private void OnGridPositionChanged(int oldVal, int newVal)
     {
+        if (IsOwner) return;
         QueueApplyRoomSync();
     }
 
     private void QueueApplyRoomSync()
     {
-        if (syncPending) return; // already queued this frame
-        syncPending    = true;
-        syncCoroutine  = StartCoroutine(ApplyRoomSyncNextFrame());
+        if (syncPending) return;
+        syncPending   = true;
+        syncCoroutine = StartCoroutine(ApplyRoomSyncNextFrame());
     }
 
     private IEnumerator ApplyRoomSyncNextFrame()
@@ -192,8 +547,6 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             ApplyRoomSync(roomName, gridX.Value, gridY.Value);
     }
 
-    // ── Core sync ──────────────────────────────────────────────────────────
-
     private void ApplyRoomSync(string roomName, int x, int y)
     {
         var room = FindRoomGridByName(roomName);
@@ -203,12 +556,14 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             return;
         }
 
-        unit.IsSyncingFromNetwork = true;
+        if (stepLerpCoroutine != null) { StopCoroutine(stepLerpCoroutine); stepLerpCoroutine = null; }
+
+        unit.IsSyncingFromNetwork = isWalking;
         unit.PlaceInRoom(room, new GridPosition(x, y));
         unit.IsSyncingFromNetwork = false;
     }
 
-    // ── Called by CombatAction (owner only) ───────────────────────────────
+    // ── Damage RPCs ────────────────────────────────────────────────────────
 
     [ServerRpc(RequireOwnership = false)]
     public void RequestApplyDamageServerRpc(int[] posX, int[] posY, int damage)
@@ -226,8 +581,24 @@ public class NetworkedPlayerBridge : NetworkBehaviour
 
     private void ApplyDamageOnPeer(int[] posX, int[] posY, int damage)
     {
-        var room = unit.GetCurrentRoomGrid();
-        if (room == null) return;
+        var unitRoom = unit.GetCurrentRoomGrid();
+        if (unitRoom == null) return;
+
+        RoomGrid room = unitRoom;
+        var gen = FindAnyObjectByType<LevelGenerator>();
+        if (gen != null)
+        {
+            string roomName = unitRoom.gameObject.name;
+            foreach (var placed in gen.GetAllRooms())
+            {
+                if (placed.roomGrid != null &&
+                    placed.roomGrid.gameObject.name == roomName)
+                {
+                    room = placed.roomGrid;
+                    break;
+                }
+            }
+        }
 
         for (int i = 0; i < posX.Length; i++)
         {
@@ -243,6 +614,17 @@ public class NetworkedPlayerBridge : NetworkBehaviour
             foreach (var target in room.GetUnitsAtGridPosition(pos))
                 NetworkedHealthBridge.TakeDamage(target.gameObject, damage);
         }
+    }
+
+    // ── Class sync ─────────────────────────────────────────────────────────
+
+    [ClientRpc]
+    public void SetPlayerClassClientRpc(int classIndex)
+    {
+        if (IsServer) return;
+        var stats = GetComponent<PlayerStats>();
+        if (stats != null)
+            stats.InitializeWithClass((PlayerClass)classIndex);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

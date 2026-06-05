@@ -24,7 +24,7 @@ public class TurnSystem : MonoBehaviour
 
     private void Start()
     {
-        if (EnemyManager.Instance != null)
+        if (!GameManager.IsMultiplayer && EnemyManager.Instance != null)
             EnemyManager.Instance.OnEnemyTurnsComplete += HandleEnemyTurnsComplete;
     }
 

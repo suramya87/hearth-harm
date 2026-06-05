@@ -113,7 +113,6 @@ public class NetworkedEnemySpawner : NetworkBehaviour
             return null;
         }
 
-        // Spawn on server — NGO replicates to clients
         netObj.Spawn(destroyWithScene: true);
 
         var eu = go.GetComponent<EnemyUnit>();

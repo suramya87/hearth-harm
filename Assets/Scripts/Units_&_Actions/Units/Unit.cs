@@ -49,31 +49,24 @@ public class Unit : MonoBehaviour
 
     // ── Grid placement ─────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Waits until the room grid is fully initialized then places the unit.
-    /// Use this for initial spawn to avoid timing issues where the grid
-    /// isn't ready yet when the level first loads.
-    /// </summary>
     public void PlaceInRoomWhenReady(RoomGrid room, GridPosition pos)
     {
         StartCoroutine(WaitAndPlace(room, pos));
     }
 
     public void PlaceInRoomNoMove(RoomGrid room, GridPosition newPos)
-        {
-            if (room == null) return;
- 
-            if (currentRoomGrid != null && isInitialized)
-                currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
- 
-            currentRoomGrid = room;
-            gridPosition    = newPos;
-            isInitialized   = true;
- 
-            room.AddUnitAtGridPosition(newPos, this);
-            // deliberately no transform.position change — MoveAction owns the visual position
-        }
+    {
+        if (room == null) return;
 
+        if (currentRoomGrid != null && isInitialized)
+            currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
+
+        currentRoomGrid = room;
+        gridPosition    = newPos;
+        isInitialized   = true;
+
+        room.AddUnitAtGridPosition(newPos, this);
+    }
 
     private IEnumerator WaitAndPlace(RoomGrid room, GridPosition pos)
     {
@@ -96,17 +89,16 @@ public class Unit : MonoBehaviour
             yield return null;
         }
 
-        // One extra frame so TilemapRoomGrid cell bounds are fully settled
         yield return null;
 
         PlaceInRoom(room, pos);
+
+        // Register with local systems (camera, action system) for the owning client.
+        RegisterWithLocalSystems();
+
         Debug.Log($"[Unit] Placed in {room.gameObject.name} at {pos} after grid ready.");
     }
 
-    /// <summary>
-    /// Immediately places the unit in a room. The room must already be initialized.
-    /// For initial spawn use PlaceInRoomWhenReady instead.
-    /// </summary>
     public void PlaceInRoom(RoomGrid room, GridPosition newPos)
     {
         if (room == null)
@@ -116,12 +108,8 @@ public class Unit : MonoBehaviour
         }
 
         if (!room.IsInitialized())
-        {
-            Debug.LogWarning($"[Unit] PlaceInRoom called on uninitialized grid " +
-                             $"{room.gameObject.name}. Use PlaceInRoomWhenReady for initial spawn.");
-        }
+            Debug.LogWarning($"[Unit] PlaceInRoom on uninitialized grid {room.gameObject.name}.");
 
-        // Remove from old cell
         if (currentRoomGrid != null && isInitialized)
             currentRoomGrid.RemoveUnitAtGridPosition(gridPosition, this);
 
@@ -137,8 +125,7 @@ public class Unit : MonoBehaviour
             transform.position = new Vector3(
                 world.x + visualOffset.x,
                 world.y + visualOffset.y,
-                transform.position.z
-            );
+                transform.position.z);
         }
 
         if (GameManager.IsMultiplayer && !IsSyncingFromNetwork)
@@ -149,12 +136,47 @@ public class Unit : MonoBehaviour
         }
     }
 
+    // ── Local systems registration ─────────────────────────────────────────
+
+    /// <summary>
+    /// Registers this unit with PlayerTarget, UnitActionSystem, and snaps the
+    /// camera. Only runs on the owning client (or in singleplayer).
+    /// </summary>
+    private void RegisterWithLocalSystems()
+    {
+        bool isLocalOwner;
+
+        if (!GameManager.IsMultiplayer)
+        {
+            isLocalOwner = true;
+        }
+        else
+        {
+            var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+            isLocalOwner = netObj != null && netObj.IsOwner;
+        }
+
+        if (!isLocalOwner) return;
+
+        // Register with PlayerTarget so camera and enemies find the right player.
+        var pt = GetComponent<PlayerTarget>();
+        if (pt == null) pt = gameObject.AddComponent<PlayerTarget>();
+        // Force re-registration in case this is after a level reload.
+        PlayerTarget.ForceRegister(pt, this);
+
+        // Register with UnitActionSystem so input works.
+        if (UnitActionSystem.Instance != null)
+            UnitActionSystem.Instance.SetSelectedUnit(this);
+
+        // Snap the camera to this player immediately.
+        CameraController2D.Instance?.SnapToTarget();
+
+        Debug.Log($"[Unit] Registered local systems for {gameObject.name}");
+    }
+
     // ── Turn events ────────────────────────────────────────────────────────
 
-    private void OnTurnChanged(object sender, EventArgs e)
-    {
-        
-    }
+    private void OnTurnChanged(object sender, EventArgs e) { }
 
     // ── Accessors ──────────────────────────────────────────────────────────
 
@@ -163,5 +185,5 @@ public class Unit : MonoBehaviour
     public bool          IsInitialized()      => isInitialized;
     public MoveAction    GetMoveAction()      => moveAction;
     public BaseAction[]  GetBaseActionArray() => allActions;
-    public Vector2 GetVisualOffset() => visualOffset;
+    public Vector2       GetVisualOffset()    => visualOffset;
 }

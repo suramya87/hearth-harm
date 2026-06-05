@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
-
 public class NetworkedPlayerSpawner : NetworkBehaviour
 {
     [Header("Player Prefabs")]
@@ -12,8 +11,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
     [SerializeField] private List<GameObject> networkedPlayerPrefabs;
 
     private LevelGenerator levelGenerator;
-
-    // ── Network lifecycle ──────────────────────────────────────────────────
 
     public override void OnNetworkSpawn()
     {
@@ -32,13 +29,10 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
         StartCoroutine(SpawnAllPlayers());
     }
 
-    // ── Spawn all players (server only) ───────────────────────────────────
-
     private IEnumerator SpawnAllPlayers()
     {
         yield return null;
 
-        // Retry finding LevelGenerator
         for (int i = 0; levelGenerator == null && i < 10; i++)
         {
             levelGenerator = FindAnyObjectByType<LevelGenerator>();
@@ -51,7 +45,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             yield break;
         }
 
-        // Retry finding the start room
         LevelGenerator.PlacedRoom startRoom = null;
         for (int i = 0; startRoom == null && i < 10; i++)
         {
@@ -68,19 +61,43 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             yield break;
         }
 
+        // Wait up to 2 seconds for all clients to submit their character selections.
+        // This fixes the race where SpawnAllPlayers runs before LobbySync has
+        // received a client's selection ServerRpc, causing index 0 for everyone.
+        float waitElapsed = 0f;
+        const float waitTimeout = 2f;
+        while (waitElapsed < waitTimeout)
+        {
+            bool allReady = true;
+            foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+            {
+                if (LobbySync.Instance != null &&
+                    !LobbySync.Instance.HasReceivedSelectionFrom(client.ClientId))
+                {
+                    allReady = false;
+                    break;
+                }
+            }
+            if (allReady) break;
+            waitElapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (waitElapsed >= waitTimeout)
+            Debug.LogWarning("[NetworkedPlayerSpawner] Timed out waiting for character " +
+                             "selections — some players may get default character.");
+
         var clients = NetworkManager.Singleton.ConnectedClientsList;
         Debug.Log($"[NetworkedPlayerSpawner] Spawning {clients.Count} player(s).");
 
         int slotIndex = 0;
         foreach (var client in clients)
         {
-            int charIndex = 0;
-            if (LobbySync.Instance != null)
-                charIndex = LobbySync.Instance.GetCharacterIndex(client.ClientId);
-            else if (CharacterSelectionSync.Instance != null)
-                charIndex = CharacterSelectionSync.Instance.GetCharacterIndex(client.ClientId);
-
+            int charIndex = ResolveCharacterIndex(client.ClientId);
             charIndex = Mathf.Clamp(charIndex, 0, networkedPlayerPrefabs.Count - 1);
+
+            Debug.Log($"[NetworkedPlayerSpawner] Client {client.ClientId} → " +
+                      $"charIndex={charIndex} prefab={networkedPlayerPrefabs[charIndex]?.name ?? "NULL"}");
 
             GameObject prefab = networkedPlayerPrefabs[charIndex];
             if (prefab == null)
@@ -105,7 +122,7 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
             var netObj = go.GetComponent<NetworkObject>();
             if (netObj == null)
             {
-                Debug.LogError("[NetworkedPlayerSpawner] Player prefab is missing a NetworkObject!");
+                Debug.LogError("[NetworkedPlayerSpawner] Player prefab missing NetworkObject!");
                 Destroy(go);
                 slotIndex++;
                 continue;
@@ -125,18 +142,44 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
                 unit.IsSyncingFromNetwork = false;
             }
 
+            var stats = go.GetComponent<PlayerStats>();
+            if (stats != null)
+                stats.InitializeWithClass((PlayerClass)charIndex);
+
+            if (bridge != null)
+                bridge.SetPlayerClassClientRpc(charIndex);
+
             Debug.Log($"[NetworkedPlayerSpawner] Spawned client {client.ClientId} " +
-                      $"(char {charIndex}) at {spawnPos.Value}");
+                      $"(char {charIndex} = {(PlayerClass)charIndex}) at {spawnPos.Value}");
 
             slotIndex++;
             yield return null;
         }
 
         RoomManager.Instance?.SetCurrentRoom(startRoom);
-        
         SetStartRoomClientRpc(startRoom.gridPosition.x, startRoom.gridPosition.y);
     }
 
+    private static int ResolveCharacterIndex(ulong clientId)
+    {
+        if (LobbySync.Instance != null &&
+            LobbySync.Instance.HasReceivedSelectionFrom(clientId))
+        {
+            int idx = LobbySync.Instance.GetCharacterIndex(clientId);
+            Debug.Log($"[NetworkedPlayerSpawner] LobbySync → index {idx} for client {clientId}");
+            return idx;
+        }
+
+        if (CharacterSelectionSync.Instance != null)
+        {
+            int idx = CharacterSelectionSync.Instance.GetCharacterIndex(clientId);
+            Debug.Log($"[NetworkedPlayerSpawner] CharacterSelectionSync → index {idx} for client {clientId}");
+            return idx;
+        }
+
+        Debug.LogWarning($"[NetworkedPlayerSpawner] No selection source for client {clientId} — using 0.");
+        return 0;
+    }
 
     [ClientRpc]
     private void SetStartRoomClientRpc(int gridX, int gridY)
@@ -152,7 +195,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
         foreach (var placed in rooms)
         {
             if (placed.gridPosition.x != gridX || placed.gridPosition.y != gridY) continue;
-
             RoomManager.Instance?.SetCurrentRoom(placed);
             Debug.Log($"[NetworkedPlayerSpawner] Client set start room → ({gridX},{gridY})");
             return;
@@ -160,8 +202,6 @@ public class NetworkedPlayerSpawner : NetworkBehaviour
 
         Debug.LogWarning($"[NetworkedPlayerSpawner] Could not find start room at ({gridX},{gridY})");
     }
-
-    // ── Spawn position helpers ─────────────────────────────────────────────
 
     private GridPosition? FindSpawnPosition(LevelGenerator.PlacedRoom room, int slotIndex)
     {

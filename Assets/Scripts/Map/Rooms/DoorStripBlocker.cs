@@ -2,37 +2,56 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Attach this component to every door strip GameObject in your room prefabs.
-/// </summary>
 public class DoorStripBlocker : MonoBehaviour
 {
     [Tooltip("If left empty the component auto-detects cells from Tilemap, " +
              "SpriteRenderer, or BoxCollider2D on this GameObject.")]
-    [SerializeField] private Vector2Int[] manualCells; 
+    [SerializeField] private Vector2Int[] manualCells;
 
-    // private RoomGrid ownerGrid;
+    private RoomGrid ownerGrid;
+    private Tilemap  ownerFloorTilemap;
 
     private bool registered;
 
-    // ── Public API ─────────────────────────────────────────────────────────
+    private bool passable = false;
 
-    private RoomGrid ownerGrid;
-    private Tilemap  ownerFloorTilemap;   
+    // ── Public API ─────────────────────────────────────────────────────────
 
     public void SetOwnerGrid(RoomGrid grid)
     {
-        ownerGrid        = grid;
-        ownerFloorTilemap = grid?.GetFloorTilemap();   
+        ownerGrid         = grid;
+        ownerFloorTilemap = grid?.GetFloorTilemap();
         if (gameObject.activeInHierarchy) Register();
         else Unregister();
     }
+
+    public void SetPassable(bool isPassable)
+    {
+        if (passable == isPassable) return;
+        passable = isPassable;
+
+        if (!gameObject.activeInHierarchy) return;
+
+        if (passable)
+        {
+            Unregister();
+        }
+        else
+        {
+            Register();
+        }
+
+        foreach (var ma in Object.FindObjectsByType<MoveAction>(FindObjectsSortMode.None))
+            ma.InvalidateCache();
+    }
+
+    public bool IsPassable => passable;
 
     // ── Unity messages ─────────────────────────────────────────────────────
 
     private void OnEnable()
     {
-        Register();
+        if (!passable) Register();
     }
 
     private void OnDisable()
@@ -68,9 +87,6 @@ public class DoorStripBlocker : MonoBehaviour
             uwg.UnregisterWallCell(worldPos);
 
         registered = false;
-
-        foreach (var ma in Object.FindObjectsByType<MoveAction>(FindObjectsSortMode.None))
-            ma.InvalidateCache();
     }
 
     // ── Cell detection ─────────────────────────────────────────────────────
@@ -92,7 +108,7 @@ public class DoorStripBlocker : MonoBehaviour
             foreach (var cell in tm.cellBounds.allPositionsWithin)
             {
                 if (!tm.HasTile(cell)) continue;
-                positions.Add(tm.GetCellCenterWorld(cell));  
+                positions.Add(tm.GetCellCenterWorld(cell));
             }
             return positions;
         }
@@ -106,7 +122,7 @@ public class DoorStripBlocker : MonoBehaviour
                 for (float x = b.min.x; x < b.max.x; x += 1f)
                 for (float y = b.min.y; y < b.max.y; y += 1f)
                 {
-                    var cell   = ownerFloorTilemap.WorldToCell(new Vector3(x, y, 0f));
+                    var cell = ownerFloorTilemap.WorldToCell(new Vector3(x, y, 0f));
                     positions.Add(ownerFloorTilemap.GetCellCenterWorld(cell));
                 }
             }
@@ -128,7 +144,7 @@ public class DoorStripBlocker : MonoBehaviour
                 for (float x = b.min.x; x < b.max.x; x += 1f)
                 for (float y = b.min.y; y < b.max.y; y += 1f)
                 {
-                    var cell   = ownerFloorTilemap.WorldToCell(new Vector3(x, y, 0f));
+                    var cell = ownerFloorTilemap.WorldToCell(new Vector3(x, y, 0f));
                     positions.Add(ownerFloorTilemap.GetCellCenterWorld(cell));
                 }
             }

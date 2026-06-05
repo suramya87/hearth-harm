@@ -44,7 +44,7 @@ public class SnowBreezeController : MonoBehaviour
         );
 
         velocityModule.x = new ParticleSystem.MinMaxCurve(currentBreeze);
-        velocityModule.y = new ParticleSystem.MinMaxCurve(fallSpeed);
+        // velocityModule.y = new ParticleSystem.MinMaxCurve(fallSpeed);
     }
 
     private void PickNewBreeze()

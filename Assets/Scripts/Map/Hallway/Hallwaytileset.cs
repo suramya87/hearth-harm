@@ -1,38 +1,6 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-/// <summary>
-/// Bundles tile assets for HallwayTilemapPainter.
-///
-/// CREATE:  Assets → Create → Level Generation → Hallway Tile Set
-///
-/// WALL SLOTS — assign one tile per direction/corner.
-/// The painter picks the correct slot automatically based on each wall cell's
-/// position relative to the corridor floor.
-///
-///   WallTop         — wall tile on the NORTH side of a horizontal corridor
-///   WallBottom      — wall tile on the SOUTH side of a horizontal corridor
-///   WallLeft        — wall tile on the WEST  side of a vertical corridor
-///   WallRight       — wall tile on the EAST  side of a vertical corridor
-///
-///   CapTop          — end cap closing the NORTH end of a vertical corridor
-///   CapBottom       — end cap closing the SOUTH end of a vertical corridor
-///   CapLeft         — end cap closing the WEST  end of a horizontal corridor
-///   CapRight        — end cap closing the EAST  end of a horizontal corridor
-///
-///   CornerConvex_NE, _NW, _SE, _SW
-///                   — outer (pointy) corners at hallway bends or junctions
-///
-///   CornerConcave_NE, _NW, _SE, _SW
-///                   — inner (scooped) corners where corridors turn
-///
-/// FALLBACK CHAIN
-///   Any unassigned directional slot falls back to WallSideTile so you can
-///   start with just one tile and progressively add detail.
-///
-/// FLOOR SLOTS (unchanged from before)
-///   FloorTile / FloorVariants[] / AccentTiles[]
-/// </summary>
 [CreateAssetMenu(menuName = "Level Generation/Hallway Tile Set", fileName = "HallwayTileSet")]
 public class HallwayTileSet : ScriptableObject
 {
@@ -54,7 +22,6 @@ public class HallwayTileSet : ScriptableObject
     [Range(0f, 1f)]
     public float AccentThreshold = 0.74f;
 
-    // ── Straight wall edges ────────────────────────────────────────────────
 
     [Header("Walls — Straight Edges")]
     [Tooltip("Fallback for any wall slot that is left empty.")]
@@ -72,7 +39,6 @@ public class HallwayTileSet : ScriptableObject
     [Tooltip("East-facing wall (right edge of a vertical corridor or room).")]
     public TileBase WallRight;
 
-    // ── End caps ───────────────────────────────────────────────────────────
 
     [Header("Walls — End Caps")]
     [Tooltip("Cap tile closing the north end of a vertical corridor " +
@@ -88,7 +54,6 @@ public class HallwayTileSet : ScriptableObject
     [Tooltip("Cap tile closing the east end of a horizontal corridor.")]
     public TileBase CapRight;
 
-    // ── Convex (outer) corners ─────────────────────────────────────────────
 
     [Header("Walls — Convex (outer) Corners")]
     [Tooltip("Outer corner where North and East walls meet.")]
@@ -103,7 +68,6 @@ public class HallwayTileSet : ScriptableObject
     [Tooltip("Outer corner where South and West walls meet.")]
     public TileBase CornerConvex_SW;
 
-    // ── Concave (inner) corners ────────────────────────────────────────────
 
     [Header("Walls — Concave (inner) Corners")]
     [Tooltip("Inner corner facing the NE quadrant (floor to the north AND east).")]
@@ -118,9 +82,6 @@ public class HallwayTileSet : ScriptableObject
     [Tooltip("Inner corner facing the SW quadrant.")]
     public TileBase CornerConcave_SW;
 
-    // ── Resolved accessors (fallback chain) ───────────────────────────────
-
-    /// <summary>Returns the best tile for a wall on the north side of a corridor.</summary>
     public TileBase GetWallTop()    => WallTop    ?? WallSideTile;
     public TileBase GetWallBottom() => WallBottom ?? WallSideTile;
     public TileBase GetWallLeft()   => WallLeft   ?? WallSideTile;
@@ -141,8 +102,6 @@ public class HallwayTileSet : ScriptableObject
     public TileBase GetConcave_SE() => CornerConcave_SE ?? GetConvex_SE();
     public TileBase GetConcave_SW() => CornerConcave_SW ?? GetConvex_SW();
 
-    // Keep old accessors so HallwayBuilder still compiles unchanged
-    /// <summary>Legacy — painter now uses GetWallTop/Bottom/Left/Right directly.</summary>
     public TileBase CornerConvexTile  => CornerConvex_NE  ?? WallSideTile;
     public TileBase CornerConcaveTile => CornerConcave_NE ?? WallSideTile;
 }

@@ -2,13 +2,14 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class CombatAction : BaseAction
 {
     [Header("Data")]
     [SerializeField] private CombatActionData actionData;
 
-    [Header("Facing correction (0–3 × 90° CCW)")]
+    [Header("Facing correction (0-3 x 90 CCW)")]
     [Range(0, 3)]
     [SerializeField] private int facingRotationSteps = 1;
 
@@ -21,7 +22,11 @@ public class CombatAction : BaseAction
     private Vector2Int         currentFacing = new(0, 1);
     private List<GridPosition> lastPreview   = new();
 
-    public CombatActionData ActionData     => actionData;
+    // Pending target set by HandleActionInput, consumed by TakeAction.
+    private GridPosition pendingTargetGP;
+    private bool         hasPendingTarget;
+
+    public CombatActionData ActionData           => actionData;
     public void SetActionData(CombatActionData d) => actionData = d;
 
     public override string GetActionName() =>
@@ -33,12 +38,45 @@ public class CombatAction : BaseAction
             diceBox = FindFirstObjectByType<DiceBoxUI>();
     }
 
-    // ── Preview ────────────────────────────────────────────────────────────
+
+    public void HandleActionInput()
+    {
+        if (!CanExecuteLocally()) return;
+        if (!Input.GetMouseButtonDown(0)) return;
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
+
+        var room = unit.GetCurrentRoomGrid();
+        if (room == null) return;
+
+        Vector3 raw      = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        Vector3 mouse    = new Vector3(raw.x, raw.y, 0f);
+        GridPosition gp  = room.GetGridPosition(mouse);
+
+        if (!IsValidTarget(gp)) return;
+
+        pendingTargetGP  = gp;
+        hasPendingTarget = true;
+
+        UnitActionSystem.Instance?.TakeAction(this, () =>
+        {
+            var move = unit.GetMoveAction();
+            if (move != null)
+                UnitActionSystem.Instance?.SetSelectedAction(move);
+        });
+    }
+
+    public override void TakeAction(Action onComplete)
+    {
+        if (!hasPendingTarget) { onComplete?.Invoke(); return; }
+        hasPendingTarget = false;
+        PerformAttack(pendingTargetGP, onComplete);
+    }
+
+    // ---- Preview ----
 
     public List<GridPosition> GetPreviewPositions(GridPosition mouseGP)
     {
         if (actionData == null) return new();
-
         var unitGP = unit.GetGridPosition();
         if (actionData.rotatesToFacing)
             currentFacing = ApplyCorrection(FacingToward(unitGP, mouseGP));
@@ -53,38 +91,26 @@ public class CombatAction : BaseAction
         return positions;
     }
 
-    // ── Execution ──────────────────────────────────────────────────────────
+    // ---- Execution ----
 
-    /// <summary>
-    /// Main entry point. Automatically routes damage through NetworkedHealthBridge
-    /// when running in multiplayer — no need to call PerformAttackNetworked separately.
-    /// </summary>
     public void PerformAttack(GridPosition targetGP, Action onComplete)
     {
-        ExecuteAttackFlow(targetGP, onComplete);
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
+        StartCoroutine(ExecuteAttackFlowRoutine(targetGP, onComplete));
     }
 
-    /// <summary>Explicit networked variant kept for API compatibility.</summary>
     public void PerformAttackNetworked(GridPosition targetGP, Action onComplete)
     {
-        ExecuteAttackFlow(targetGP, onComplete);
-    }
-
-    private void ExecuteAttackFlow(GridPosition targetGP, Action onComplete)
-    {
+        if (!CanExecuteLocally()) { onComplete?.Invoke(); return; }
         StartCoroutine(ExecuteAttackFlowRoutine(targetGP, onComplete));
     }
 
     private IEnumerator ExecuteAttackFlowRoutine(GridPosition targetGP, Action onComplete)
     {
-        if (actionData == null)
-        {
-            onComplete?.Invoke();
-            yield break;
-        }
+        if (actionData == null) { onComplete?.Invoke(); yield break; }
 
         onActionComplete = onComplete;
-        isActive = true;
+        isActive         = true;
 
         var unitGP = unit.GetGridPosition();
 
@@ -96,58 +122,51 @@ public class CombatAction : BaseAction
 
         var hitPositions = IsRanged()
             ? PatternAt(targetGP, currentFacing)
-            : PatternAt(unitGP, currentFacing);
+            : PatternAt(unitGP,   currentFacing);
 
         AttackSpritePopup.ShowOnTiles(actionData, hitPositions);
-
         SpendStamina();
 
-        int finalDamage = 0;
+        int  finalDamage  = 0;
         bool diceFinished = false;
 
         if (diceBox != null && actionData.useDiceDamage)
         {
-            int strengthBonus = playerStats != null ? playerStats.strength : 0;
+            int strengthBonus  = playerStats != null ? playerStats.strength : 0;
             int totalFlatBonus = actionData.flatBonus + strengthBonus;
 
-            yield return diceBox.PlayPhysicsD6Roll(actionData.diceCount, totalFlatBonus, (result) =>
+            yield return diceBox.PlayPhysicsD6Roll(actionData.diceCount, totalFlatBonus, result =>
             {
-                finalDamage = Mathf.Max(1, Mathf.RoundToInt(result * actionData.damageMultiplier));
+                finalDamage  = Mathf.Max(1, Mathf.RoundToInt(result * actionData.damageMultiplier));
                 diceFinished = true;
             });
         }
         else
         {
-            List<int> rolls = RollDamageDice();
-            finalDamage = CalculateDamage(rolls);
+            finalDamage  = CalculateDamage(RollDamageDice());
             diceFinished = true;
         }
 
-        // Wait safety (in case)
-        while (!diceFinished)
-            yield return null;
+        while (!diceFinished) yield return null;
 
-        // 💥 STEP 3: Apply damage AFTER dice animation
         if (GameManager.IsMultiplayer)
-            ApplyDamageWithValueNetworked(hitPositions, finalDamage);
+            ApplyDamageNetworked(hitPositions, finalDamage);
         else
-            ApplyDamageWithValue(hitPositions, finalDamage);
+            ApplyDamage(hitPositions, finalDamage);
 
         playerAnimator?.RefreshStaminaState();
 
         isActive = false;
-        SelectMoveAction();
-
         onActionComplete?.Invoke();
     }
 
-    // ── Damage Application ─────────────────────────────────────────────────
-    private void ApplyDamageWithValue(List<GridPosition> positions, int dmg)
+    // ---- Damage application ----
+
+    private void ApplyDamage(List<GridPosition> positions, int dmg)
     {
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
 
-        // Track already-hit enemies this attack to avoid multi-cell boss double hits
         var hitEnemies = new HashSet<EnemyUnit>();
         var hitUnits   = new HashSet<Unit>();
 
@@ -157,30 +176,24 @@ public class CombatAction : BaseAction
 
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
-                if (enemy == null || enemy.IsDead) continue;
-                if (!hitEnemies.Add(enemy)) continue; // already hit this enemy
-
+                if (enemy == null || enemy.IsDead || !hitEnemies.Add(enemy)) continue;
                 var interceptor = enemy.GetComponent<BossDamageInterceptor>();
-                if (interceptor != null)
-                    interceptor.TakeDamage(dmg);
-                else
-                    enemy.Health.TakeDamage(dmg);
-
+                if (interceptor != null) interceptor.TakeDamage(dmg);
+                else                     enemy.Health.TakeDamage(dmg);
                 DamageNumber.Spawn(damageNumberPrefab, enemy.transform.position, dmg);
             }
 
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
-                if (!hitUnits.Add(target)) continue; // already hit this unit
-
+                if (!hitUnits.Add(target)) continue;
                 target.GetComponent<HealthComponent>()?.TakeDamage(dmg);
                 DamageNumber.Spawn(damageNumberPrefab, target.transform.position, dmg);
             }
         }
     }
 
-    private void ApplyDamageWithValueNetworked(List<GridPosition> positions, int dmg)
+    private void ApplyDamageNetworked(List<GridPosition> positions, int dmg)
     {
         var room = unit.GetCurrentRoomGrid();
         if (room == null) return;
@@ -194,27 +207,22 @@ public class CombatAction : BaseAction
 
             foreach (var enemy in room.GetEnemiesAtGridPosition(pos))
             {
-                if (enemy == null || enemy.IsDead) continue;
-                if (!hitEnemies.Add(enemy)) continue;
-
+                if (enemy == null || enemy.IsDead || !hitEnemies.Add(enemy)) continue;
                 var interceptor = enemy.GetComponent<BossDamageInterceptor>();
-                if (interceptor != null)
-                    interceptor.TakeDamage(dmg);
-                else
-                    NetworkedHealthBridge.TakeDamage(enemy.gameObject, dmg);
+                if (interceptor != null) interceptor.TakeDamage(dmg);
+                else                     NetworkedHealthBridge.TakeDamage(enemy.gameObject, dmg);
             }
 
             foreach (var target in room.GetUnitsAtGridPosition(pos))
             {
                 if (target == unit && !actionData.canTargetSelf) continue;
                 if (!hitUnits.Add(target)) continue;
-
                 NetworkedHealthBridge.TakeDamage(target.gameObject, dmg);
             }
         }
     }
 
-    // ── Valid targets ──────────────────────────────────────────────────────
+    // ---- Valid targets ----
 
     public List<GridPosition> GetValidActionGridPositionList()
     {
@@ -234,7 +242,6 @@ public class CombatAction : BaseAction
                 int d = Mathf.Abs(dx) + Mathf.Abs(dy);
                 if (d < actionData.minRange || d > actionData.maxRange) continue;
                 if (d == 0 && !actionData.canTargetSelf) continue;
-
                 var c = new GridPosition(unitGP.x + dx, unitGP.y + dy);
                 if (room.IsValidGridPosition(c)) valid.Add(c);
             }
@@ -256,17 +263,12 @@ public class CombatAction : BaseAction
     public bool CanAfford()
     {
         if (actionData == null) return false;
-
-        if (!actionData.requiresEnoughStamina)
-            return true;
-
-        if (playerStats == null)
-            return false;
-
+        if (!actionData.requiresEnoughStamina) return true;
+        if (playerStats == null) return false;
         return playerStats.currentStamina >= actionData.staminaCost;
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
+    // ---- Helpers ----
 
     private void SpendStamina()
     {
@@ -301,17 +303,14 @@ public class CombatAction : BaseAction
             : (dx >= 0 ? new(1, 0) : new(-1, 0));
     }
 
-    private static readonly Vector2Int[] _cardinals = { new(0,1), new(0,-1), new(1,0), new(-1,0) };
+    private static readonly Vector2Int[] _cardinals =
+        { new(0,1), new(0,-1), new(1,0), new(-1,0) };
     private static IEnumerable<Vector2Int> Cardinals() => _cardinals;
 
     private List<int> RollDamageDice()
     {
-        if (!actionData.useDiceDamage)
-            return new List<int> { actionData.baseDamage };
-
-        if (actionData.diceCount <= 0)
-            return new List<int>();
-
+        if (!actionData.useDiceDamage) return new List<int> { actionData.baseDamage };
+        if (actionData.diceCount <= 0) return new List<int>();
         return DiceRoller.RollMultiple(actionData.dieType, actionData.diceCount);
     }
 
@@ -323,18 +322,8 @@ public class CombatAction : BaseAction
             : actionData.baseDamage + strengthBonus;
 
         if (actionData.useDiceDamage)
-        {
-            foreach (int r in rolls)
-                total += r;
-        }
+            foreach (int r in rolls) total += r;
 
         return Mathf.Max(1, Mathf.RoundToInt(total * actionData.damageMultiplier));
-    }
-
-    private void SelectMoveAction()
-    {
-        var moveAction = GetComponent<MoveAction>();
-        if (moveAction == null || UnitActionSystem.Instance == null) return;
-        UnitActionSystem.Instance.SetSelectedAction(moveAction, false);
     }
 }

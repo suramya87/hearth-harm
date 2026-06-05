@@ -2,7 +2,6 @@ using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
-
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(EnemyUnit))]
 public class NetworkedEnemyBridge : NetworkBehaviour
@@ -16,10 +15,48 @@ public class NetworkedEnemyBridge : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // Nothing extra needed — server drives all logic.
+        if (!IsServer)
+            StartCoroutine(SyncOnSpawn());
     }
 
-    // ── Called by EnemyUnit.MoveToPosition() on server ─────────────────────
+    private IEnumerator SyncOnSpawn()
+    {
+        yield return null;
+
+        RoomGrid room = null;
+        string existingRoomName = enemyUnit.CurrentRoomGrid?.gameObject.name ?? "";
+
+        if (!string.IsNullOrEmpty(existingRoomName))
+            room = FindRoomByName(existingRoomName);
+
+        if (room == null)
+        {
+            var gen = FindAnyObjectByType<LevelGenerator>();
+            if (gen != null)
+            {
+                foreach (var placed in gen.GetAllRooms())
+                {
+                    if (placed.roomGrid == null) continue;
+                    if (placed.roomGrid.IsPositionInRoom(transform.position))
+                    { room = placed.roomGrid; break; }
+                }
+            }
+        }
+
+        if (room == null)
+        {
+            Debug.LogWarning($"[NetworkedEnemyBridge] Could not find room for {gameObject.name} on client.");
+            yield break;
+        }
+
+        var gp = room.GetGridPosition(transform.position);
+        enemyUnit.SyncRoomGrid(room);
+        room.AddEnemyAtGridPosition(gp, enemyUnit);
+        EnemyManager.Instance?.RegisterEnemy(enemyUnit);
+
+        Debug.Log($"[NetworkedEnemyBridge] Client synced {gameObject.name} into {room.gameObject.name} at {gp}");
+    }
+
 
     public void ServerBroadcastMove(GridPosition newPos, RoomGrid room)
     {
@@ -42,22 +79,21 @@ public class NetworkedEnemyBridge : NetworkBehaviour
 
     [ClientRpc]
     private void BroadcastMoveClientRpc(
-        int   gx,   int   gy,
-        float wx,   float wy,   float wz,
+        int    gx,  int   gy,
+        float  wx,  float wy,  float wz,
         string roomName)
     {
-        if (IsServer) return; // server already applied
+        if (IsServer) return;
 
         var room = FindRoomByName(roomName);
-
         if (room != null)
         {
             if (enemyUnit.IsInitialized)
                 room.RemoveEnemyAtGridPosition(enemyUnit.GridPosition, enemyUnit);
             room.AddEnemyAtGridPosition(new GridPosition(gx, gy), enemyUnit);
+            enemyUnit.SyncRoomGrid(room);
         }
 
-        // Animate toward the new world position
         var dest = new Vector3(wx, wy, transform.position.z);
         if (moveCoroutine != null) StopCoroutine(moveCoroutine);
         moveCoroutine = StartCoroutine(AnimateMove(dest));
@@ -90,6 +126,12 @@ public class NetworkedEnemyBridge : NetworkBehaviour
     public void NotifyDeathClientRpc()
     {
         if (IsServer) return;
+        if (enemyUnit.IsInitialized && enemyUnit.CurrentRoomGrid != null)
+        {
+            enemyUnit.CurrentRoomGrid.RemoveEnemyAtGridPosition(
+                enemyUnit.GridPosition, enemyUnit);
+        }
+        EnemyManager.Instance?.UnregisterEnemy(enemyUnit);
 
         var animator = GetComponent<Animator>();
         if (animator != null)
@@ -102,27 +144,33 @@ public class NetworkedEnemyBridge : NetworkBehaviour
 
     public static Unit FindNearestPlayerInRoom(RoomGrid room, GridPosition from)
     {
+        if (room == null) return null;
+
         if (!GameManager.IsMultiplayer)
         {
             var pt = PlayerTarget.Instance;
             return (pt != null && pt.IsInRoom(room)) ? pt.GetUnit() : null;
         }
 
-        Unit   nearest = null;
+        string roomName = room.gameObject.name;
+        Unit   nearest  = null;
         int    bestDist = int.MaxValue;
 
         foreach (var bridge in FindObjectsByType<NetworkedPlayerBridge>(FindObjectsSortMode.None))
         {
-            var unit = bridge.GetComponent<Unit>();
-            if (unit == null) continue;
+            var u = bridge.GetComponent<Unit>();
+            if (u == null) continue;
 
-            var hp = unit.GetComponent<HealthComponent>();
+            var hp = u.GetComponent<HealthComponent>();
             if (hp != null && hp.IsDead) continue;
 
-            if (unit.GetCurrentRoomGrid() != room) continue;
+            var playerRoom = u.GetCurrentRoomGrid();
+            if (playerRoom == null) continue;
 
-            int d = from.ManhattanDistance(unit.GetGridPosition());
-            if (d < bestDist) { bestDist = d; nearest = unit; }
+            if (playerRoom.gameObject.name != roomName) continue;
+
+            int d = from.ManhattanDistance(u.GetGridPosition());
+            if (d < bestDist) { bestDist = d; nearest = u; }
         }
 
         return nearest;
@@ -132,6 +180,7 @@ public class NetworkedEnemyBridge : NetworkBehaviour
 
     private static RoomGrid FindRoomByName(string name)
     {
+        if (string.IsNullOrEmpty(name)) return null;
         var gen = FindAnyObjectByType<LevelGenerator>();
         if (gen == null) return null;
         foreach (var placed in gen.GetAllRooms())
